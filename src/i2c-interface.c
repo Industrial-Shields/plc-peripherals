@@ -1,46 +1,71 @@
-#include "i2c.h"
+#include "../include/i2c-interface.h"
 
+#include <unistd.h>
+#include <errno.h>
+
+#ifdef ARDUINO_ARCH_ESP32
+
+#else
+#include <stdio.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
-#include <stdio.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
+struct _i2c_interface_t {
+	int fd;
+};
+#endif
+
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-int i2c_init(i2c_t* i2c, uint8_t bus) {
+i2c_interface_t* i2c_init(uint8_t bus) {
+	i2c_interface_t* i2c = malloc(sizeof(i2c_interface_t));
 	if (i2c == NULL) {
-		fprintf(stderr, "i2c_init: invalid i2c\n");
-		return 1;
+		return NULL;
 	}
 
-	char i2cFileName[50];
-	sprintf(i2cFileName, "/dev/i2c-%d", bus);
-	i2c->fd = open(i2cFileName, O_RDWR);
+	char i2c_file_name[32];
+	snprintf(i2c_file_name, sizeof(i2c_file_name), "/dev/i2c-%d", bus);
+	i2c->fd = open(i2c_file_name, O_RDWR);
 	if (i2c->fd < 0) {
-		perror("i2c_init");
-		return 1;
+		free(i2c);
+		return NULL;
 	}
 
-	return 0;
+	errno = 0;
+	return i2c;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void i2c_deinit(i2c_t* i2c) {
-	if ((i2c != NULL) && (i2c->fd >= 0)) {
-		close(i2c->fd);
-	}
+int i2c_deinit(i2c_interface_t** i2c) {
+        if (i2c == NULL || *i2c == NULL) {
+	        errno = EFAULT;
+	        return -1;
+        }
+
+        if ((*i2c)->fd >= 0) {
+		int ret = close((*i2c)->fd);
+		if (ret == 0) {
+			(*i2c)->fd = -1;
+			free(*i2c);
+			*i2c = NULL;
+		}
+		return ret;
+        }
+	else {
+		errno = EBADF;
+                return -1;
+        }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-size_t i2c_write(i2c_t* i2c, uint8_t addr, const void* buff, size_t len) {
+size_t i2c_write(i2c_interface_t* i2c, uint8_t addr, const void* buff, size_t len) {
 	if ((i2c == NULL) || (i2c->fd < 0) || (buff == NULL) || (len == 0)) {
-		fprintf(stderr, "i2c_write: invalid i2c\n");
 		return 0;
 	}
 
 	if (ioctl(i2c->fd, I2C_SLAVE, addr) < 0) {
-		perror("i2c_write");
 		return 0;
 	}
 
@@ -55,7 +80,7 @@ size_t i2c_write(i2c_t* i2c, uint8_t addr, const void* buff, size_t len) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-size_t i2c_read(i2c_t* i2c, uint8_t addr, uint8_t reg, void* buff, size_t len) {
+size_t i2c_read(i2c_interface_t* i2c, uint8_t addr, uint8_t reg, void* buff, size_t len) {
 	if ((i2c == NULL) || (i2c->fd < 0) || (buff == NULL) || (len == 0)) {
 		fprintf(stderr, "i2cInit: invalid i2c\n");
 		return 0;
