@@ -1,2 +1,5 @@
 *.h.gch
 *.o
+/build/
+/.ccls-cache/
+compile_commands.json
