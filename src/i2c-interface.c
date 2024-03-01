@@ -60,52 +60,123 @@ int i2c_deinit(i2c_interface_t** i2c) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-size_t i2c_write(i2c_interface_t* i2c, uint8_t addr, const void* buff, size_t len) {
-	if ((i2c == NULL) || (i2c->fd < 0) || (buff == NULL) || (len == 0)) {
-		return 0;
-	}
+int i2c_write(i2c_interface_t* i2c, uint8_t addr, const i2c_write_t* to_write) {
+	if (i2c == NULL) {
+	        errno = EFAULT;
+	        return -1;
+        }
+	if (i2c->fd < 0) {
+		errno = EBADF;
+		return -1;
+        }
+        if (addr >= 128) {
+	        errno = EINVAL;
+	        return -1;
+        }
+        if (to_write == NULL || to_write->buff == NULL) {
+                errno = EFAULT;
+                return -1;
+        }
+        if (to_write->len == 0) {
+	        errno = 0;
+	        return 1;
+        }
 
-	if (ioctl(i2c->fd, I2C_SLAVE, addr) < 0) {
-		return 0;
-	}
+        const struct i2c_msg msg = {
+	        .addr = addr,
+	        .flags = 0,
+	        .len = to_write->len,
+	        .buf = (uint8_t*) to_write->buff
+        };
+        struct i2c_msg msgs[1] = {msg};
+        const struct i2c_rdwr_ioctl_data ioctl_data[1] = {{
+	            .msgs = msgs,
+	            .nmsgs = sizeof(msgs) / sizeof(struct i2c_msg)
+	        }
+        };
 
-	size_t wLen = write(i2c->fd, buff, len);
-	if (wLen != len) {
-		perror("i2c_write");
-		fprintf(stderr, "i2c_write: invalid len (%u != %u)\n", (unsigned int) wLen, (unsigned int) len);
-		return 0;
-	}
-
-	return len;
+        switch (ioctl(i2c->fd, I2C_RDWR, ioctl_data)) {
+        case 1:
+	        return 0;
+	        break;
+        case 0:
+	        errno = EAGAIN;
+	        return 1;
+	        break;
+ 
+        default:
+	        errno = EPROTO;
+	        [[fallthrough]];
+        case -1:
+	        return -1;
+	        break;
+        }
 }
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-size_t i2c_read(i2c_interface_t* i2c, uint8_t addr, uint8_t reg, void* buff, size_t len) {
-	if ((i2c == NULL) || (i2c->fd < 0) || (buff == NULL) || (len == 0)) {
-		fprintf(stderr, "i2cInit: invalid i2c\n");
-		return 0;
-	}
+int i2c_read(i2c_interface_t* i2c, uint8_t addr, const i2c_write_t* read_order, const i2c_read_t* to_read) {
+	if (i2c == NULL) {
+	        errno = EFAULT;
+	        return -1;
+        }
+	if (i2c->fd < 0) {
+		errno = EBADF;
+		return -1;
+        }
+        if (addr >= 128) {
+	        errno = EINVAL;
+	        return -1;
+        }
+        if (read_order == NULL || read_order->buff == NULL) {
+                errno = EFAULT;
+                return -1;
+        }
+        if (read_order->len == 0) {
+	        errno = EINVAL;
+	        return -1;
+        }
+        if (to_read == NULL || to_read->buff == NULL) {
+                errno = EFAULT;
+                return -1;
+        }
+        if (to_read->len == 0) {
+	        errno = EINVAL;
+	        return -1;
+        }
 
-	struct i2c_msg msgs[2];
-	struct i2c_rdwr_ioctl_data data[1];
+        const struct i2c_msg read_order_msg = {
+	        .addr = addr,
+	        .flags = 0,
+	        .len = read_order->len,
+	        .buf = (uint8_t*) read_order->buff
+        };
+        const struct i2c_msg to_read_msg = {
+	        .addr = addr,
+	        .flags = I2C_M_RD,
+	        .len = to_read->len,
+	        .buf = (uint8_t*) to_read->buff
+        };
+        struct i2c_msg msgs[2] = {read_order_msg, to_read_msg};
+        const struct i2c_rdwr_ioctl_data ioctl_data[1] = {{
+	            .msgs = msgs,
+	            .nmsgs = sizeof(msgs) / sizeof(struct i2c_msg)
+	        }
+        };
 
-	msgs[0].addr = addr;
-	msgs[0].flags = 0;
-	msgs[0].len = 1;
-	msgs[0].buf = &reg;
+        switch (ioctl(i2c->fd, I2C_RDWR, ioctl_data)) {
+        case 2:
+	        return 0;
+	        break;
+        case 1:
+        case 0:
+	        errno = EAGAIN;
+	        return 1;
+	        break;
 
-	msgs[1].addr = addr;
-	msgs[1].flags = I2C_M_RD | I2C_M_NOSTART;
-	msgs[1].len = len;
-	msgs[1].buf = (uint8_t*) buff;
-
-	data[0].msgs = msgs;
-	data[0].nmsgs = 2;
-
-	if (ioctl(i2c->fd, I2C_RDWR, &data) < 0) {
-		perror("i2c_read");
-		return 0;
-	}
-
-	return len;
+        default:
+	        errno = EPROTO;
+	        [[fallthrough]];
+        case -1:
+	        return -1;
+	        break;
+        }
 }

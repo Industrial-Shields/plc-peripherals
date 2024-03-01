@@ -1,6 +1,6 @@
 export CC := gcc
 export CPPFLAGS := -I$(realpath include)
-export CFLAGS := -Wall -Wextra -Werror -fPIC
+export CFLAGS := -Wall -Wextra -Werror -fPIC -fanalyzer
 export LDFLAGS
 
 BUILD_TYPE ?= Release
@@ -20,7 +20,7 @@ export ABS_SRC_DIR := $(realpath $(SRC_DIR))
 export ABS_BUILD_DIR := $(patsubst %/$(SRC_DIR), %/$(BUILD_DIR), $(ABS_SRC_DIR))
 LDFLAGS += -L$(ABS_BUILD_DIR) -lplc-peripherals
 
-SRCS := src/i2c-interface.c #$(wildcard $(SRC_DIR)/*.c)
+SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
 LIB := $(BUILD_DIR)/$(LIBNAME)
 
