@@ -107,6 +107,7 @@ int main() {
 
 	RUN_TEST(ltc2309_init_sanity_check);
 	RUN_TEST(ltc2309_deinit_sanity_check);
+	RUN_TEST(ltc2309_init_deinit_cycle);
 
 	RUN_TEST(ltc2309_read_test);
 
