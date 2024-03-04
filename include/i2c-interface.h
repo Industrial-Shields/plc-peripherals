@@ -28,7 +28,8 @@ extern "C" {
 	i2c_interface_t* i2c_init(uint8_t bus);
 	int i2c_deinit(i2c_interface_t** i2c);
         int i2c_write(i2c_interface_t* i2c, uint8_t addr, const i2c_write_t* to_write);
-        int i2c_read(i2c_interface_t* i2c, uint8_t addr, const i2c_write_t* read_order, const i2c_read_t* to_read);
+	int i2c_read(i2c_interface_t* i2c, uint8_t addr, const i2c_read_t* to_read);
+        int i2c_write_then_read(i2c_interface_t* i2c, uint8_t addr, const i2c_write_t* read_order, const i2c_read_t* to_read);
 
 #ifdef __cplusplus
 }

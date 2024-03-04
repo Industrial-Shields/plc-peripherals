@@ -112,8 +112,63 @@ int i2c_write(i2c_interface_t* i2c, uint8_t addr, const i2c_write_t* to_write) {
 	        break;
         }
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-int i2c_read(i2c_interface_t* i2c, uint8_t addr, const i2c_write_t* read_order, const i2c_read_t* to_read) {
+int i2c_read(i2c_interface_t* i2c, const uint8_t addr, const i2c_read_t* to_read) {
+	if (i2c == NULL) {
+	        errno = EFAULT;
+	        return -1;
+        }
+	if (i2c->fd < 0) {
+		errno = EBADF;
+		return -1;
+        }
+        if (addr >= 128) {
+	        errno = EINVAL;
+	        return -1;
+        }
+        if (to_read == NULL || to_read->buff == NULL) {
+                errno = EFAULT;
+                return -1;
+        }
+        if (to_read->len == 0) {
+	        errno = 0;
+	        return 1;
+        }
+
+        const struct i2c_msg msg = {
+	        .addr = addr,
+	        .flags = I2C_M_RD,
+	        .len = to_read->len,
+	        .buf = (uint8_t*) to_read->buff
+        };
+        struct i2c_msg msgs[1] = {msg};
+        const struct i2c_rdwr_ioctl_data ioctl_data[1] = {{
+	            .msgs = msgs,
+	            .nmsgs = sizeof(msgs) / sizeof(struct i2c_msg)
+	        }
+        };
+
+        switch (ioctl(i2c->fd, I2C_RDWR, ioctl_data)) {
+        case 1:
+	        return 0;
+	        break;
+        case 0:
+	        errno = EAGAIN;
+	        return 1;
+	        break;
+
+        default:
+	        errno = EPROTO;
+	        [[fallthrough]];
+        case -1:
+	        return -1;
+	        break;
+        }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+int i2c_write_then_read(i2c_interface_t* i2c, const uint8_t addr, const i2c_write_t* read_order, const i2c_read_t* to_read) {
 	if (i2c == NULL) {
 	        errno = EFAULT;
 	        return -1;
