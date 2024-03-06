@@ -17,7 +17,7 @@ extern "C" {
 
 	typedef struct {
 		const uint8_t* buff;
-		const size_t len;
+	        size_t len;
 	} i2c_write_t;
 
 	typedef struct {
