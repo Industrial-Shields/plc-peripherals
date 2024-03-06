@@ -89,15 +89,6 @@ static int mcp23008_reset(i2c_interface_t* i2c, uint8_t addr) {
 }
 
 int mcp23008_init(i2c_interface_t* i2c, uint8_t addr) {
-	if (i2c == NULL) {
-		errno = EFAULT;
-		return -1;
-	}
-	if (addr >= 128) {
-	        errno = EINVAL;
-	        return -1;
-        }
-
 	FAST_CREATE_I2C_WRITE(read_order_iocon_reg, IOCON_REGISTER);
 	FAST_CREATE_I2C_WRITE(read_order_gppu_reg, GPPU_REGISTER);
 
@@ -136,15 +127,6 @@ int mcp23008_init(i2c_interface_t* i2c, uint8_t addr) {
 }
 
 int mcp23008_deinit(i2c_interface_t* i2c, uint8_t addr) {
-        if (i2c == NULL) {
-	        errno = EFAULT;
-	        return -1;
-        }
-        if (addr >= 128) {
-	        errno = EINVAL;
-	        return -1;
-        }
-
         FAST_CREATE_I2C_WRITE(read_order_iocon_reg, IOCON_REGISTER);
 	FAST_CREATE_I2C_WRITE(read_order_gppu_reg, GPPU_REGISTER);
 
@@ -178,11 +160,7 @@ int mcp23008_deinit(i2c_interface_t* i2c, uint8_t addr) {
 
 
 int mcp23008_set_pin_mode(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t mode) {
-	if (i2c == NULL) {
-		errno = EFAULT;
-		return -1;
-	}
-	if (addr >= 128 || index >= 8 || mode >= 2) {
+	if (index >= 8 || mode >= 2) {
 	        errno = EINVAL;
 	        return -1;
         }
@@ -214,15 +192,6 @@ int mcp23008_set_pin_mode(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uin
 }
 
 int mcp23008_set_pin_mode_all(i2c_interface_t* i2c, uint8_t addr, uint8_t modes) {
-	if (i2c == NULL) {
-		errno = EFAULT;
-		return -1;
-	}
-	if (addr >= 128) {
-	        errno = EINVAL;
-	        return -1;
-        }
-
 	int i2c_ret = write_reg(i2c, addr, IODIR_REGISTER, modes);
 	if (i2c_ret != 0) {
 		return i2c_ret;
@@ -233,11 +202,11 @@ int mcp23008_set_pin_mode_all(i2c_interface_t* i2c, uint8_t addr, uint8_t modes)
 }
 
 int mcp23008_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t* value) {
-	if (i2c == NULL) {
+	if (value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
-	if (addr >= 128 || index >= 8) {
+	if (index >= 8) {
 	        errno = EINVAL;
 	        return -1;
         }
@@ -258,11 +227,7 @@ int mcp23008_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t* va
 }
 
 int mcp23008_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t value) {
-	if (i2c == NULL) {
-		errno = EFAULT;
-		return -1;
-	}
-	if (addr >= 128 || index >= 8) {
+	if (index >= 8) {
 	        errno = EINVAL;
 	        return -1;
         }
@@ -293,14 +258,10 @@ int mcp23008_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t va
 }
 
 int mcp23008_read_all(i2c_interface_t* i2c, uint8_t addr, uint8_t* value) {
-	if (i2c == NULL) {
+	if (value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
-	if (addr >= 128) {
-	        errno = EINVAL;
-	        return -1;
-        }
 
 	FAST_CREATE_I2C_WRITE(read_order_gpio_reg, GPIO_REGISTER);
 
@@ -316,15 +277,6 @@ int mcp23008_read_all(i2c_interface_t* i2c, uint8_t addr, uint8_t* value) {
 }
 
 int mcp23008_write_all(i2c_interface_t* i2c, uint8_t addr, uint8_t value) {
-	if (i2c == NULL) {
-		errno = EFAULT;
-		return -1;
-	}
-	if (addr >= 128) {
-	        errno = EINVAL;
-	        return -1;
-        }
-
 	int i2c_ret = write_reg(i2c, addr, GPIO_REGISTER, value);
 	if (i2c_ret != 0) {
 		return i2c_ret;

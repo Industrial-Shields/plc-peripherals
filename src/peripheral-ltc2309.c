@@ -58,6 +58,10 @@ int ltc2309_deinit(i2c_interface_t* i2c, uint8_t addr) {
 }
 
 int ltc2309_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* read_value) {
+	if (read_value == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
         uint8_t mux;
 	switch (index) {
 	case 0:
