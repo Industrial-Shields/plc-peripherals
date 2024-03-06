@@ -213,6 +213,25 @@ int mcp23008_set_pin_mode(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uin
 	return 0;
 }
 
+int mcp23008_set_pin_mode_all(i2c_interface_t* i2c, uint8_t addr, uint8_t modes) {
+	if (i2c == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+	if (addr >= 128) {
+	        errno = EINVAL;
+	        return -1;
+        }
+
+	int i2c_ret = write_reg(i2c, addr, IODIR_REGISTER, modes);
+	if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+
+	errno = 0;
+	return 0;
+}
+
 int mcp23008_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t* value) {
 	if (i2c == NULL) {
 		errno = EFAULT;

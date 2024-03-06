@@ -14,6 +14,7 @@ extern "C" {
 	int mcp23008_init(i2c_interface_t* i2c, uint8_t addr);
 	int mcp23008_deinit(i2c_interface_t* i2c, uint8_t addr);
 	int mcp23008_set_pin_mode(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t mode);
+	int mcp23008_set_pin_mode_all(i2c_interface_t* i2c, uint8_t addr, uint8_t modes);
 	int mcp23008_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t* value);
         int mcp23008_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t value);
 	int mcp23008_read_all(i2c_interface_t* i2c, uint8_t addr, uint8_t* value);
