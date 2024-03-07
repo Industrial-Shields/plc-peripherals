@@ -1,9 +1,7 @@
-#include "peripheral-ads1015.h"
+#include "../include/peripheral-ads1015.h"
 
 #include <unistd.h>
-
-#include "rpiplc-arduino.h"
-
+#include <errno.h>
 
 // Registers
 #define CONVERSION_REGISTER		0x00
@@ -50,48 +48,89 @@
 #define CONFIG_L_DR_2400		0xa0
 #define CONFIG_L_DR_3300		0xc0
 
-int ads1015_init(i2c_t* i2c, uint8_t addr) {
-	return 1;
+int ads1015_init(i2c_interface_t* i2c, uint8_t addr) {
+	if (i2c == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+	if (addr >= 128) {
+	        errno = EINVAL;
+	        return -1;
+        }
+
+	errno = 0;
+	return 0;
 }
 
-uint16_t ads1015_read(i2c_t* i2c, uint8_t addr, uint8_t index) {
-	uint8_t mux = 0;
+int ads1015_deinit(i2c_interface_t* i2c, uint8_t addr) {
+	if (i2c == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+	if (addr >= 128) {
+	        errno = EINVAL;
+	        return -1;
+        }
+
+	errno = 0;
+	return 0;
+}
+
+int ads1015_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* read_value) {
+	if (read_value == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+	uint8_t mux;
 	switch (index) {
-		case 0:
-			mux = CONFIG_H_MUX_0;
-			break;
+	case 0:
+		mux = CONFIG_H_MUX_0;
+		break;
 
-		case 1:
-			mux = CONFIG_H_MUX_1;
-			break;
+	case 1:
+		mux = CONFIG_H_MUX_1;
+		break;
 
-		case 2:
-			mux = CONFIG_H_MUX_2;
-			break;
+	case 2:
+		mux = CONFIG_H_MUX_2;
+		break;
 
-		case 3:
-			mux = CONFIG_H_MUX_3;
-			break;
+	case 3:
+		mux = CONFIG_H_MUX_3;
+		break;
+	default:
+		errno = EINVAL;
+		return -1;
 	}
 
-	uint8_t buffer[3];
-	buffer[0] = CONFIG_REGISTER;
+        uint8_t buffer[3];
+
+        buffer[0] = CONFIG_REGISTER;
 	buffer[1] = CONFIG_H_MODE_SINGLE | CONFIG_H_PGA_1 | CONFIG_H_OS_START | mux;
 	buffer[2] = CONFIG_L_CQUE_NONE | CONFIG_L_CLAT_NONE | CONFIG_L_CPOL_LOW | CONFIG_L_CMODE_HYST | CONFIG_L_DR_1600;
-	if (i2c_write(i2c, addr, buffer, 3) != 3) {
-		return 0;
+	const i2c_write_t start_conversion = {.buff=buffer, .len=sizeof(buffer)};
+
+	int i2c_ret = i2c_write(i2c, addr, &start_conversion);
+	if (i2c_ret != 0) {
+		return i2c_ret;
 	}
 
-	delay(1);
+	usleep(1000);
 
-	if (i2c_read(i2c, addr, CONVERSION_REGISTER, buffer, 2) != 2) {
-		return 0;
+	buffer[0] = CONVERSION_REGISTER;
+	const i2c_write_t read_conversion_reg = {.buff=buffer, .len=1};
+	const i2c_read_t read_conversion = {.buff=buffer, .len=2}; // It must return two bytes
+
+	i2c_ret = i2c_write_then_read(i2c, addr, &read_conversion_reg, &read_conversion);
+	if (i2c_ret != 0) {
+		return i2c_ret;
 	}
 
-	uint16_t res = ((buffer[0] << 8) | (buffer[1])) >> 4;
-	if (res > 0x07ff) {
-		res = 0;
+	uint16_t result = ((buffer[0] << 8) | (buffer[1])) >> 4;
+	if (result > 0x07ff) {
+		return -1;
 	}
 
-	return res;
+	*read_value = result;
+	return 0;
 }
