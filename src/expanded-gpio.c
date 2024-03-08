@@ -181,7 +181,7 @@ int digitalWrite(uint32_t pin, uint8_t value) {
 }
 
 int digitalRead(uint32_t pin) {
-	uint16_t value;
+	uint16_t value = 0;
 	int i2c_ret;
 
 	uint8_t addr = pinToDeviceAddress(pin);
@@ -202,20 +202,22 @@ int digitalRead(uint32_t pin) {
 		}
 	}
 	else if (isAddressIntoArray(addr, LTC2309, NUM_LTC2309)) {
-		i2c_ret = ltc2309_read(i2c, addr, index, &value) > 2047 ? 1 : 0;
+		i2c_ret = ltc2309_read(i2c, addr, index, &value);
 		if (i2c_ret < 0) {
 			return 0;
 		}
+	        value = value > 2000 ? 1 : 0;
         }
 
 	else if (isAddressIntoArray(addr, ADS1015, NUM_ADS1015)) {
-		i2c_ret = ads1015_read(i2c, addr, index, &value) > 1023 ? 1 : 0;
+		i2c_ret = ads1015_read(i2c, addr, index, &value);
 		if (i2c_ret < 0) {
-		        value = 0;
+			return 0;
 		}
+	        value = value > 1000 ? 1 : 0;
 	}
 
-	return 0;
+	return value;
 }
 
 int analogWrite(uint32_t pin, uint16_t value) {
@@ -236,21 +238,24 @@ int analogWrite(uint32_t pin, uint16_t value) {
 }
 
 uint16_t analogRead(uint32_t pin) {
+	uint16_t value = 0;
+	int i2c_ret;
+
+
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-	uint16_t value;
-	int i2c_ret;
 
 	if (isAddressIntoArray(addr, ADS1015, NUM_ADS1015)) {
-		i2c_ret = ads1015_read(i2c, addr, index, &value) > 1023 ? 1 : 0;
+		i2c_ret = ads1015_read(i2c, addr, index, &value);
 		if (i2c_ret < 0) {
 			return 0;
 		}
 	}
 	else if (isAddressIntoArray(addr, LTC2309, NUM_LTC2309)) {
-		i2c_ret = ltc2309_read(i2c, addr, index, &value) > 2047 ? 1 : 0;
+		i2c_ret = ltc2309_read(i2c, addr, index, &value);
 		if (i2c_ret < 0) {
+			perror("i2c");
 		        return 0;
 		}
         }

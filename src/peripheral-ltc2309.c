@@ -109,13 +109,7 @@ int ltc2309_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* re
 		return i2c_ret;
 	}
 
-	uint16_t result = (buffer[0] << 4) | (buffer[1] >> 4);
-	if (result > 0x07ff) {
-		errno = ENODATA;
-		return -1;
-	}
-
-	*read_value = result;
+	*read_value = (buffer[0] << 4) | (buffer[1] >> 4);
 
 	return 0;
 }
