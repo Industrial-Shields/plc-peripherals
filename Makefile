@@ -43,6 +43,8 @@ $(LIB): $(OBJS) | $(BUILD_DIR)
 with_expanded_gpio: $(OBJS) $(BUILD_DIR)/expanded-gpio.o | $(BUILD_DIR)
 	ar rcs $(LIB) $^
 
+tests: $(LIB)
+	make -C tests/
 
 clean:
 	rm -rf $(BUILD_DIR)
