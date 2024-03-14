@@ -33,7 +33,7 @@
 #define IOCON_B_ODR             0b00000100
 
 
-#define GET_REGISTER(pin, A, B) (index <= 7 ? A : B)
+#define GET_REGISTER(_pin, _A, _B) (_pin <= 7 ? _A : _B)
 
 
 static inline int write_reg(i2c_interface_t* i2c, uint8_t addr, uint8_t reg, uint8_t value) {
@@ -252,13 +252,14 @@ int mcp23017_deinit(i2c_interface_t* i2c, uint8_t addr) {
 }
 
 int mcp23017_set_pin_mode(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t mode) {
-	if (index >= 8 || mode >= 2) {
+	if (index >= 16 || mode >= 2) {
 	        errno = EINVAL;
 	        return -1;
         }
 
-	const uint8_t write_register = GET_REGISTER(pin, IODIR_A_REGISTER, IODIR_B_REGISTER);
+	const uint8_t write_register = GET_REGISTER(index, IODIR_A_REGISTER, IODIR_B_REGISTER);
 	FAST_CREATE_I2C_WRITE(read_order_iodir_reg, write_register);
+	index = index % 8;
 
 	uint8_t iodir;
 	i2c_read_t read_iodir_reg = {.buff=&iodir, .len=1};
@@ -299,18 +300,19 @@ int mcp23017_set_pin_mode_all(i2c_interface_t* i2c, uint8_t addr, uint16_t modes
 	return 0;
 }
 
-int mcp23017_get_input(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t* value) {
+int mcp23017_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t* value) {
 	if (value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
-	if (index >= 8) {
+	if (index >= 16) {
 	        errno = EINVAL;
 	        return -1;
         }
 
-	const uint8_t write_register = GET_REGISTER(pin, GPIO_A_REGISTER, GPIO_B_REGISTER);
+	const uint8_t write_register = GET_REGISTER(index, GPIO_A_REGISTER, GPIO_B_REGISTER);
 	FAST_CREATE_I2C_WRITE(read_order_gpio_reg, write_register);
+	index = index % 8;
 
 	i2c_read_t read_gpio_reg = {.buff=value, .len=1};
 
@@ -325,16 +327,17 @@ int mcp23017_get_input(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_
 	return 0;
 }
 
-int mcp23017_set_output(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t value) {
-	if (index >= 8) {
+int mcp23017_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t value) {
+	if (index >= 16) {
 	        errno = EINVAL;
 	        return -1;
         }
 	value = value > 0 ? 1 : 0;
 
 
-	const uint8_t write_register = GET_REGISTER(pin, GPIO_A_REGISTER, GPIO_B_REGISTER);
+	const uint8_t write_register = GET_REGISTER(index, GPIO_A_REGISTER, GPIO_B_REGISTER);
 	FAST_CREATE_I2C_WRITE(read_order_gpio_reg, write_register);
+	index = index % 8;
 
 	uint8_t gpio;
 	i2c_read_t read_gpio_reg = {.buff=&gpio, .len=1};
@@ -349,6 +352,46 @@ int mcp23017_set_output(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8
 	}
 
 	i2c_ret = write_reg(i2c, addr, write_register, gpio);
+	if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+
+	errno = 0;
+	return 0;
+}
+
+int mcp23017_read_all(i2c_interface_t* i2c, uint8_t addr, uint16_t* value) {
+	if (value == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	FAST_CREATE_I2C_WRITE(read_order_gpio_a_reg, GPIO_A_REGISTER);
+	FAST_CREATE_I2C_WRITE(read_order_gpio_b_reg, GPIO_B_REGISTER);
+
+	i2c_read_t read_gpio_a_reg = {.buff=(uint8_t*) value, .len=1};
+	i2c_read_t read_gpio_b_reg = {.buff=((uint8_t*) value) + 1, .len=1};
+
+	int i2c_ret = i2c_write_then_read(i2c, addr, &read_order_gpio_a_reg, &read_gpio_a_reg);
+	if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+	i2c_ret = i2c_write_then_read(i2c, addr, &read_order_gpio_b_reg, &read_gpio_b_reg);
+	if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+
+	errno = 0;
+	return 0;
+}
+
+int mcp23017_write_all(i2c_interface_t* i2c, uint8_t addr, uint16_t value) {
+	int i2c_ret = write_reg(i2c, addr, GPIO_A_REGISTER, value & 0x00FF);
+	if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+
+	i2c_ret = write_reg(i2c, addr, GPIO_B_REGISTER, value & 0xFF00);
 	if (i2c_ret != 0) {
 		return i2c_ret;
 	}

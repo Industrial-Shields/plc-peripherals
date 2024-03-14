@@ -9,6 +9,7 @@
 #include "../include/peripheral-mcp23008.h"
 #include "../include/peripheral-pca9685.h"
 #include "../include/peripheral-ltc2309.h"
+#include "../include/peripheral-mcp23017.h"
 
 // TODO: Portable logging methods
 
@@ -107,6 +108,22 @@ int initExpandedGPIO(void) {
                 }
 	}
 
+		for (size_t i = 0; i < NUM_MCP23017; i++) {
+		i2c_ret = mcp23017_init(i2c, MCP23017[i]);
+		if (i2c_ret == 1 && errno == EALREADY) {
+			i2c_ret = mcp23017_deinit(i2c, MCP23017[i]);
+			assert(i2c_ret >= 0);
+                        if (i2c_ret < 0) {
+	                        return MCP23017_INIT_FAIL;
+                        }
+                        i2c_ret = mcp23017_init(i2c, MCP23017[i]);
+                        assert(i2c_ret >= 0);
+                        if (i2c_ret < 0) {
+	                        return MCP23017_INIT_FAIL;
+                        }
+                }
+	}
+
 	return 0;
 }
 
@@ -157,6 +174,14 @@ int deinitExpandedGPIO(void) {
 		}
 	}
 
+	for (size_t i = 0; i < NUM_MCP23017; ++i) {
+		i2c_ret = mcp23017_deinit(i2c, MCP23017[i]);
+		assert(i2c_ret >= 0);
+		if (i2c_ret < 0) {
+			return MCP23017_DEINIT_FAIL;
+		}
+	}
+
         return i2c_deinit(&i2c);
 }
 
@@ -182,6 +207,14 @@ int pinMode(uint32_t pin, uint8_t mode) {
 		assert(i2c_ret >= 0);
 		if (i2c_ret < 0) {
 			return MCP23008_SET_PIN_MODE_FAIL;
+		}
+	}
+
+	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017)) {
+		i2c_ret = mcp23017_set_pin_mode(i2c, addr, index, mode == OUTPUT ? MCP23017_OUTPUT : MCP23017_INPUT);
+		assert(i2c_ret >= 0);
+		if (i2c_ret < 0) {
+			return MCP23017_SET_PIN_MODE_FAIL;
 		}
 	}
 
@@ -219,6 +252,12 @@ int digitalWrite(uint32_t pin, uint8_t value) {
 	else if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008)) {
 		if (mcp23008_write(i2c, addr, index, value) < 0) {
 			return MCP23008_SET_OUT_FAIL;
+		}
+	}
+
+	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017)) {
+		if (mcp23017_write(i2c, addr, index, value) < 0) {
+			return MCP23017_SET_OUT_FAIL;
 		}
 	}
 
@@ -266,6 +305,13 @@ int digitalRead(uint32_t pin) {
 	        value = value > 818 ? 1 : 0;
 	}
 
+	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017)) {
+		i2c_ret = mcp23017_read(i2c, addr, index, (uint8_t*) &value);
+		if (i2c_ret < 0) {
+			return 0;
+		}
+	}
+
 	return value;
 }
 
@@ -294,6 +340,13 @@ uint16_t analogRead(uint32_t pin) {
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
+	if (addr == 0) {
+		i2c_ret = normal_gpio_analog_read(pin, &value);
+		assert(i2c_ret == 0);
+		if (i2c_ret < 0) {
+			return 0;
+		}
+	}
 
 	if (isAddressIntoArray(addr, ADS1015, NUM_ADS1015)) {
 		i2c_ret = ads1015_se_read(i2c, addr, index, &value);
@@ -321,7 +374,7 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 		i2c_ret = mcp23008_write_all(i2c, addr, values);
 		assert(i2c_ret >= 0);
 		if (i2c_ret < 0) {
-			return PCA9685_WRITE_ALL_FAIL;
+			return MCP23008_WRITE_ALL_FAIL;
 		}
 	}
 
@@ -329,21 +382,37 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 		i2c_ret = pca9685_set_all_digital(i2c, addr, values);
 		assert(i2c_ret >= 0);
 		if (i2c_ret < 0) {
-			return MCP23008_WRITE_ALL_FAIL;
+			return PCA9685_WRITE_ALL_FAIL;
+		}
+	}
+
+	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017)) {
+		i2c_ret = mcp23017_set_all_digital(i2c, addr, values);
+		assert(i2c_ret >= 0);
+		if (i2c_ret < 0) {
+			return MCP23017_WRITE_ALL_FAIL;
 		}
 	}
 
 	return 0;
 }
 
-int digitalReadAll(uint8_t addr, uint8_t* values) {
+int digitalReadAll(uint8_t addr, uint16_t* values) {
 	int i2c_ret;
 
 	if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008)) {
-		i2c_ret = mcp23008_read_all(i2c, addr, values);
+		i2c_ret = mcp23008_read_all(i2c, addr, (uint8_t*) values);
 		assert(i2c_ret >= 0);
 		if (i2c_ret < 0) {
 			return MCP23008_READ_ALL_FAIL;
+		}
+	}
+
+	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017)) {
+		i2c_ret = mcp23017_read_all(i2c, addr, values);
+		assert(i2c_ret >= 0);
+		if (i2c_ret < 0) {
+			return MCP23017_READ_ALL_FAIL;
 		}
 	}
 

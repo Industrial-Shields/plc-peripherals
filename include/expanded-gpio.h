@@ -50,6 +50,8 @@ extern "C" {
 
 	extern int normal_gpio_read(uint32_t pin, uint8_t* read);
 
+	extern int normal_gpio_analog_read(uint32_t pin, uint16_t* read);
+
 
 	#if defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Linux
 	void delay(uint32_t milliseconds);
@@ -67,25 +69,31 @@ extern "C" {
 		ADS1015_INIT_FAIL,
 		MCP23008_INIT_FAIL,
 		LTC2309_INIT_FAIL,
+		MCP23017_INIT_FAIL,
 		NORMAL_GPIO_DEINIT_FAIL,
 		PCA9685_DEINIT_FAIL,
 		ADS1015_DEINIT_FAIL,
 		MCP23008_DEINIT_FAIL,
 		LTC2309_DEINIT_FAIL,
+		MCP23017_DEINIT_FAIL,
 
 		NORMAL_GPIO_SET_PIN_MODE_FAIL,
 		MCP23008_SET_PIN_MODE_FAIL,
+		MCP23017_SET_PIN_MODE_FAIL,
 
 		NORMAL_GPIO_WRITE_FAIL,
 		PCA9685_SET_OUT_FAIL,
 		MCP23008_SET_OUT_FAIL,
+		MCP23017_SET_OUT_FAIL,
 
 		PCA9685_SET_OUT_PWM_FAIL,
 
 		PCA9685_WRITE_ALL_FAIL,
 		MCP23008_WRITE_ALL_FAIL,
+		MCP23017_WRITE_ALL_FAIL,
 
 		MCP23008_READ_ALL_FAIL,
+		MCP23017_READ_ALL_FAIL,
 
 		PCA9685_SET_ALL_FAIL
 	};
@@ -106,7 +114,7 @@ extern "C" {
 
 	int digitalWriteAll(uint8_t addr, uint32_t values);
 
-	int digitalReadAll(uint8_t addr, uint8_t* values);
+	int digitalReadAll(uint8_t addr, uint16_t* values);
 
 	int analogWriteAll(uint8_t addr, const uint16_t* values);
 
