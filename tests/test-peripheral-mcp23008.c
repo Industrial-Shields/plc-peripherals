@@ -1,5 +1,6 @@
-#include <i2c-interface.h>
-#include <peripheral-mcp23008.h>
+#if defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Linux
+
+#include <plc-peripherals.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -281,3 +282,5 @@ int main() {
 
         return UNITY_END();
 }
+
+#endif // PLC_ENVIRONMENT == Linux
