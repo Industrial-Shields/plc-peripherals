@@ -391,7 +391,7 @@ int mcp23017_write_all(i2c_interface_t* i2c, uint8_t addr, uint16_t value) {
 		return i2c_ret;
 	}
 
-	i2c_ret = write_reg(i2c, addr, GPIO_B_REGISTER, value & 0xFF00);
+	i2c_ret = write_reg(i2c, addr, GPIO_B_REGISTER, (uint8_t) (value & 0xFF00));
 	if (i2c_ret != 0) {
 		return i2c_ret;
 	}

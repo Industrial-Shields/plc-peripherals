@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 #include <errno.h>
-#include <assert.h>
+#include <unistd.h>
 
 #include "../include/i2c-interface.h"
 #include "../include/peripheral-ads1015.h"
@@ -10,6 +10,12 @@
 #include "../include/peripheral-pca9685.h"
 #include "../include/peripheral-ltc2309.h"
 #include "../include/peripheral-mcp23017.h"
+
+// Do not compile with assertions unless explicitly told
+#ifndef WITH_ASSERTIONS
+#define NDEBUG
+#endif
+#include <assert.h>
 
 // TODO: Portable logging methods
 
@@ -395,7 +401,7 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 	}
 
 	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017)) {
-		i2c_ret = mcp23017_set_all_digital(i2c, addr, values);
+		i2c_ret = mcp23017_write_all(i2c, addr, values);
 		assert(i2c_ret >= 0);
 		if (i2c_ret < 0) {
 			return MCP23017_WRITE_ALL_FAIL;
