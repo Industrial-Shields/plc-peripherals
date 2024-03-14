@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "../include/i2c-interface.h"
 #include "../include/peripheral-ads1015.h"
