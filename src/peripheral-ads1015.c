@@ -76,7 +76,8 @@ int ads1015_deinit(i2c_interface_t* i2c, uint8_t addr) {
 	return 0;
 }
 
-int ads1015_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* read_value) {
+// It can be used for single-ended and differential readings
+int ads1015_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, int16_t* read_value) {
 	if (read_value == NULL) {
 		errno = EFAULT;
 		return -1;
@@ -115,7 +116,7 @@ int ads1015_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* re
 		return i2c_ret;
 	}
 
-	usleep(1000);
+	usleep(650);
 
 	buffer[0] = CONVERSION_REGISTER;
 	const i2c_write_t read_conversion_reg = {.buff=buffer, .len=1};
@@ -126,11 +127,42 @@ int ads1015_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* re
 		return i2c_ret;
 	}
 
-	uint16_t result = ((buffer[0] << 8) | (buffer[1])) >> 4;
-	if (result > 0x07ff) {
-		return -1;
+        int16_t i2c_read = ((buffer[0] << 8) | (buffer[1]));
+        if ((i2c_read & 0x000F) != 0) { // Last 4 bits were not 0, invalid conversion
+	        errno = ERANGE;
+	        return -1;
+        }
+
+        *read_value = i2c_read >> 4;
+	return 0;
+}
+
+// Single-ended read, it removes the sign bits and returns an unsigned integer of 11 valid bits
+int ads1015_se_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* read_value) {
+	int16_t signed_value;
+	int i2c_ret = ads1015_read(i2c, addr, index, &signed_value);
+
+	if (i2c_ret < 0) {
+		return i2c_ret;
 	}
 
-	*read_value = result;
+	else if (signed_value < 0) {
+		/* Quote from the ADS1015 datasheet, page 22:
+		 * Single-ended signal measurements, where VAINN = 0 V and VAINP = 0 V to +FS, only use
+		 * the positive code range from 0000h to 7FF0h. However, because of device offset, the
+		 * ADS101x can still output negative codes in case VAINP is close to 0 V.
+		 */
+		// We accept up to three bits of error
+		if (signed_value >= -7) {
+			signed_value = 0;
+                }
+		else {
+			errno = ERANGE;
+			return -1;
+                }
+        }
+
+	*read_value = signed_value & 0x0FFF;
+
 	return 0;
 }

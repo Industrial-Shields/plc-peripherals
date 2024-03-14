@@ -37,6 +37,9 @@ extern "C" {
 	extern const uint8_t LTC2309[];
 	extern const size_t NUM_LTC2309;
 
+	extern const uint8_t MCP23017[];
+	extern const size_t NUM_MCP23017;
+
 
 	extern int normal_gpio_init(void);
 	extern int normal_gpio_deinit(void);
@@ -48,9 +51,11 @@ extern "C" {
 	extern int normal_gpio_read(uint32_t pin, uint8_t* read);
 
 
+	#if defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Linux
 	void delay(uint32_t milliseconds);
 
 	void delayMicroseconds(uint32_t micros);
+	#endif
 
 
 	// Exported functions, useful for Arduino environment
@@ -85,9 +90,9 @@ extern "C" {
 		PCA9685_SET_ALL_FAIL
 	};
 
-	int initPins(void);
+	int initExpandedGPIO(void);
 
-	int deinitPins(void);
+	int deinitExpandedGPIO(void);
 
 	int pinMode(uint32_t pin, uint8_t mode);
 
