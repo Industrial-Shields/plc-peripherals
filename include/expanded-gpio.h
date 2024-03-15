@@ -4,17 +4,24 @@
 #include <stdint.h>
 #include <stddef.h>
 
-
+#ifndef INPUT
 #define INPUT 0
+#endif
+
+#ifndef OUTPUT
 #define OUTPUT 1
+#endif
+
+#ifndef LOW
 #define LOW 0
+#endif
+
+#ifndef HIGH
 #define HIGH 1
+#endif
 
 #define pinToDeviceAddress(pin) (((pin) >> 8) & 0xff)
 #define pinToDeviceIndex(pin) ((pin)&0xff)
-
-// #define RPI_GPIO_INPUT 0
-// #define RPI_GPIO_OUTPUT 1
 
 #ifdef __cplusplus
 extern "C" {

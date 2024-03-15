@@ -84,15 +84,15 @@ int i2c_deinit(i2c_interface_t** i2c) {
         // defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Linux
 #elif defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Arduino_ESP32
 	int ret = i2cDeinit((*i2c)->bus_num);
-	if (ret == ESP_OK) {
-		errno = ret;
-		(*i2c)->bus_num = -1;
-		free(*i2c);
-		*i2c = NULL;
+        if (ret != ESP_OK) {
+	        errno = EBADF;
+	        return ret;
         }
-	else {
-		errno = ret;
-		return -1;
+        else {
+	       (*i2c)->bus_num = -1;
+	       free(*i2c);
+	       *i2c = NULL;
+	       return 0;
         }
         // defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Arduino_ESP32
 #endif
