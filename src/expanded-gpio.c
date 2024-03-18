@@ -24,10 +24,11 @@ static i2c_interface_t* i2c = NULL;
 static int isAddressIntoArray(uint8_t addr, const uint8_t* arr, uint8_t len) {
 	while (len--) {
 		if (*arr++ == addr) {
-			return -1;
+			return 0;
 		}
 	}
-	return 0;
+
+	return -1;
 }
 
 int initExpandedGPIO(void) {
@@ -247,27 +248,20 @@ int digitalWrite(uint32_t pin, uint8_t value) {
 	}
 
 	else if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
-		if (value) {
-			if (pca9685_set_out_on(i2c, addr, index) < 0) {
-				return PCA9685_SET_OUT_FAIL;
-			}
-		}
-		else {
-			if (pca9685_set_out_off(i2c, addr, index) < 0) {
-				return PCA9685_SET_OUT_FAIL;
-			}
+		if (pca9685_write(i2c, addr, index, value) != 0) {
+			return PCA9685_WRITE_FAIL;
 		}
 	}
 
 	else if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008) == 0) {
 		if (mcp23008_write(i2c, addr, index, value) < 0) {
-			return MCP23008_SET_OUT_FAIL;
+			return MCP23008_WRITE_FAIL;
 		}
 	}
 
 	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017) == 0) {
 		if (mcp23017_write(i2c, addr, index, value) < 0) {
-			return MCP23017_SET_OUT_FAIL;
+			return MCP23017_WRITE_FAIL;
 		}
 	}
 
@@ -334,10 +328,10 @@ int analogWrite(uint32_t pin, uint16_t value) {
 	uint8_t index = pinToDeviceIndex(pin);
 
 	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
-		ret = pca9685_set_out_pwm(i2c, addr, index, value);
+		ret = pca9685_pwm_write(i2c, addr, index, value);
 		assert(ret >= 0);
 		if (ret < 0) {
-			return PCA9685_SET_OUT_PWM_FAIL;
+			return PCA9685_PWM_WRITE_FAIL;
 		}
 	}
 
@@ -390,7 +384,7 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 	}
 
 	else if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
-		ret = pca9685_set_all_digital(i2c, addr, values);
+		ret = pca9685_write_all(i2c, addr, values);
 		if (ret < 0) {
 			return PCA9685_WRITE_ALL_FAIL;
 		}
@@ -430,9 +424,9 @@ int analogWriteAll(uint8_t addr, const uint16_t* values) {
 	int ret;
 
 	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
-		ret = pca9685_set_all_analog(i2c, addr, values);
+		ret = pca9685_pwm_write_all(i2c, addr, values);
 		if (ret < 0) {
-			return PCA9685_SET_ALL_FAIL;
+			return PCA9685_PWM_WRITE_ALL_FAIL;
 		}
 	}
 

@@ -12,12 +12,10 @@ extern "C" {
 
 	int pca9685_init(i2c_interface_t* i2c, uint8_t addr);
 	int pca9685_deinit(i2c_interface_t* i2c, uint8_t addr);
-	int pca9685_set_out_on(i2c_interface_t* i2c, uint8_t addr, uint8_t index);
-	int pca9685_set_out_off(i2c_interface_t* i2c, uint8_t addr, uint8_t index);
-	int pca9685_set_out_pwm(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t value);
-
-	int pca9685_set_all_digital(i2c_interface_t* i2c, uint8_t addr, uint16_t values);
-	int pca9685_set_all_analog(i2c_interface_t* i2c, uint8_t addr, const uint16_t* values);
+	int pca9685_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t value);
+	int pca9685_write_all(i2c_interface_t* i2c, uint8_t addr, uint16_t values);
+	int pca9685_pwm_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t value);
+	int pca9685_pwm_write_all(i2c_interface_t* i2c, uint8_t addr, const uint16_t values[PCA9685_NUM_OUTPUTS]);
 
 #ifdef __cplusplus
 }

@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "../include/i2c-interface.h"
 
+#define LTC2309_NUM_INPUTS 8
+
 #ifdef __cplusplus
 extern "C" {
 #endif

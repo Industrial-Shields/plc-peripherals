@@ -2,7 +2,9 @@
 #define __PERIPHERAL_MCP23008_H__
 
 #include <stdint.h>
-#include "i2c-interface.h"
+#include "../include/i2c-interface.h"
+
+#define MCP23008_NUM_IO 8
 
 #define MCP23008_OUTPUT 0
 #define MCP23008_INPUT 1

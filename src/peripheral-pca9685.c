@@ -12,7 +12,7 @@
 #define SUBADR2_REGISTER	0x03
 #define SUBADR3_REGISTER	0x04
 #define ALLCALLADR_REGISTER	0x05
-#define ALL_LED_ON_L_REGISTER   0xFA
+#define ALL_LED_ON_L_REGISTER	0xFA
 
 #define LED_REGISTERS(i)	(0x06 + (i * 4))
 #define LED_ON_L(i)		(LED_REGISTERS(i))
@@ -39,19 +39,19 @@
 #define MODE2_INVRT		0x10
 
 // Default register values
-#define DEFAULT_MODE1           0b00010001
-#define DEFAULT_MODE2           0b00000100
-#define DEFAULT_SUBADDR1        0b11100010
-#define DEFAULT_SUBADDR2        0b11100100
-#define DEFAULT_SUBADDR3        0b11101000
-#define DEFAULT_ALLCALLADR      0b11100000
-#define DEFAULT_LEDXX_OFF_H     0b00010000
+#define DEFAULT_MODE1		0b00010001
+#define DEFAULT_MODE2		0b00000100
+#define DEFAULT_SUBADDR1	0b11100010
+#define DEFAULT_SUBADDR2	0b11100100
+#define DEFAULT_SUBADDR3	0b11101000
+#define DEFAULT_ALLCALLADR	0b11100000
+#define DEFAULT_LEDXX_OFF_H	0b00010000
 
-#define DEFAULT_ALL_LED_ON_L    0b00000000
-#define DEFAULT_ALL_LED_ON_H    0b00100000
-#define DEFAULT_ALL_LED_OFF_L   0b00000000
-#define DEFAULT_ALL_LED_OFF_H   0b00100000
-#define DEFAULT_PRE_SCALE       0b00011110
+#define DEFAULT_ALL_LED_ON_L	0b00000000
+#define DEFAULT_ALL_LED_ON_H	0b00100000
+#define DEFAULT_ALL_LED_OFF_L	0b00000000
+#define DEFAULT_ALL_LED_OFF_H	0b00100000
+#define DEFAULT_PRE_SCALE	0b00011110
 
 static int write_regs(i2c_interface_t* i2c, uint8_t addr, uint8_t* buffer, uint8_t len) {
 	const i2c_write_t to_write = {.buff=buffer, .len=len};
@@ -62,7 +62,7 @@ static int write_regs(i2c_interface_t* i2c, uint8_t addr, uint8_t* buffer, uint8
 	return 0;
 }
 
-static int set_led(i2c_interface_t* i2c, uint8_t addr,  uint8_t index,
+static int set_led(i2c_interface_t* i2c, uint8_t addr,	uint8_t index,
 		uint8_t on_l, uint8_t on_h, uint8_t off_l, uint8_t off_h) {
 	/*
 	// Prevent MODE1 and MODE2 uncontrolled overwrite
@@ -96,7 +96,7 @@ static int pca9685_reset(i2c_interface_t* i2c, uint8_t addr) {
 	to_write_buff[5] = DEFAULT_SUBADDR3;
 	to_write_buff[6] = DEFAULT_ALLCALLADR;
 	for (uint8_t output = 0; output < PCA9685_NUM_OUTPUTS; output++) {
-	        to_write_buff[10+output*4] = DEFAULT_LEDXX_OFF_H;
+		to_write_buff[10+output*4] = DEFAULT_LEDXX_OFF_H;
 	}
 	i2c_write_t to_write = {.buff=to_write_buff, .len=1+70};
 	int i2c_ret = i2c_write(i2c, addr, &to_write);
@@ -162,7 +162,7 @@ int pca9685_init(i2c_interface_t* i2c, uint8_t addr) {
 	}
 
 
-        i2c_ret = pca9685_reset(i2c, addr);
+	i2c_ret = pca9685_reset(i2c, addr);
 	if (i2c_ret != 0) {
 		return i2c_ret;
 	}
@@ -228,32 +228,24 @@ int pca9685_deinit(i2c_interface_t* i2c, uint8_t addr) {
 		return 1;
 	}
 
-        return pca9685_reset(i2c, addr);
+	return pca9685_reset(i2c, addr);
 }
 
-int pca9685_set_out_on(i2c_interface_t* i2c, uint8_t addr, uint8_t index) {
+int pca9685_write(i2c_interface_t *i2c, uint8_t addr, uint8_t index, uint8_t value) {
 	if (index >= PCA9685_NUM_OUTPUTS) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	return set_led(i2c, addr, index, 0x00, 0x10, 0x00, 0x00);
-}
-
-int pca9685_set_out_off(i2c_interface_t* i2c, uint8_t addr, uint8_t index) {
-	if (index >= PCA9685_NUM_OUTPUTS) {
-		errno = EINVAL;
-		return -1;
+	if (value == 0) {
+		return set_led(i2c, addr, index, 0x00, 0x00, 0x00, 0x10);
 	}
-
-	return set_led(i2c, addr, index, 0x00, 0x00, 0x00, 0x10);
+	else {
+		return set_led(i2c, addr, index, 0x00, 0x10, 0x00, 0x00);
+	}
 }
 
-int pca9685_set_out_pwm(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t value) {
-	return set_led(i2c, addr, index, 0x00, 0x00, value & 0xff, (value >> 8) & 0x0f);
-}
-
-int pca9685_set_all_digital(i2c_interface_t* i2c, uint8_t addr, uint16_t values) {
+int pca9685_write_all(i2c_interface_t* i2c, uint8_t addr, uint16_t values) {
 	uint8_t buffer[1 + 4*PCA9685_NUM_OUTPUTS];
 	uint8_t* ptr = buffer;
 
@@ -269,7 +261,11 @@ int pca9685_set_all_digital(i2c_interface_t* i2c, uint8_t addr, uint16_t values)
 	return write_regs(i2c, addr, buffer, sizeof(buffer));
 }
 
-int pca9685_set_all_analog(i2c_interface_t* i2c, uint8_t addr, const uint16_t* values) {
+int pca9685_pwm_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t value) {
+	return set_led(i2c, addr, index, 0x00, 0x00, value & 0xff, (value >> 8) & 0x0f);
+}
+
+int pca9685_pwm_write_all(i2c_interface_t* i2c, uint8_t addr, const uint16_t values[PCA9685_NUM_OUTPUTS]) {
 	uint8_t buffer[1 + 4*PCA9685_NUM_OUTPUTS];
 	uint8_t* ptr = buffer;
 
