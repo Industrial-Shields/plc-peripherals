@@ -1,6 +1,6 @@
 export CC := gcc
-export CPPFLAGS += -I$(realpath include) $(EXTRA_CPPFLAGS)
-export CFLAGS += -Wall -Wextra -Werror -fanalyzer $(EXTRA_CFLAGS)
+export CPPFLAGS += -I$(realpath include)
+export CFLAGS += -Wall -Wextra -Werror -fanalyzer
 export LDFLAGS
 
 BUILD_TYPE ?= Release
