@@ -31,7 +31,36 @@ static int isAddressIntoArray(uint8_t addr, const uint8_t* arr, uint8_t len) {
 	return -1;
 }
 
-int initExpandedGPIO(void) {
+typedef enum {
+	INIT_SUCCESS = 0,
+	FIRST_INIT,
+	RESTART_DEINIT,
+	RESTART_INIT
+} init_fail_type_t;
+
+static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), int (*deinit_fun)(i2c_interface_t*, uint8_t), const uint8_t* devices, size_t num_devices, bool restart) {
+	for (size_t i = 0; i < num_devices; i++) {
+		int ret = init_fun(i2c, devices[i]);
+		if (ret != 1 && errno != EALREADY) {
+			return FIRST_INIT;
+		}
+
+		if (restart) {
+			ret = deinit_fun(i2c, devices[i]);
+			if (ret < 0) {
+				return RESTART_DEINIT;
+			}
+			ret = init_fun(i2c, devices[i]);
+			if (ret < 0) {
+				return RESTART_INIT;
+			}
+		}
+	}
+
+	return INIT_SUCCESS;
+}
+
+int initExpandedGPIO(bool restart_peripherals) {
 	if (i2c != NULL) {
 		errno = EALREADY;
 		return I2C_ALREADY_INITIALIZED;
@@ -51,70 +80,38 @@ int initExpandedGPIO(void) {
 		return NORMAL_GPIO_INIT_FAIL;
 	}
 
-	for (size_t i = 0; i < NUM_PCA9685; i++) {
-		ret = pca9685_init(i2c, PCA9685[i]);
-		if (ret == 1 && errno == EALREADY) {
-			ret = pca9685_deinit(i2c, PCA9685[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return PCA9685_INIT_FAIL;
-			}
-			ret = pca9685_init(i2c, PCA9685[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return PCA9685_INIT_FAIL;
-			}
-		}
+	ret = init_device(pca9685_init, pca9685_deinit, PCA9685, NUM_PCA9685, restart_peripherals);
+	assert(ret != FIRST_INIT);
+	assert(ret != RESTART_DEINIT);
+	assert(ret != RESTART_INIT);
+	if (ret != INIT_SUCCESS) {
+		return PCA9685_INIT_FAIL;
 	}
 
-	for (size_t i = 0; i < NUM_ADS1015; i++) {
-		ret = ads1015_init(i2c, ADS1015[i]);
-		if (ret == 1 && errno == EALREADY) {
-			ret = ads1015_deinit(i2c, ADS1015[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return ADS1015_INIT_FAIL;
-			}
-			ret = ads1015_init(i2c, ADS1015[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return ADS1015_INIT_FAIL;
-			}
-		}
+        ret = init_device(ads1015_init, ads1015_deinit, ADS1015, NUM_ADS1015, restart_peripherals);
+	assert(ret != FIRST_INIT);
+	assert(ret != RESTART_DEINIT);
+	assert(ret != RESTART_INIT);
+	if (ret != INIT_SUCCESS) {
+		return ADS1015_INIT_FAIL;
 	}
 
-	for (size_t i = 0; i < NUM_MCP23008; i++) {
-		ret = mcp23008_init(i2c, MCP23008[i]);
-		if (ret == 1 && errno == EALREADY) {
-			ret = mcp23008_deinit(i2c, MCP23008[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return MCP23008_INIT_FAIL;
-			}
-			ret = mcp23008_init(i2c, MCP23008[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return MCP23008_INIT_FAIL;
-			}
-		}
+	ret = init_device(mcp23008_init, mcp23008_deinit, MCP23008, NUM_MCP23008, restart_peripherals);
+	assert(ret != FIRST_INIT);
+	assert(ret != RESTART_DEINIT);
+	assert(ret != RESTART_INIT);
+	if (ret != INIT_SUCCESS) {
+		return MCP23008_INIT_FAIL;
 	}
-
-	for (size_t i = 0; i < NUM_LTC2309; i++) {
-		ret = ltc2309_init(i2c, LTC2309[i]);
-		if (ret == 1 && errno == EALREADY) {
-			ret = ltc2309_deinit(i2c, LTC2309[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return LTC2309_INIT_FAIL;
-			}
-			ret = ltc2309_init(i2c, LTC2309[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return LTC2309_INIT_FAIL;
-			}
-		}
+	
+	ret = init_device(ltc2309_init, ltc2309_deinit, LTC2309, NUM_LTC2309, restart_peripherals);
+	assert(ret != FIRST_INIT);
+	assert(ret != RESTART_DEINIT);
+	assert(ret != RESTART_INIT);
+	if (ret != INIT_SUCCESS) {
+		return LTC2309_INIT_FAIL;
 	}
-
+	
 	/*
 	 * Introduce a delay to allow the MCP23017 devices to stabilize after power-up and reset.
 	 * After a power-on reset, the device may not respond to I2C commands. Without this
@@ -123,22 +120,14 @@ int initExpandedGPIO(void) {
 	 */
 	usleep(60 * 1000);
 
-	for (size_t i = 0; i < NUM_MCP23017; i++) {
-		ret = mcp23017_init(i2c, MCP23017[i]);
-		if (ret == 1 && errno == EALREADY) {
-			ret = mcp23017_deinit(i2c, MCP23017[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return MCP23017_INIT_FAIL;
-			}
-			ret = mcp23017_init(i2c, MCP23017[i]);
-			assert(ret >= 0);
-			if (ret < 0) {
-				return MCP23017_INIT_FAIL;
-			}
-		}
+	ret = init_device(mcp23017_init, mcp23017_deinit, MCP23017, NUM_MCP23017, restart_peripherals);
+	assert(ret != FIRST_INIT);
+	assert(ret != RESTART_DEINIT);
+	assert(ret != RESTART_INIT);
+	if (ret != INIT_SUCCESS) {
+		return MCP23017_INIT_FAIL;
 	}
-
+	
 	return 0;
 }
 
@@ -159,7 +148,7 @@ int deinitExpandedGPIO(void) {
 
 	for (size_t i = 0; i < NUM_PCA9685; ++i) {
 		ret = pca9685_deinit(i2c, PCA9685[i]);
-		assert(ret >= 0);
+		assert(ret == 0);
 		if (ret < 0) {
 			return PCA9685_DEINIT_FAIL;
 		}
@@ -167,7 +156,7 @@ int deinitExpandedGPIO(void) {
 
 	for (size_t i = 0; i < NUM_ADS1015; ++i) {
 		ret = ads1015_deinit(i2c, ADS1015[i]);
-		assert(ret >= 0);
+		assert(ret == 0);
 		if (ret < 0) {
 			return ADS1015_DEINIT_FAIL;
 		}
@@ -175,7 +164,7 @@ int deinitExpandedGPIO(void) {
 
 	for (size_t i = 0; i < NUM_MCP23008; ++i) {
 		ret = mcp23008_deinit(i2c, MCP23008[i]);
-		assert(ret >= 0);
+		assert(ret == 0);
 		if (ret < 0) {
 			return MCP23008_DEINIT_FAIL;
 		}
@@ -183,7 +172,7 @@ int deinitExpandedGPIO(void) {
 
 	for (size_t i = 0; i < NUM_LTC2309; ++i) {
 		ret = ltc2309_deinit(i2c, LTC2309[i]);
-		assert(ret >= 0);
+		assert(ret == 0);
 		if (ret < 0) {
 			return LTC2309_DEINIT_FAIL;
 		}
@@ -191,7 +180,7 @@ int deinitExpandedGPIO(void) {
 
 	for (size_t i = 0; i < NUM_MCP23017; ++i) {
 		ret = mcp23017_deinit(i2c, MCP23017[i]);
-		assert(ret >= 0);
+		assert(ret == 0);
 		if (ret < 0) {
 			return MCP23017_DEINIT_FAIL;
 		}
@@ -329,7 +318,7 @@ int analogWrite(uint32_t pin, uint16_t value) {
 
 	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
 		ret = pca9685_pwm_write(i2c, addr, index, value);
-		assert(ret >= 0);
+		assert(ret == 0);
 		if (ret < 0) {
 			return PCA9685_PWM_WRITE_FAIL;
 		}

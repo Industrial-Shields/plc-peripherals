@@ -1,6 +1,7 @@
 #ifndef __EXPANDED_GPIO_H__
 #define __EXPANDED_GPIO_H__
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -105,7 +106,7 @@ extern "C" {
 		PCA9685_PWM_WRITE_ALL_FAIL
 	};
 
-	int initExpandedGPIO(void);
+	int initExpandedGPIO(bool restart_peripherals);
 
 	int deinitExpandedGPIO(void);
 
