@@ -201,7 +201,7 @@ int deinitExpandedGPIO(void) {
 }
 
 int pinMode(uint32_t pin, uint8_t mode) {
-	int ret;
+	int ret = -1;
 
 
 	uint8_t addr = pinToDeviceAddress(pin);
@@ -234,7 +234,7 @@ int pinMode(uint32_t pin, uint8_t mode) {
 }
 
 int digitalWrite(uint32_t pin, uint8_t value) {
-	int ret;
+	int ret = -1;
 
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
@@ -322,7 +322,7 @@ int digitalRead(uint32_t pin) {
 }
 
 int analogWrite(uint32_t pin, uint16_t value) {
-	int ret;
+	int ret = -1;
 
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
@@ -335,7 +335,7 @@ int analogWrite(uint32_t pin, uint16_t value) {
 		}
 	}
 
-	return 0;
+	return ret;
 }
 
 uint16_t analogRead(uint32_t pin) {
@@ -374,7 +374,7 @@ uint16_t analogRead(uint32_t pin) {
 }
 
 int digitalWriteAll(uint8_t addr, uint32_t values) {
-	int ret;
+	int ret = -1;
 
 	if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008) == 0) {
 		ret = mcp23008_write_all(i2c, addr, values);
@@ -401,7 +401,7 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 }
 
 int digitalReadAll(uint8_t addr, uint16_t* values) {
-	int ret;
+	int ret = -1;
 
 	if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008) == 0) {
 		ret = mcp23008_read_all(i2c, addr, (uint8_t*) values);
@@ -421,7 +421,7 @@ int digitalReadAll(uint8_t addr, uint16_t* values) {
 }
 
 int analogWriteAll(uint8_t addr, const uint16_t* values) {
-	int ret;
+	int ret = -1;
 
 	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
 		ret = pca9685_pwm_write_all(i2c, addr, values);
