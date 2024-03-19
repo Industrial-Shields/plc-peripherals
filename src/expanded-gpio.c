@@ -41,7 +41,8 @@ typedef enum {
 static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), int (*deinit_fun)(i2c_interface_t*, uint8_t), const uint8_t* devices, size_t num_devices, bool restart) {
 	for (size_t i = 0; i < num_devices; i++) {
 		int ret = init_fun(i2c, devices[i]);
-		if (ret != 1 && errno != EALREADY) {
+		if (ret == 0) continue;
+		else if (ret != 1 && errno != EALREADY) {
 			return FIRST_INIT;
 		}
 
