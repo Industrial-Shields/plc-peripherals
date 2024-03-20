@@ -53,6 +53,9 @@
 #define DEFAULT_ALL_LED_OFF_H	0b00100000
 #define DEFAULT_PRE_SCALE	0b00011110
 
+// Constants
+#define DEFAULT_PRESCALE        11 // PWM frequency of ~500Hz
+
 static int write_regs(i2c_interface_t* i2c, uint8_t addr, uint8_t* buffer, uint8_t len) {
 	const i2c_write_t to_write = {.buff=buffer, .len=len};
 	if (i2c_write(i2c, addr, &to_write) != 0) {
@@ -131,17 +134,49 @@ static int pca9685_reset(i2c_interface_t* i2c, uint8_t addr) {
 	return i2c_ret;
 }
 
+static int enable_sleep_mode(i2c_interface_t* i2c, uint8_t addr) {
+	uint8_t buffer[2];
+
+	FAST_CREATE_I2C_WRITE(read_order_mode1_reg, MODE1_REGISTER);
+
+	i2c_read_t read_mode1_reg = {.buff=&buffer[1], .len=1};
+
+	int i2c_ret = i2c_write_then_read(i2c, addr, &read_order_mode1_reg, &read_mode1_reg);
+	if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+
+	buffer[0] = MODE1_REGISTER;
+	buffer[1] |= MODE1_SLEEP;
+	return write_regs(i2c, addr, buffer, 2);
+}
+
+static int disable_sleep_mode(i2c_interface_t* i2c, uint8_t addr) {
+	uint8_t buffer[2];
+
+	FAST_CREATE_I2C_WRITE(read_order_mode1_reg, MODE1_REGISTER);
+
+	i2c_read_t read_mode1_reg = {.buff=&buffer[1], .len=1};
+
+	int i2c_ret = i2c_write_then_read(i2c, addr, &read_order_mode1_reg, &read_mode1_reg);
+	if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+
+	buffer[0] = MODE1_REGISTER;
+	buffer[1] &= ~MODE1_SLEEP;
+        return write_regs(i2c, addr, buffer, 2);
+}
+
 int pca9685_init(i2c_interface_t* i2c, uint8_t addr) {
 	uint8_t buffer[1 + 1];
 
 	FAST_CREATE_I2C_WRITE(read_order_mode1_reg, MODE1_REGISTER);
 	FAST_CREATE_I2C_WRITE(read_order_mode2_reg, MODE2_REGISTER);
-	FAST_CREATE_I2C_WRITE(read_order_prescale_reg, PRE_SCALE_REGISTER);
 
-	uint8_t mode1_reg = 0, mode2_reg, prescale_reg;
+	uint8_t mode1_reg = 0, mode2_reg = 0;
 	i2c_read_t read_mode1_reg = {.buff=&mode1_reg, .len=1};
 	i2c_read_t read_mode2_reg = {.buff=&mode2_reg, .len=1};
-	i2c_read_t read_prescale_reg = {.buff=&prescale_reg, .len=1};
 
 	int i2c_ret = i2c_write_then_read(i2c, addr, &read_order_mode1_reg, &read_mode1_reg);
 	if (i2c_ret != 0) {
@@ -151,12 +186,8 @@ int pca9685_init(i2c_interface_t* i2c, uint8_t addr) {
 	if (i2c_ret != 0) {
 		return i2c_ret;
 	}
-	i2c_ret = i2c_write_then_read(i2c, addr, &read_order_prescale_reg, &read_prescale_reg);
-	if (i2c_ret != 0) {
-		return i2c_ret;
-	}
 
-	if ( (mode1_reg == MODE1_AI) && (mode2_reg == MODE2_OUTDRV) && (prescale_reg == 11) ) {
+	if ( (mode1_reg == MODE1_AI) && (mode2_reg == MODE2_OUTDRV) ) {
 		errno = EALREADY;
 		return 1;
 	}
@@ -181,9 +212,8 @@ int pca9685_init(i2c_interface_t* i2c, uint8_t addr) {
 		return i2c_ret;
 	}
 
-
 	buffer[0] = PRE_SCALE_REGISTER;
-	buffer[1] = 11; // PWM frequency 500Hz
+	buffer[1] = DEFAULT_PRESCALE;
 	i2c_ret = write_regs(i2c, addr, buffer, 2);
 	if (i2c_ret != 0) {
 		return i2c_ret;
@@ -259,6 +289,28 @@ int pca9685_write_all(i2c_interface_t* i2c, uint8_t addr, uint16_t values) {
 	}
 
 	return write_regs(i2c, addr, buffer, sizeof(buffer));
+}
+
+int pca9685_pwm_frequency(i2c_interface_t *i2c, uint8_t addr, uint8_t prescaler_value) {
+	if (prescaler_value < 3) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	int i2c_ret = enable_sleep_mode(i2c, addr);
+	if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+
+	uint8_t buffer[2];
+	buffer[0] = PRE_SCALE_REGISTER;
+	buffer[1] = prescaler_value;
+        i2c_ret = write_regs(i2c, addr, buffer, 2);
+        if (i2c_ret != 0) {
+		return i2c_ret;
+	}
+
+        return disable_sleep_mode(i2c, addr);
 }
 
 int pca9685_pwm_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t value) {

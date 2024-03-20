@@ -114,6 +114,8 @@ extern "C" {
 
 	int analogWrite(uint32_t pin, uint16_t value);
 
+	int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq);
+
 	uint16_t analogRead(uint32_t pin);
 
 	int digitalWriteAll(uint8_t addr, uint32_t values);

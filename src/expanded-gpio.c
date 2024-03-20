@@ -328,6 +328,29 @@ int analogWrite(uint32_t pin, uint16_t value) {
 	return ret;
 }
 
+int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
+	int ret = -1;
+
+	uint8_t addr = pinToDeviceAddress(pin);
+
+	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
+		if (desired_freq < 24 || desired_freq > 1526) {
+			errno = ERANGE;
+			return -1;
+		}
+
+		uint64_t prescaler_value = ((((PCA9685_INTERNAL_CLOCK << 4) / (4096 * desired_freq))) >> 4) - 1;
+		if (prescaler_value > 255) {
+			errno = EOVERFLOW;
+			return -1;
+		}
+
+		return pca9685_pwm_frequency(i2c, addr, prescaler_value);
+	}
+
+	return ret;
+}
+
 uint16_t analogRead(uint32_t pin) {
 	uint16_t value = 0;
 	int ret;
