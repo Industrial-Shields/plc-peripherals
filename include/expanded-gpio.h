@@ -5,21 +5,17 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#ifndef INPUT
+#undef INPUT
 #define INPUT 0
-#endif
 
-#ifndef OUTPUT
+#undef OUTPUT
 #define OUTPUT 1
-#endif
 
-#ifndef LOW
+#undef LOW
 #define LOW 0
-#endif
 
-#ifndef HIGH
+#undef HIGH
 #define HIGH 1
-#endif
 
 #define pinToDeviceAddress(pin) (((pin) >> 8) & 0xff)
 #define pinToDeviceIndex(pin) ((pin)&0xff)
