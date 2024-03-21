@@ -11,10 +11,6 @@
 #include "../include/peripheral-ltc2309.h"
 #include "../include/peripheral-mcp23017.h"
 
-// Do not compile with assertions unless explicitly told
-#if !defined(PERIPHERALS_WITH_ASSERTIONS) && !defined(NDEBUG)
-#define NDEBUG
-#endif
 #include <assert.h>
 
 // TODO: Portable logging methods
