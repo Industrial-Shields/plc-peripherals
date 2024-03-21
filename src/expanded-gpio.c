@@ -119,7 +119,7 @@ int initExpandedGPIO(bool restart_peripherals) {
 	 * delay, attempting to communicate with the devices immediately after a reset
 	 * may result in a NACK, causing the program to immediately fail.
 	 */
-	usleep(60 * 1000);
+	usleep(80 * 1000);
 
 	ret = init_device(mcp23017_init, mcp23017_deinit, MCP23017, NUM_MCP23017, restart_peripherals);
 	assert(ret != FIRST_INIT);
