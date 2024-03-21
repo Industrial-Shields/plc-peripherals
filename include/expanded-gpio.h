@@ -52,6 +52,10 @@ extern "C" {
 
 	extern int normal_gpio_write(uint32_t pin, uint8_t value);
 
+	extern int normal_gpio_pwm_frequency(uint32_t pin, uint32_t freq);
+
+	extern int normal_gpio_pwm_write(uint32_t pin, uint16_t value);
+
 	extern int normal_gpio_read(uint32_t pin, uint8_t* read);
 
 	extern int normal_gpio_analog_read(uint32_t pin, uint16_t* read);

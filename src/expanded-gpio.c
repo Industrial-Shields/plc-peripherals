@@ -317,7 +317,11 @@ int analogWrite(uint32_t pin, uint16_t value) {
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
+        if (addr == 0) {
+	        return normal_gpio_pwm_write(pin, value);
+        }
+
+        else if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
 		ret = pca9685_pwm_write(i2c, addr, index, value);
 		assert(ret == 0);
 		if (ret < 0) {
@@ -333,7 +337,11 @@ int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
 
 	uint8_t addr = pinToDeviceAddress(pin);
 
-	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
+        if (addr == 0) {
+	        return normal_gpio_pwm_frequency(pin, desired_freq);
+        }
+
+        if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
 		if (desired_freq < 24 || desired_freq > 1526) {
 			errno = ERANGE;
 			return -1;
