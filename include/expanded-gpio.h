@@ -70,6 +70,7 @@ extern "C" {
 
 	// Exported functions, useful for Arduino environment
 	enum {
+		// initExpandedGPIO & deinitExpandedGPIO
 		I2C_ALREADY_INITIALIZED = 1,
 		I2C_ALREADY_DEINITIALIZED,
 		NORMAL_GPIO_INIT_FAIL,
@@ -84,25 +85,31 @@ extern "C" {
 		MCP23008_DEINIT_FAIL,
 		LTC2309_DEINIT_FAIL,
 		MCP23017_DEINIT_FAIL,
-
+		// pinMode
 		NORMAL_GPIO_SET_PIN_MODE_FAIL,
 		MCP23008_SET_PIN_MODE_FAIL,
 		MCP23017_SET_PIN_MODE_FAIL,
-
+		// digitalWrite
 		NORMAL_GPIO_WRITE_FAIL,
 		PCA9685_WRITE_FAIL,
 		MCP23008_WRITE_FAIL,
 		MCP23017_WRITE_FAIL,
-
+		// digitalRead
+		// analogWrite
+		NORMAL_GPIO_PWM_WRITE_FAIL,
 		PCA9685_PWM_WRITE_FAIL,
-
+		// analogWriteSetFrequency
+		NORMAL_GPIO_PWM_CHANGE_FREQ_FAIL,
+		PCA9685_PWM_CHANGE_FREQ_FAIL,
+		// analogRead
+		// digitalWriteAll
 		PCA9685_WRITE_ALL_FAIL,
 		MCP23008_WRITE_ALL_FAIL,
 		MCP23017_WRITE_ALL_FAIL,
-
+		// digitalReadAll
 		MCP23008_READ_ALL_FAIL,
 		MCP23017_READ_ALL_FAIL,
-
+		// analogWriteAll
 		PCA9685_PWM_WRITE_ALL_FAIL
 	};
 

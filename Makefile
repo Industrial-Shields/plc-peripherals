@@ -6,7 +6,7 @@ export LDFLAGS
 BUILD_TYPE ?= Release
 ifeq ($(BUILD_TYPE),Debug)
 	CPPFLAGS += -DDEBUG
-	CFLAGS += -O0 -g -fsanitize=address -fsanitize=undefined -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=signed-integer-overflow -fno-omit-frame-pointer -coverage
+	CFLAGS += -O0 -g -fno-omit-frame-pointer
 	LDFLAGS += -fstack-protector-strong
 else
 	CFLAGS += -O2
