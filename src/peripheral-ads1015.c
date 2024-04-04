@@ -58,8 +58,8 @@ int ads1015_init(i2c_interface_t* i2c, uint8_t addr) {
 	        return -1;
         }
 
-	errno = 0;
-	return 0;
+	int16_t read_test;
+	return ads1015_read(i2c, addr, 0, &read_test);
 }
 
 int ads1015_deinit(i2c_interface_t* i2c, uint8_t addr) {

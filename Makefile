@@ -8,6 +8,10 @@ ifeq ($(BUILD_TYPE),Debug)
 	CPPFLAGS += -DDEBUG
 	CFLAGS += -O0 -g -fno-omit-frame-pointer
 	LDFLAGS += -fstack-protector-strong
+else ifeq ($(BUILD_TYPE),Debug_Sanitize)
+	CPPFLAGS += -DDEBUG
+	CFLAGS += -O0 -g -fno-omit-frame-pointer -fsanitize=address
+	LDFLAGS += -fstack-protector-strong -static-libasan
 else
 	CFLAGS += -O2
 endif
