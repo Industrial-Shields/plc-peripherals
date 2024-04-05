@@ -30,15 +30,6 @@
 
 
 int ltc2309_init(i2c_interface_t* i2c, uint8_t addr) {
-	if (i2c == NULL) {
-		errno = EFAULT;
-		return -1;
-	}
-	if (addr >= 128) {
-	        errno = EINVAL;
-	        return -1;
-        }
-
 	uint16_t read_test;
 	return ltc2309_read(i2c, addr, 0, &read_test);
 }
@@ -109,7 +100,12 @@ int ltc2309_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* re
 		return i2c_ret;
 	}
 
-	*read_value = (buffer[0] << 4) | (buffer[1] >> 4);
+	uint16_t i2c_read = ((buffer[0] << 8) | (buffer[1]));
+        if ((i2c_read & 0x000F) != 0) { // Last 4 bits were not 0, invalid conversion
+	        errno = ERANGE;
+	        return -1;
+        }
 
+        *read_value = i2c_read >> 4;
 	return 0;
 }
