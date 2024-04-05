@@ -1,7 +1,6 @@
 #include "../include/i2c-interface.h"
 
 #include <stdbool.h>
-#include <errno.h>
 #include <string.h>
 
 #include "../include/detect-platform.h"
@@ -19,15 +18,18 @@ struct _i2c_interface_t {
 };
 
 #elif defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Arduino_ESP32
+#include <driver/i2c.h>
 #include <esp32-hal-i2c.h>
 #include <esp32-hal-log.h>
 #include <pins_arduino.h>
+#define __LINUX_ERRNO_EXTENSIONS__
 struct _i2c_interface_t {
         uint8_t bus_num;
 };
 const size_t MAXIMUM_I2C_TIMEOUT = 50;
 #endif
 
+#include <errno.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #if defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Linux
@@ -150,7 +152,7 @@ static inline int _i2c_deinit_platform(i2c_interface_t* i2c) {
  *             - EIO: The I2C bus doesn't exist.
  */
 static inline int _i2c_deinit_platform(i2c_interface_t* i2c) {
-	if (bus >= SOC_I2C_NUM) {
+	if (i2c->bus_num >= SOC_I2C_NUM) {
 		errno = EIO;
 		return -1;
 	}
@@ -376,7 +378,13 @@ static inline int _i2c_read_platform(i2c_interface_t* i2c, const uint8_t addr, c
  *                      value will be the same as the "i2cRead" call.
  */
 static inline int _i2c_read_platform(i2c_interface_t* i2c, const uint8_t addr, const i2c_read_t* to_read) {
-	int i2c_ret = i2cRead(i2c->bus_num, addr, to_read->buff, to_read->len, MAXIMUM_I2C_TIMEOUT);
+	size_t read_len;
+	int i2c_ret = i2cRead(i2c->bus_num, addr, to_read->buff, to_read->len, MAXIMUM_I2C_TIMEOUT, &read_len);
+
+         if (read_len != to_read->len) {
+	        errno = EAGAIN;
+	        return -1;
+        }
 
 	switch (i2c_ret) {
 	case ESP_OK:
