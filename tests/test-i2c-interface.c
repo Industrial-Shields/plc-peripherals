@@ -8,11 +8,13 @@
 
 #define MCP23008_FIRST_ADDR 0x20
 #define MCP23008_SECOND_ADDR 0x21
-#define MCP23008_NONEXIST_ADDR 0x22
+#define UNUSED_ADDRESS 0x30
 
 #define MCP23008_IODIR_REG 0x00
 #define MCP23008_OLAT_REG 0x0A
 
+
+// Mock
 struct _i2c_interface_t {
 	int fd;
 };
@@ -30,7 +32,7 @@ void i2c_init_sanity_check() {
 	// Test bad I2C bus argument
 	i2c_interface_t* i2c = i2c_init(255);
 	TEST_ASSERT_NULL(i2c);
-	TEST_ASSERT_EQUAL_MESSAGE(ENOENT, errno, strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
 }
 
 void i2c_deinit_sanity_check() {
@@ -46,8 +48,8 @@ void i2c_deinit_sanity_check() {
 	i2c_interface_t* mock = malloc(sizeof(struct _i2c_interface_t));
 	TEST_ASSERT_NOT_NULL_MESSAGE(mock, strerror(errno));
 	mock->fd = -1;
-	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_deinit(&mock), strerror(errno));
-	TEST_ASSERT_EQUAL_MESSAGE(EBADF, errno, strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(1, i2c_deinit(&mock), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
 	mock->fd = 99;
 	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_deinit(&mock), strerror(errno));
@@ -64,12 +66,6 @@ void i2c_write_sanity_check() {
 	const i2c_write_t write01 = {NULL, 1};
 	const i2c_write_t write10 = {mock, 0};
 	const i2c_write_t write11 = {mock, 1};
-
-
-	// Test invalid file descriptor
-        ((i2c_interface_t*) mock)->fd = -1;
-	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write((void*) mock, 0x8F, &write00), strerror(errno));
-	TEST_ASSERT_EQUAL_MESSAGE(EBADF, errno, strerror(errno));
 
 
 	// Test NULL arguments
@@ -112,16 +108,17 @@ void i2c_write_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write((void*) mock, 0x8F, &write11), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write((void*) mock, MCP23008_FIRST_ADDR, &write00), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write((void*) mock, UNUSED_ADDRESS, &write00), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write((void*) mock, MCP23008_FIRST_ADDR, &write01), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write((void*) mock, UNUSED_ADDRESS, &write01), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL_MESSAGE(1, i2c_write((void*) mock, MCP23008_FIRST_ADDR, &write10), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(0, i2c_write((void*) mock, UNUSED_ADDRESS, &write10), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(0, errno, strerror(errno));
 
-	//TEST_ASSERT_EQUAL_MESSAGE(0, i2c_write((void*) mock, MCP23008_FIRST_ADDR, &write11), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write((void*) mock, UNUSED_ADDRESS, &write11), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(EBADF, errno, strerror(errno));
 
 	free(mock);
 }
@@ -139,7 +136,7 @@ void i2c_read_sanity_check() {
 	// Test invalid file descriptor
         ((i2c_interface_t*) mock)->fd = -1;
 	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read((void*) mock, 0x8F, &read00), strerror(errno));
-	TEST_ASSERT_EQUAL_MESSAGE(EBADF, errno, strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(EBADFD, errno, strerror(errno));
 
 
 	// Test NULL arguments
@@ -188,10 +185,11 @@ void i2c_read_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read((void*) mock, MCP23008_FIRST_ADDR, &read01), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL_MESSAGE(1, i2c_read((void*) mock, MCP23008_FIRST_ADDR, &read10), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(0, i2c_read((void*) mock, MCP23008_FIRST_ADDR, &read10), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(0, errno, strerror(errno));
 
-	//TEST_ASSERT_EQUAL_MESSAGE(0, i2c_read((void*) mock, MCP23008_FIRST_ADDR, &read11), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read((void*) mock, MCP23008_FIRST_ADDR, &read11), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(EBADF, errno, strerror(errno));
 
 	free(mock);
 }
@@ -213,7 +211,7 @@ void i2c_read_then_write_sanity_check() {
 	// Test invalid file descriptor
         ((i2c_interface_t*) mock)->fd = -1;
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write((void*) mock, 0x8F, &read_order00), strerror(errno));
-	TEST_ASSERT_EQUAL_MESSAGE(EBADF, errno, strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(EBADFD, errno, strerror(errno));
 
 
 	// Test NULL arguments
@@ -233,7 +231,7 @@ void i2c_read_then_write_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
 
-	// Sanity checks
+	// Sanity checks with null mock
 	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order00, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
@@ -244,31 +242,6 @@ void i2c_read_then_write_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
 	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order00, &to_read11));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order00, &to_read00));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order00, &to_read01));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order00, &to_read10));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order00, &to_read11));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order01, &to_read00));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order01, &to_read01));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order01, &to_read10));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order01, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
 	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order01, &to_read00));
@@ -283,7 +256,6 @@ void i2c_read_then_write_sanity_check() {
 	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order01, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-
 	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order10, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
@@ -294,31 +266,6 @@ void i2c_read_then_write_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
 	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order10, &to_read11));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order10, &to_read00));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order10, &to_read01));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order10, &to_read10));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order10, &to_read11));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order11, &to_read00));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order11, &to_read01));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order11, &to_read10));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order11, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
 	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, 0x8F, &read_order11, &to_read00));
@@ -334,105 +281,151 @@ void i2c_read_then_write_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
 
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order00, &to_read00));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order00, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order00, &to_read01));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order00, &to_read01));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order00, &to_read10));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order00, &to_read10));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order00, &to_read11));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order00, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order00, &to_read00));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order01, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order00, &to_read01));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order01, &to_read01));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order00, &to_read10));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order01, &to_read10));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order00, &to_read11));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order01, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order01, &to_read00));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order10, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order01, &to_read01));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order10, &to_read01));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order01, &to_read10));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order10, &to_read10));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order01, &to_read11));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order10, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order01, &to_read00));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order11, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order01, &to_read01));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order11, &to_read01));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order01, &to_read10));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order11, &to_read10));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order01, &to_read11));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, UNUSED_ADDRESS, &read_order11, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
+	// Sanity checks with mock
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order00, &to_read00));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order10, &to_read00));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order00, &to_read01));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order00, &to_read10));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order00, &to_read11));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order01, &to_read00));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order01, &to_read01));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order01, &to_read10));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order01, &to_read11));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order10, &to_read00));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order10, &to_read01));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order10, &to_read10));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order10, &to_read11));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order11, &to_read00));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order11, &to_read01));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order11, &to_read10));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, 0x8F, &read_order11, &to_read11));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order00, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order10, &to_read01));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order00, &to_read01));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order10, &to_read10));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order00, &to_read10));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order10, &to_read11));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order00, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order10, &to_read00));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order01, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order10, &to_read01));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order01, &to_read01));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order10, &to_read10));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order01, &to_read10));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order10, &to_read11));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order01, &to_read11));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order10, &to_read00));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order11, &to_read00));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order10, &to_read01));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order10, &to_read10));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order10, &to_read11));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order11, &to_read00));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order11, &to_read01));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order11, &to_read01));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order11, &to_read10));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order11, &to_read10));
+	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order11, &to_read11));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order11, &to_read00));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order11, &to_read01));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order11, &to_read10));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
-
-	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(NULL, MCP23008_FIRST_ADDR, &read_order11, &to_read11));
-	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
+	TEST_ASSERT_EQUAL(-1, i2c_write_then_read(mock, UNUSED_ADDRESS, &read_order11, &to_read11));
+	TEST_ASSERT_EQUAL_MESSAGE(EBADF, errno, strerror(errno));
 
 
 	free(mock);
@@ -469,9 +462,12 @@ void i2c_write_test() {
         TEST_ASSERT_EQUAL_MESSAGE(0, i2c_write(i2c, MCP23008_FIRST_ADDR, &pull_down), strerror(errno));
 
         // Non-existant MCP23008
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &set_output), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &pull_high), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &pull_down), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &set_output), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_high), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_down), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
 
 
         TEST_ASSERT_MESSAGE(i2c_deinit(&i2c) == 0, strerror(errno));
@@ -552,21 +548,24 @@ void i2c_read_test() {
 
 
         // Non-existant MCP23008 test
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &set_output), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &read_order_iodir), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, MCP23008_NONEXIST_ADDR, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &set_output), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &read_order_iodir), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, UNUSED_ADDRESS, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
 
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &pull_some_high), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &read_order_olat), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, MCP23008_NONEXIST_ADDR, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_some_high), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &read_order_olat), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, UNUSED_ADDRESS, &to_read), strerror(errno));
 
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &pull_some_down), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &read_order_olat), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, MCP23008_NONEXIST_ADDR, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_some_down), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &read_order_olat), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, UNUSED_ADDRESS, &to_read), strerror(errno));
 
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &pull_down), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &read_order_olat), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, MCP23008_NONEXIST_ADDR, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_down), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &read_order_olat), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, UNUSED_ADDRESS, &to_read), strerror(errno));
 
 
         free(read_order_iodir_buff);
@@ -643,17 +642,17 @@ void i2c_read_then_write_test() {
 
 
         // Non-existant MCP23008 test
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &set_output), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write_then_read(i2c, MCP23008_NONEXIST_ADDR, &read_order_iodir, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &set_output), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write_then_read(i2c, UNUSED_ADDRESS, &read_order_iodir, &to_read), strerror(errno));
 
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &pull_some_high), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write_then_read(i2c, MCP23008_NONEXIST_ADDR, &read_order_olat, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_some_high), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write_then_read(i2c, UNUSED_ADDRESS, &read_order_olat, &to_read), strerror(errno));
 
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &pull_some_down), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write_then_read(i2c, MCP23008_NONEXIST_ADDR, &read_order_olat, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_some_down), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write_then_read(i2c, UNUSED_ADDRESS, &read_order_olat, &to_read), strerror(errno));
 
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, MCP23008_NONEXIST_ADDR, &pull_down), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write_then_read(i2c, MCP23008_NONEXIST_ADDR, &read_order_olat, &to_read), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_down), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write_then_read(i2c, UNUSED_ADDRESS, &read_order_olat, &to_read), strerror(errno));
 
         free(read_order_iodir_buff);
         free(read_order_olat_buff);

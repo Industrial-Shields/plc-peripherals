@@ -7,6 +7,7 @@
 #include <errno.h>
 
 #define LTC2309_ADDRESS 0x28
+#define UNUSED_ADDRESS  0x30
 
 #include <unity.h>
 void setUp(void) {
@@ -25,14 +26,14 @@ void ltc2309_init_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_init(NULL, 0xFF), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 		
-	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_init(NULL, 0x00), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_init(NULL, UNUSED_ADDRESS), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 	
 	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_init(i2c, 0xFF), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 	
-	TEST_ASSERT_EQUAL_MESSAGE(0, ltc2309_init(i2c, 0x00), strerror(errno));
-	TEST_ASSERT_EQUAL_MESSAGE(0, errno, strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_init(i2c, UNUSED_ADDRESS), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
 
 
 	TEST_ASSERT_EQUAL_MESSAGE(0, i2c_deinit(&i2c), strerror(errno));
@@ -47,13 +48,13 @@ void ltc2309_deinit_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_deinit(NULL, 0xFF), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 		
-	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_deinit(NULL, 0x00), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_deinit(NULL, UNUSED_ADDRESS), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EFAULT, errno, strerror(errno));
 	
 	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_deinit(i2c, 0xFF), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 	
-	TEST_ASSERT_EQUAL_MESSAGE(0, ltc2309_deinit(i2c, 0x00), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(0, ltc2309_deinit(i2c, UNUSED_ADDRESS), strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(0, errno, strerror(errno));
 
 
@@ -77,6 +78,15 @@ void ltc2309_init_deinit_cycle() {
         TEST_ASSERT_NULL_MESSAGE(i2c, strerror(errno));
 }
 
+void ltc2309_non_existant_read_test() {
+	i2c_interface_t* i2c = i2c_init(1);
+	TEST_ASSERT_NOT_NULL_MESSAGE(i2c, strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_init(i2c, 0x30), strerror(errno));
+        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+
+	TEST_ASSERT_EQUAL_MESSAGE(0, i2c_deinit(&i2c), strerror(errno));
+	TEST_ASSERT_NULL_MESSAGE(i2c, strerror(errno));
+}
 
 static void read_ltc_channel(i2c_interface_t* i2c, uint8_t channel, uint32_t lower_threshold, uint32_t upper_threshold) {
 	for (size_t c = 0; c < 10; c++) {
@@ -110,6 +120,8 @@ int main() {
 	RUN_TEST(ltc2309_init_sanity_check);
 	RUN_TEST(ltc2309_deinit_sanity_check);
 	RUN_TEST(ltc2309_init_deinit_cycle);
+
+	RUN_TEST(ltc2309_non_existant_read_test);
 
 	RUN_TEST(ltc2309_read_test);
 
