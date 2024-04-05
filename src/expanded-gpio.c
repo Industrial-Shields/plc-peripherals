@@ -303,7 +303,7 @@ int digitalRead(uint32_t pin) {
 	}
 
 	else if (isAddressIntoArray(addr, ADS1015, NUM_ADS1015) == 0) {
-		ret = ads1015_se_read(i2c, addr, index, &value);
+		ret = ads1015_unsigned_read(i2c, addr, index, &value);
 		assert(ret == 0);
 		if (ret != 0) {
 			return 0;
@@ -406,7 +406,7 @@ uint16_t analogRead(uint32_t pin) {
 	}
 
 	if (isAddressIntoArray(addr, ADS1015, NUM_ADS1015) == 0) {
-		ret = ads1015_se_read(i2c, addr, index, &value);
+		ret = ads1015_unsigned_read(i2c, addr, index, &value);
 		assert(ret == 0);
 		if (ret != 0) {
 			return 0;

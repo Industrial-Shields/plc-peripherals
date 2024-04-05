@@ -49,15 +49,6 @@
 #define CONFIG_L_DR_3300		0xc0
 
 int ads1015_init(i2c_interface_t* i2c, uint8_t addr) {
-	if (i2c == NULL) {
-		errno = EFAULT;
-		return -1;
-	}
-	if (addr >= 128) {
-	        errno = EINVAL;
-	        return -1;
-        }
-
 	int16_t read_test;
 	return ads1015_read(i2c, addr, 0, &read_test);
 }
@@ -68,15 +59,14 @@ int ads1015_deinit(i2c_interface_t* i2c, uint8_t addr) {
 		return -1;
 	}
 	if (addr >= 128) {
-	        errno = EINVAL;
-	        return -1;
-        }
+		errno = EINVAL;
+		return -1;
+	}
 
 	errno = 0;
 	return 0;
 }
 
-// It can be used for single-ended and differential readings
 int ads1015_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, int16_t* read_value) {
 	if (read_value == NULL) {
 		errno = EFAULT;
@@ -104,9 +94,9 @@ int ads1015_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, int16_t* rea
 		return -1;
 	}
 
-        uint8_t buffer[3];
+	uint8_t buffer[3];
 
-        buffer[0] = CONFIG_REGISTER;
+	buffer[0] = CONFIG_REGISTER;
 	buffer[1] = CONFIG_H_MODE_SINGLE | CONFIG_H_PGA_1 | CONFIG_H_OS_START | mux;
 	buffer[2] = CONFIG_L_CQUE_NONE | CONFIG_L_CLAT_NONE | CONFIG_L_CPOL_LOW | CONFIG_L_CMODE_HYST | CONFIG_L_DR_1600;
 	const i2c_write_t start_conversion = {.buff=buffer, .len=sizeof(buffer)};
@@ -127,18 +117,17 @@ int ads1015_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, int16_t* rea
 		return i2c_ret;
 	}
 
-        int16_t i2c_read = ((buffer[0] << 8) | (buffer[1]));
-        if ((i2c_read & 0x000F) != 0) { // Last 4 bits were not 0, invalid conversion
-	        errno = ERANGE;
-	        return -1;
-        }
+	int16_t i2c_read = ((buffer[0] << 8) | (buffer[1]));
+	if ((i2c_read & 0x000F) != 0) { // Last 4 bits were not 0, invalid conversion
+		errno = ERANGE;
+		return -1;
+	}
 
-        *read_value = i2c_read >> 4;
+	*read_value = i2c_read >> 4;
 	return 0;
 }
 
-// Single-ended read, it removes the sign bits and returns an unsigned integer of 11 valid bits
-int ads1015_se_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* read_value) {
+int ads1015_unsigned_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t* read_value) {
 	int16_t signed_value;
 	int i2c_ret = ads1015_read(i2c, addr, index, &signed_value);
 
@@ -155,12 +144,12 @@ int ads1015_se_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t*
 		// We accept up to three bits of error
 		if (signed_value >= -7) {
 			signed_value = 0;
-                }
+		}
 		else {
 			errno = ERANGE;
 			return -1;
-                }
-        }
+		}
+	}
 
 	*read_value = signed_value & 0x0FFF;
 
