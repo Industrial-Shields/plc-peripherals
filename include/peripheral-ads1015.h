@@ -24,7 +24,7 @@ extern "C" {
 	 *	       - EINVAL: The I2C address is invalid.
 	 *	       - EBADFD: The I2C interface contains incorrect data.
 	 *	       - EAGAIN: The operation is temporarily unavailable.
-	 *	       - EIO: The slave didn't ACK the request, or a more general error in the bus.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
 	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
 	 *			return value will be the same as the platform's write function.
 	 *	       - ERANGE: Invalid conversion result on the read check.
@@ -63,7 +63,7 @@ extern "C" {
 	 *	       - EINVAL: The I2C address or the channel index is invalid.
 	 *	       - EBADFD: The I2C interface contains incorrect data.
 	 *	       - EAGAIN: The operation is temporarily unavailable.
-	 *	       - EIO: The slave didn't ACK the request, or a more general error in the bus.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
 	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
 	 *			return value will be the same as the platform's write function.
 	 *	       - ERANGE: Invalid conversion result.
@@ -88,7 +88,7 @@ extern "C" {
 	 *	       - EINVAL: The I2C address or the channel index is invalid.
 	 *	       - EBADFD: The I2C interface contains incorrect data.
 	 *	       - EAGAIN: The operation is temporarily unavailable.
-	 *	       - EIO: The slave didn't ACK the request, or a more general error in the bus.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
 	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
 	 *			return value will be the same as the platform's write function.
 	 *	       - ERANGE: Invalid conversion result.

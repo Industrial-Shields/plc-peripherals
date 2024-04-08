@@ -17,8 +17,6 @@ extern "C" {
 	 * @param name The name of the variable to be created.
 	 * @param ...  The bytes to be stored in the buffer. Each byte should be separated by a comma.
 	 *
-	 * @note The "sizeof" operator is used to determine the size of the buffer automatically.
-	 *
 	 * Example usage:
 	 * ```
 	 * FAST_CREATE_I2C_WRITE(write_data, 0x12, 0x34, 0x56);
@@ -115,7 +113,7 @@ extern "C" {
 	 *             - EINVAL: The I2C address is invalid.
 	 *             - EBADFD: The I2C interface contains incorrect data.
 	 *             - EAGAIN: The operation is temporarily unavailable.
-	 *             - EIO: The slave didn't ACK the request, or a more general error in the bus.
+	 *             - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
 	 *             - EBADE: Unexpected result from the write function. If this errno is set, the
 	 *                      return value will be the same as the platform's write function.
 	 *             - For Linux:
@@ -137,7 +135,7 @@ extern "C" {
 	 *             - EINVAL: The I2C address is invalid.
 	 *             - EBADFD: The I2C interface contains incorrect data.
 	 *             - EAGAIN: The operation is temporarily unavailable.
-	 *             - EIO: The slave didn't ACK the request, or a more general error in the bus.
+	 *             - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
 	 *             - EBADE: Unexpected result from the write function. If this errno is set, the
 	 *                      return value will be the same as the platform's write function.
 	 *             - For Linux:
@@ -161,7 +159,7 @@ extern "C" {
 	 *             - EINVAL: The I2C address or the length of "to_read" is invalid.
 	 *             - EBADFD: The I2C interface contains incorrect data.
 	 *             - EAGAIN: The operation is temporarily unavailable.
-	 *             - EIO: The slave didn't ACK the request, or a more general error in the bus.
+	 *             - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
 	 *             - EBADE: Unexpected result from the write function. If this errno is set, the
 	 *                      return value will be the same as the platform's write function.
 	 *             - For Linux:

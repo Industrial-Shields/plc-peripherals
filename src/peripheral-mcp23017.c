@@ -269,16 +269,19 @@ int mcp23017_set_pin_mode(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uin
 		return i2c_ret;
 	}
 
-	if (mode & 0x01) {
-		iodir |= (1 << index);
+	uint8_t new_iodir;
+	if (mode == MCP23017_INPUT) {
+		new_iodir = iodir | (1 << index);
 	}
 	else {
-		iodir &= ~(1 << index);
+		new_iodir = iodir & ~(1 << index);
 	}
 
-	i2c_ret = write_reg(i2c, addr, write_register, iodir);
-	if (i2c_ret != 0) {
-		return i2c_ret;
+	if (iodir != new_iodir) {
+		i2c_ret = write_reg(i2c, addr, write_register, new_iodir);
+		if (i2c_ret != 0) {
+			return i2c_ret;
+		}
 	}
 
 	errno = 0;
@@ -344,16 +347,19 @@ int mcp23017_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t va
 
 	int i2c_ret = i2c_write_then_read(i2c, addr, &read_order_gpio_reg, &read_gpio_reg);
 
-	if (!value) {
-		gpio &= ~(1 << index);
+	uint8_t new_gpio;
+	if (value) {
+		new_gpio = gpio | (1 << index);
 	}
 	else {
-		gpio |= (1 << index);
+		new_gpio = gpio & ~(1 << index);
 	}
 
-	i2c_ret = write_reg(i2c, addr, write_register, gpio);
-	if (i2c_ret != 0) {
-		return i2c_ret;
+	if (new_gpio != gpio) {
+		i2c_ret = write_reg(i2c, addr, write_register, new_gpio);
+		if (i2c_ret != 0) {
+			return i2c_ret;
+		}
 	}
 
 	errno = 0;

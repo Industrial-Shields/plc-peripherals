@@ -13,14 +13,185 @@
 extern "C" {
 #endif
 
+	/**
+	 * @brief Initializes the MCP23008 GPIO expander.
+	 *
+	 * This function initializes the MCP23008 GPIO expander at the specified address.
+	 *
+	 * @param i2c Pointer to the I2C interface structure.
+	 * @param addr The I2C address of the MCP23008.
+	 * @return 0 on success, 1 if it is already initialized, -1 on failure.
+	 *	   On failure, errno is set as follows:
+	 *	       - EFAULT: The I2C interface is invalid.
+	 *	       - EINVAL: The I2C address is invalid.
+	 *	       - EBADFD: The I2C interface contains incorrect data.
+	 *	       - EAGAIN: The operation is temporarily unavailable.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
+	 *			return value will be the same as the platform's write function.
+	 *	       - For Linux:
+	 *		   - Other errors that "ioctl" may return.
+	 */
 	int mcp23008_init(i2c_interface_t* i2c, uint8_t addr);
+
+	/**
+	 * @brief De-initializes the MCP23008.
+	 *
+	 * This function de-initializes the MCP23008.
+	 *
+	 * @param i2c Pointer to the I2C interface structure.
+	 * @param addr The I2C address of the MCP23008.
+	 * @return 0 on success, 1 if it is already initialized, -1 on failure.
+	 *	   On failure, errno is set as follows:
+	 *	       - EFAULT: The I2C interface is invalid.
+	 *	       - EINVAL: The I2C address is invalid.
+	 *	       - EBADFD: The I2C interface contains incorrect data.
+	 *	       - EAGAIN: The operation is temporarily unavailable.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
+	 *			return value will be the same as the platform's write function.
+	 *	       - For Linux:
+	 *		   - Other errors that "ioctl" may return.
+	 */
 	int mcp23008_deinit(i2c_interface_t* i2c, uint8_t addr);
+
+	/**
+	 * @brief Sets the pin mode for a specific pin on the MCP23008 GPIO expander.
+	 *
+	 * This function sets the mode for a specific pin on the MCP23008 GPIO expander.
+	 *
+	 * @param i2c Pointer to the I2C interface structure.
+	 * @param addr The I2C address of the MCP23008.
+	 * @param index The pin index (0-7) for which to set the mode.
+	 * @param mode The mode to set (1 for input, 0 for output).
+	 * @return 0 on success, -1 on failure.
+	 *	   On failure, errno is set as follows:
+	 *	       - EFAULT: The I2C interface is invalid.
+	 *	       - EINVAL: The I2C address or the index given are invalid.
+	 *	       - EBADFD: The I2C interface contains incorrect data.
+	 *	       - EAGAIN: The operation is temporarily unavailable.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
+	 *			return value will be the same as the platform's write function.
+	 *	       - For Linux:
+	 *		   - Other errors that "ioctl" may return.
+	 */
 	int mcp23008_set_pin_mode(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t mode);
+
+	/**
+	 * @brief Sets the pin mode for all pins on the MCP23008 GPIO expander.
+	 *
+	 * This function sets the mode for all pins on the MCP23008 GPIO expander at the same time
+	 * with a mask, each bit representing it's index (bit 7 == GP7).
+	 *
+	 * @param i2c Pointer to the I2C interface structure.
+	 * @param addr The I2C address of the MCP23008.
+	 * @param modes The mode to set for all pins (each bit corresponds to a pin, 1 for input, 0 for output).
+	 * @return 0 on success, -1 on failure.
+	 *	   On failure, errno is set as follows:
+	 *	       - EFAULT: The I2C interface is invalid.
+	 *	       - EINVAL: The I2C address is invalid.
+	 *	       - EBADFD: The I2C interface contains incorrect data.
+	 *	       - EAGAIN: The operation is temporarily unavailable.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
+	 *			return value will be the same as the platform's write function.
+	 *	       - For Linux:
+	 *		   - Other errors that "ioctl" may return.
+	 */
 	int mcp23008_set_pin_mode_all(i2c_interface_t* i2c, uint8_t addr, uint8_t modes);
+
+	/**
+	 * @brief Reads the value of a specific input pin on the MCP23008 GPIO expander.
+	 *
+	 * This function reads the value of a specific input pin on the MCP23008 GPIO expander.
+	 *
+	 * @param i2c Pointer to the I2C interface structure.
+	 * @param addr The I2C address of the MCP23008.
+	 * @param index The pin index (0-7) to read the value from.
+	 * @param value Pointer to store the read value (0 if low, 1 if high).
+	 * @return 0 on success, -1 on failure.
+	 *	   On failure, errno is set as follows:
+	 *	       - EFAULT: One of the pointers given is invalid.
+	 *	       - EINVAL: The I2C address or the index given are invalid.
+	 *	       - EBADFD: The I2C interface contains incorrect data.
+	 *	       - EAGAIN: The operation is temporarily unavailable.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
+	 *			return value will be the same as the platform's write function.
+	 *	       - For Linux:
+	 *		   - Other errors that "ioctl" may return.
+	 */
 	int mcp23008_read(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t* value);
+
+	/**
+	 * @brief Writes the value of a specific input pin on the MCP23008 GPIO expander.
+	 *
+	 * This function writes the value of a specific input pin on the MCP23008 GPIO expander.
+	 *
+	 * @param i2c Pointer to the I2C interface structure.
+	 * @param addr The I2C address of the MCP23008.
+	 * @param index The pin index (0-7) to write the value from.
+	 * @param value The value to write (0 for low value, 1 for high value).
+	 * @return 0 on success, -1 on failure.
+	 *	   On failure, errno is set as follows:
+	 *	       - EFAULT: The I2C interface is invalid.
+	 *	       - EINVAL: The I2C address is invalid.
+	 *	       - EBADFD: The I2C interface contains incorrect data.
+	 *	       - EAGAIN: The operation is temporarily unavailable.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
+	 *			return value will be the same as the platform's write function.
+	 *	       - For Linux:
+	 *		   - Other errors that "ioctl" may return.
+	 */
         int mcp23008_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint8_t value);
+
+	/**
+	 * @brief Reads the values of all pins on the MCP23008 GPIO expander.
+	 *
+	 * This function reads the values of all pins on the MCP23008 GPIO expander, and returns
+	 * it as a 8 bit integer, each bit representing it's index (bit 7 == GP7).
+	 *
+	 * @param i2c Pointer to the I2C interface structure.
+	 * @param addr The I2C address of the MCP23008.
+	 * @param value Pointer to store the read values (each bit corresponds to a pin, 0 if low, 1 if high).
+	 * @return 0 on success, -1 on failure.
+	 *	   On failure, errno is set as follows:
+	 *	       - EFAULT: One of the pointers given is invalid.
+	 *	       - EINVAL: The I2C address is invalid.
+	 *	       - EBADFD: The I2C interface contains incorrect data.
+	 *	       - EAGAIN: The operation is temporarily unavailable.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
+	 *			return value will be the same as the platform's write function.
+	 *	       - For Linux:
+	 *		   - Other errors that "ioctl" may return.
+	 */
 	int mcp23008_read_all(i2c_interface_t* i2c, uint8_t addr, uint8_t* value);
-        int mcp23008_write_all(i2c_interface_t* i2c, uint8_t addr, uint8_t value);
+
+	/**
+	 * @brief Writes a value to all pins on the MCP23008 GPIO expander.
+	 *
+	 * This function writes a value to all pins on the MCP23008 GPIO expander
+	 * directly, each bit representing it's index (bit 7 == GP7).
+	 *
+	 * @param i2c Pointer to the I2C interface structure.
+	 * @param addr The I2C address of the MCP23008.
+	 * @param value The value to write (each bit corresponds to a pin, 0 for low value, 1 for high value).
+	 * @return 0 on success, -1 on failure.
+	 *	   On failure, errno is set as follows:
+	 *	       - EFAULT: The I2C interface is invalid.
+	 *	       - EINVAL: The I2C address is invalid.
+	 *	       - EBADFD: The I2C interface contains incorrect data.
+	 *	       - EAGAIN: The operation is temporarily unavailable.
+	 *	       - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+	 *	       - EBADE: Unexpected result from the write function. If this errno is set, the
+	 *			return value will be the same as the platform's write function.
+	 *	       - For Linux:
+	 *		   - Other errors that "ioctl" may return.
+	 */
+	int mcp23008_write_all(i2c_interface_t* i2c, uint8_t addr, uint8_t value);
 
 #ifdef __cplusplus
 }
