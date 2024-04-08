@@ -68,7 +68,7 @@ void pca9685_init_deinit_cycle() {
 
 	// Check if PCA9685 is already initialized, and de-initialize it
 	int i2c_ret = pca9685_init(i2c, PCA9685_ADDRESS);
-	if (i2c_ret == 0 || (i2c_ret == 1 && errno == EALREADY)) {
+	if (i2c_ret == 0 || (i2c_ret == 1)) {
 		TEST_ASSERT_EQUAL_MESSAGE(0, pca9685_deinit(i2c, PCA9685_ADDRESS), strerror(errno));
 	}
 
@@ -87,7 +87,6 @@ void pca9685_write_tests() {
 	i2c_interface_t* i2c = i2c_init(1);
 	TEST_ASSERT_NOT_NULL_MESSAGE(i2c, strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(0, pca9685_init(i2c, PCA9685_ADDRESS), strerror(errno));
-
 
 	// First test
 	for (size_t c = 0; c < PCA9685_NUM_OUTPUTS; c++) {
@@ -150,10 +149,35 @@ void pca9685_write_all_tests() {
 	TEST_ASSERT_NULL_MESSAGE(i2c, strerror(errno));
 }
 
+void pca9685_pwm_frequency_tests() {
+	i2c_interface_t* i2c = i2c_init(1);
+	TEST_ASSERT_NOT_NULL_MESSAGE(i2c, strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(0, pca9685_init(i2c, PCA9685_ADDRESS), strerror(errno));
+
+
+	// Bad PWM frequency
+	TEST_ASSERT_EQUAL_MESSAGE(-1, pca9685_pwm_frequency(i2c, PCA9685_ADDRESS, 1), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(ERANGE, errno, strerror(errno));
+
+	// Set to 24 Hz
+	TEST_ASSERT_EQUAL_MESSAGE(0, pca9685_pwm_frequency(i2c, PCA9685_ADDRESS, 3), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(0, errno, strerror(errno));
+
+
+	TEST_ASSERT_EQUAL_MESSAGE(0, pca9685_deinit(i2c, PCA9685_ADDRESS), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(0, errno, strerror(errno));
+	TEST_ASSERT_MESSAGE(i2c_deinit(&i2c) == 0, strerror(errno));
+	TEST_ASSERT_NULL_MESSAGE(i2c, strerror(errno));
+}
+
 void pca9685_pwm_write_tests() {
 	i2c_interface_t* i2c = i2c_init(1);
 	TEST_ASSERT_NOT_NULL_MESSAGE(i2c, strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(0, pca9685_init(i2c, PCA9685_ADDRESS), strerror(errno));
+
+	// Bad PWM value
+	TEST_ASSERT_EQUAL_MESSAGE(-1, pca9685_pwm_write(i2c, PCA9685_ADDRESS, 0, 8900), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(ERANGE, errno, strerror(errno));
 
 	uint16_t pwm_values[PCA9685_NUM_OUTPUTS] = {0, 256, 512, 768, 2198, 3123, 1347, 2789, 865, 3920, 1786, 4021, 587, 3840, 3840, 4095};
 	for (size_t c = 0; c < PCA9685_NUM_OUTPUTS; c++) {
@@ -182,7 +206,14 @@ void pca9685_pwm_write_all_tests() {
 	TEST_ASSERT_NOT_NULL_MESSAGE(i2c, strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(0, pca9685_init(i2c, PCA9685_ADDRESS), strerror(errno));
 
-	const uint16_t values[] = {0, 256, 512, 768, 2198, 3123, 1347, 2789, 865, 3920, 1786, 4021, 587, 3840, 3840, 4095};
+        uint16_t values[] = {0, 256, 512, 768, 2198, 3123, 1347, 2789, 865, 3920, 1786, 4021, 587, 3840, 3840, 4095};
+
+	// Bad PWM value
+	values[2] = 8900;
+	TEST_ASSERT_EQUAL_MESSAGE(-1, pca9685_pwm_write_all(i2c, PCA9685_ADDRESS, values), strerror(errno));
+	TEST_ASSERT_EQUAL_MESSAGE(ERANGE, errno, strerror(errno));
+	values[2] = 512;
+
 	TEST_ASSERT_EQUAL_MESSAGE(0, pca9685_pwm_write_all(i2c, PCA9685_ADDRESS, values), strerror(errno));
 
 	FAST_CREATE_I2C_WRITE(read_order_leds, LED0_ON_L_REGISTER);
@@ -212,6 +243,8 @@ int main() {
 	RUN_TEST(pca9685_write_tests);
 
 	RUN_TEST(pca9685_write_all_tests);
+
+	RUN_TEST(pca9685_pwm_frequency_tests);
 
 	RUN_TEST(pca9685_pwm_write_tests);
 

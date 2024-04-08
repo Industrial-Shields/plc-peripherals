@@ -56,16 +56,7 @@ static inline int write_reg(i2c_interface_t* i2c, uint8_t addr, uint8_t reg, uin
  * @param i2c Pointer to the I2C interface structure.
  * @param addr The I2C address of the MCP23008.
  * @return 0 on success, -1 on failure.
- *         On failure, errno is set as follows:
- *             - EFAULT: One of the pointers given is invalid.
- *             - EINVAL: The I2C address is invalid.
- *             - EBADFD: The I2C interface contains incorrect data.
- *             - EAGAIN: The operation is temporarily unavailable.
- *             - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
- *             - EBADE: Unexpected result from the write function. If this errno is set, the
- *                      return value will be the same as the platform's write function.
- *             - For Linux:
- *                 - Other errors that "ioctl" may return.
+ *         On failure, errno is set as described in the write_regs function documentation.
  */
 static int mcp23008_reset(i2c_interface_t* i2c, uint8_t addr) {
 	int i2c_ret;

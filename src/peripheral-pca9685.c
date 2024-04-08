@@ -56,15 +56,52 @@
 // Constants
 #define DEFAULT_PRESCALE        11 // PWM frequency of ~500Hz
 
+/**
+ * @brief Writes a value to a register on the PCA9685 expander.
+ *
+ * This function writes a value to a specific register on the PCA9685 expander.
+ *
+ * @param i2c Pointer to the I2C interface structure.
+ * @param addr The I2C address of the MCP23008.
+ * @param reg The register address to write to.
+ * @param value The value to write to the register.
+ * @return 0 on success, -1 on failure.
+ *         On failure, errno is set as follows:
+ *             - EFAULT: The I2C interface is invalid.
+ *             - EINVAL: The I2C address is invalid.
+ *             - EBADFD: The I2C interface contains incorrect data.
+ *             - EAGAIN: The operation is temporarily unavailable.
+ *             - EIO: The slave didn't ACK the request, or there is a more general error on the bus.
+ *             - EBADE: Unexpected result from the write function. If this errno is set, the
+ *                      return value will be the same as the platform's write function.
+ *             - For Linux:
+ *                 - Other errors that "ioctl" may return.
+ */
 static int write_regs(i2c_interface_t* i2c, uint8_t addr, uint8_t* buffer, uint8_t len) {
 	const i2c_write_t to_write = {.buff=buffer, .len=len};
 	if (i2c_write(i2c, addr, &to_write) != 0) {
 		return -1;
 	}
 
+	errno = 0;
 	return 0;
 }
 
+/**
+ * @brief Sets the LED output on the PCA9685 PWM controller.
+ *
+ * This function sets a certain LED output on the PCA9685 PWM controller to the specified parameters.
+ *
+ * @param i2c Pointer to the I2C interface structure.
+ * @param addr The I2C address of the PCA9685 device.
+ * @param index The index of the LED output.
+ * @param on_l The ON time (low byte) of the PWM signal.
+ * @param on_h The ON time (high byte) of the PWM signal.
+ * @param off_l The OFF time (low byte) of the PWM signal.
+ * @param off_h The OFF time (high byte) of the PWM signal.
+ * @return 0 on success, -1 on failure.
+ *         On failure, errno is set as described in the write_regs function documentation.
+ */
 static int set_led(i2c_interface_t* i2c, uint8_t addr,	uint8_t index,
 		uint8_t on_l, uint8_t on_h, uint8_t off_l, uint8_t off_h) {
 	/*
@@ -84,6 +121,17 @@ static int set_led(i2c_interface_t* i2c, uint8_t addr,	uint8_t index,
 	return write_regs(i2c, addr, buffer, sizeof(buffer));
 }
 
+
+/**
+ * @brief Resets the PCA9685 PWM controller.
+ *
+ * This function resets the PCA9685 PWM controller to its default settings.
+ *
+ * @param i2c Pointer to the I2C interface structure.
+ * @param addr The I2C address of the PCA9685 device.
+ * @return 0 on success, -1 on failure.
+ *         On failure, errno is set as described in the write_regs function documentation.
+ */
 static int pca9685_reset(i2c_interface_t* i2c, uint8_t addr) {
 	uint8_t* to_write_buff = calloc(1+70, sizeof(uint8_t));
 	if (to_write_buff == NULL) {
@@ -134,6 +182,16 @@ static int pca9685_reset(i2c_interface_t* i2c, uint8_t addr) {
 	return i2c_ret;
 }
 
+/**
+ * @brief Enables sleep mode on the PCA9685 PWM controller.
+ *
+ * This function enables sleep mode on the PCA9685 PWM controller.
+ *
+ * @param i2c Pointer to the I2C interface structure.
+ * @param addr The I2C address of the PCA9685 device.
+ * @return 0 on success, -1 on failure.
+ *         On failure, errno is set as described in the write_regs function documentation.
+ */
 static int enable_sleep_mode(i2c_interface_t* i2c, uint8_t addr) {
 	uint8_t buffer[2];
 
@@ -151,6 +209,17 @@ static int enable_sleep_mode(i2c_interface_t* i2c, uint8_t addr) {
 	return write_regs(i2c, addr, buffer, 2);
 }
 
+
+/**
+ * @brief Disables sleep mode on the PCA9685 PWM controller.
+ *
+ * This function disables sleep mode on the PCA9685 PWM controller.
+ *
+ * @param i2c Pointer to the I2C interface structure.
+ * @param addr The I2C address of the PCA9685 device.
+ * @return 0 on success, -1 on failure.
+ *         On failure, errno is set as described in the write_regs function documentation.
+ */
 static int disable_sleep_mode(i2c_interface_t* i2c, uint8_t addr) {
 	uint8_t buffer[2];
 
@@ -188,7 +257,6 @@ int pca9685_init(i2c_interface_t* i2c, uint8_t addr) {
 	}
 
 	if ( (mode1_reg == MODE1_AI) && (mode2_reg == MODE2_OUTDRV) ) {
-		errno = EALREADY;
 		return 1;
 	}
 
@@ -254,7 +322,6 @@ int pca9685_deinit(i2c_interface_t* i2c, uint8_t addr) {
 	}
 
 	if ( (mode1_reg == DEFAULT_MODE1) && (mode2_reg == DEFAULT_MODE2) && (prescale_reg == DEFAULT_PRE_SCALE) ) {
-		errno = EALREADY;
 		return 1;
 	}
 
@@ -293,7 +360,7 @@ int pca9685_write_all(i2c_interface_t* i2c, uint8_t addr, uint16_t values) {
 
 int pca9685_pwm_frequency(i2c_interface_t *i2c, uint8_t addr, uint8_t prescaler_value) {
 	if (prescaler_value < 3) {
-		errno = EINVAL;
+		errno = ERANGE;
 		return -1;
 	}
 
@@ -314,6 +381,11 @@ int pca9685_pwm_frequency(i2c_interface_t *i2c, uint8_t addr, uint8_t prescaler_
 }
 
 int pca9685_pwm_write(i2c_interface_t* i2c, uint8_t addr, uint8_t index, uint16_t value) {
+	if (value > 4095) {
+		errno = ERANGE;
+		return -1;
+	}
+
 	return set_led(i2c, addr, index, 0x00, 0x00, value & 0xff, (value >> 8) & 0x0f);
 }
 
@@ -324,6 +396,10 @@ int pca9685_pwm_write_all(i2c_interface_t* i2c, uint8_t addr, const uint16_t val
 	*ptr++ = LED_REGISTERS(0);
 
 	for (int i = 0; i < PCA9685_NUM_OUTPUTS; ++i) {
+		if (values[i] > 4095) {
+			errno = ERANGE;
+			return -1;
+		}
 		*ptr++ = 0x00;
 		*ptr++ = 0x00;
 		*ptr++ = values[i] & 0xff;
