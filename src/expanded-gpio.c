@@ -36,13 +36,12 @@ typedef enum {
 
 static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), int (*deinit_fun)(i2c_interface_t*, uint8_t), const uint8_t* devices, size_t num_devices, bool restart) {
 	for (size_t i = 0; i < num_devices; i++) {
-		int ret = init_fun(i2c, devices[i]);
-		if (ret == 0) continue;
-		else if (ret != 1 && errno != EALREADY) {
+		int ret = init_fun(i2c, devices[i]);;
+		if (ret < 0) {
 			return FIRST_INIT;
 		}
 
-		if (restart) {
+		else if (restart) {
 			ret = deinit_fun(i2c, devices[i]);
 			if (ret != 0) {
 				return RESTART_DEINIT;
@@ -59,7 +58,6 @@ static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), 
 
 int initExpandedGPIO(bool restart_peripherals) {
 	if (i2c != NULL) {
-		errno = EALREADY;
 		return I2C_ALREADY_INITIALIZED;
 	}
 
@@ -132,8 +130,7 @@ int initExpandedGPIO(bool restart_peripherals) {
 int deinitExpandedGPIO(void) {
 	assert(i2c);
 	if (i2c == NULL) {
-		errno = EALREADY;
-		return -1;
+		return 1;
 	}
 
 
