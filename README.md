@@ -1,4 +1,5 @@
 # plc-peripherals
+### by Industrial Shields
 
 The `plc-peripherals` library provides an unified I2C interface to interact with GPIO peripherals like the MCP230XX, the LTC2309, the ADS1015 and the PCA9685.
 
@@ -39,4 +40,4 @@ The LTC2309 doesn't have this extension, since unlike the ADS1015, in unipolar m
 #### Defined macros
 * X_INPUT and X_OUTPUT: The values to pass as `mode` to the set_pin functions. This is useful because, for example, "1" in the MCP230XX is INPUT, not OUTPUT (as it normally is in the Arduino environment).
 * NUM_IO: Number if GPIOs.
-* NUM_OUTPUTS: Number of outputs-only..
+* NUM_OUTPUTS: Number of outputs-only.
