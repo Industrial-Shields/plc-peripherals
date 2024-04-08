@@ -17,6 +17,14 @@
 
 static i2c_interface_t* i2c = NULL;
 
+/**
+ * @brief Checks if an address exists in an array of addresses.
+ *
+ * @param addr The address to check.
+ * @param arr Pointer to the array of addresses.
+ * @param len Length of the array.
+ * @return 0 if the address is found, -1 otherwise.
+ */
 static int isAddressIntoArray(uint8_t addr, const uint8_t* arr, uint8_t len) {
 	while (len--) {
 		if (*arr++ == addr) {
@@ -34,6 +42,18 @@ typedef enum {
 	RESTART_INIT
 } init_fail_type_t;
 
+/**
+ * @brief Initializes a device with error handling and optional restart capability.
+ *
+ * This function initializes a device with error handling and optional restart capability.
+ *
+ * @param init_fun Pointer to the initialization function of the device.
+ * @param deinit_fun Pointer to the deinitialization function of the device.
+ * @param devices Array of device addresses.
+ * @param num_devices Number of devices in the array.
+ * @param restart Flag indicating whether to restart the device on initialization failure.
+ * @return INIT_SUCCESS if successful, appropriate error code otherwise.
+ */
 static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), int (*deinit_fun)(i2c_interface_t*, uint8_t), const uint8_t* devices, size_t num_devices, bool restart) {
 	for (size_t i = 0; i < num_devices; i++) {
 		int ret = init_fun(i2c, devices[i]);;
@@ -449,7 +469,7 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 	return ret;
 }
 
-int digitalReadAll(uint8_t addr, uint16_t* values) {
+int digitalReadAll(uint8_t addr, void* values) {
 	assert(i2c);
 
 	int ret = -1;
@@ -462,7 +482,7 @@ int digitalReadAll(uint8_t addr, uint16_t* values) {
 	}
 
 	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017) == 0) {
-		ret = mcp23017_read_all(i2c, addr, values);
+		ret = mcp23017_read_all(i2c, addr, (uint16_t*) values);
 		if (ret != 0) {
 			return MCP23017_READ_ALL_FAIL;
 		}
@@ -471,13 +491,13 @@ int digitalReadAll(uint8_t addr, uint16_t* values) {
 	return ret;
 }
 
-int analogWriteAll(uint8_t addr, const uint16_t* values) {
+int analogWriteAll(uint8_t addr, const void* values) {
 	assert(i2c);
 
 	int ret = -1;
 
 	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
-		ret = pca9685_pwm_write_all(i2c, addr, values);
+		ret = pca9685_pwm_write_all(i2c, addr, (uint16_t*) values);
 		if (ret != 0) {
 			return PCA9685_PWM_WRITE_ALL_FAIL;
 		}
