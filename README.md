@@ -7,6 +7,10 @@ It also provides an interface to interact with GPIOs in the same way, both direc
 This library was thought as a static library to be included in other libraries (like in [librpiplc](https://github.com/Industrial-Shields/librpiplc)), but it can also be used as a standalone dynamic library.
 
 
+## Licensing
+This library is licensed under the LGPL-3.0-or-later. The test programs are licensed under the GPL-3.0-or-later.
+
+
 ## Peripheral generic interface
 ### Mandatory methods
 - init
