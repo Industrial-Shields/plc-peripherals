@@ -30,17 +30,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Undef macros to ensure that other libraries don't interfere
-#undef INPUT
 #define INPUT 0
-
-#undef OUTPUT
 #define OUTPUT 1
 
-#undef LOW
 #define LOW 0
-
-#undef HIGH
 #define HIGH 1
 
 // Macros to extract device address and index from a pin number
