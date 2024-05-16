@@ -36,6 +36,8 @@
 #define LOW 0
 #define HIGH 1
 
+#define PERIPHERALS_NO_I2C_BUS -1
+
 // Macros to extract device address and index from a pin number
 #define pinToDeviceAddress(pin) (((pin) >> 8) & 0xff)
 #define pinToDeviceIndex(pin) ((pin)&0xff)
@@ -54,25 +56,25 @@ extern "C" {
 	 * expanded-gpio.
 	 */
 	
-	extern const uint8_t I2C_BUS;
+	extern const int I2C_BUS;
 
 	extern const uint8_t NORMAL_GPIO_INPUT;
 	extern const uint8_t NORMAL_GPIO_OUTPUT;
 
-	extern const uint8_t MCP23008[];
-	extern const size_t NUM_MCP23008;
+	extern const uint8_t ARRAY_MCP23008[];
+	extern const size_t NUM_ARRAY_MCP23008;
 
-	extern const uint8_t ADS1015[];
-	extern const size_t NUM_ADS1015;
+	extern const uint8_t ARRAY_ADS1015[];
+	extern const size_t NUM_ARRAY_ADS1015;
 
-	extern const uint8_t PCA9685[];
-	extern const size_t NUM_PCA9685;
+	extern const uint8_t ARRAY_PCA9685[];
+	extern const size_t NUM_ARRAY_PCA9685;
 
-	extern const uint8_t LTC2309[];
-	extern const size_t NUM_LTC2309;
+	extern const uint8_t ARRAY_LTC2309[];
+	extern const size_t NUM_ARRAY_LTC2309;
 
-	extern const uint8_t MCP23017[];
-	extern const size_t NUM_MCP23017;
+	extern const uint8_t ARRAY_MCP23017[];
+	extern const size_t NUM_ARRAY_MCP23017;
 
 
 	extern int normal_gpio_init(void);
@@ -104,43 +106,43 @@ extern "C" {
 		I2C_ALREADY_INITIALIZED = 1,
 		I2C_ALREADY_DEINITIALIZED,
 		NORMAL_GPIO_INIT_FAIL,
-		PCA9685_INIT_FAIL,
-		ADS1015_INIT_FAIL,
-		MCP23008_INIT_FAIL,
-		LTC2309_INIT_FAIL,
-		MCP23017_INIT_FAIL,
+		ARRAY_PCA9685_INIT_FAIL,
+		ARRAY_ADS1015_INIT_FAIL,
+		ARRAY_MCP23008_INIT_FAIL,
+		ARRAY_LTC2309_INIT_FAIL,
+		ARRAY_MCP23017_INIT_FAIL,
 		NORMAL_GPIO_DEINIT_FAIL,
-		PCA9685_DEINIT_FAIL,
-		ADS1015_DEINIT_FAIL,
-		MCP23008_DEINIT_FAIL,
-		LTC2309_DEINIT_FAIL,
-		MCP23017_DEINIT_FAIL,
+		ARRAY_PCA9685_DEINIT_FAIL,
+		ARRAY_ADS1015_DEINIT_FAIL,
+		ARRAY_MCP23008_DEINIT_FAIL,
+		ARRAY_LTC2309_DEINIT_FAIL,
+		ARRAY_MCP23017_DEINIT_FAIL,
 		// pinMode
 		NORMAL_GPIO_SET_PIN_MODE_FAIL,
-		MCP23008_SET_PIN_MODE_FAIL,
-		MCP23017_SET_PIN_MODE_FAIL,
+		ARRAY_MCP23008_SET_PIN_MODE_FAIL,
+		ARRAY_MCP23017_SET_PIN_MODE_FAIL,
 		// digitalWrite
 		NORMAL_GPIO_WRITE_FAIL,
-		PCA9685_WRITE_FAIL,
-		MCP23008_WRITE_FAIL,
-		MCP23017_WRITE_FAIL,
+		ARRAY_PCA9685_WRITE_FAIL,
+		ARRAY_MCP23008_WRITE_FAIL,
+		ARRAY_MCP23017_WRITE_FAIL,
 		// digitalRead
 		// analogWrite
 		NORMAL_GPIO_PWM_WRITE_FAIL,
-		PCA9685_PWM_WRITE_FAIL,
+		ARRAY_PCA9685_PWM_WRITE_FAIL,
 		// analogWriteSetFrequency
 		NORMAL_GPIO_PWM_CHANGE_FREQ_FAIL,
-		PCA9685_PWM_CHANGE_FREQ_FAIL,
+		ARRAY_PCA9685_PWM_CHANGE_FREQ_FAIL,
 		// analogRead
 		// digitalWriteAll
-		PCA9685_WRITE_ALL_FAIL,
-		MCP23008_WRITE_ALL_FAIL,
-		MCP23017_WRITE_ALL_FAIL,
+		ARRAY_PCA9685_WRITE_ALL_FAIL,
+		ARRAY_MCP23008_WRITE_ALL_FAIL,
+		ARRAY_MCP23017_WRITE_ALL_FAIL,
 		// digitalReadAll
-		MCP23008_READ_ALL_FAIL,
-		MCP23017_READ_ALL_FAIL,
+		ARRAY_MCP23008_READ_ALL_FAIL,
+		ARRAY_MCP23017_READ_ALL_FAIL,
 		// analogWriteAll
-		PCA9685_PWM_WRITE_ALL_FAIL
+		ARRAY_PCA9685_PWM_WRITE_ALL_FAIL
 	};
 
 	// Exported functions, useful for Arduino and other environments

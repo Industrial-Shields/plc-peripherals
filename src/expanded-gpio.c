@@ -96,6 +96,19 @@ static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), 
 }
 
 int initExpandedGPIO(bool restart_peripherals) {
+	int ret;
+
+	ret = normal_gpio_init();
+	assert(ret == 0);
+	if (ret != 0) {
+		return NORMAL_GPIO_INIT_FAIL;
+	}
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		return ret;
+	}
+
+
+
 	if (i2c != NULL) {
 		return I2C_ALREADY_INITIALIZED;
 	}
@@ -106,48 +119,39 @@ int initExpandedGPIO(bool restart_peripherals) {
 		return -1;
 	}
 
-
-	int ret;
-
-	ret = normal_gpio_init();
-	assert(ret == 0);
-	if (ret != 0) {
-		return NORMAL_GPIO_INIT_FAIL;
-	}
-
-	ret = init_device(pca9685_init, pca9685_deinit, PCA9685, NUM_PCA9685, restart_peripherals);
+	ret = init_device(pca9685_init, pca9685_deinit, ARRAY_PCA9685, NUM_ARRAY_PCA9685, restart_peripherals);
 	assert(ret != FIRST_INIT);
 	assert(ret != RESTART_DEINIT);
 	assert(ret != RESTART_INIT);
 	if (ret != INIT_SUCCESS) {
-		return PCA9685_INIT_FAIL;
+		return ARRAY_PCA9685_INIT_FAIL;
 	}
 
-        ret = init_device(ads1015_init, ads1015_deinit, ADS1015, NUM_ADS1015, restart_peripherals);
+        ret = init_device(ads1015_init, ads1015_deinit, ARRAY_ADS1015, NUM_ARRAY_ADS1015, restart_peripherals);
 	assert(ret != FIRST_INIT);
 	assert(ret != RESTART_DEINIT);
 	assert(ret != RESTART_INIT);
 	if (ret != INIT_SUCCESS) {
-		return ADS1015_INIT_FAIL;
+		return ARRAY_ADS1015_INIT_FAIL;
 	}
 
-	ret = init_device(mcp23008_init, mcp23008_deinit, MCP23008, NUM_MCP23008, restart_peripherals);
+	ret = init_device(mcp23008_init, mcp23008_deinit, ARRAY_MCP23008, NUM_ARRAY_MCP23008, restart_peripherals);
 	assert(ret != FIRST_INIT);
 	assert(ret != RESTART_DEINIT);
 	assert(ret != RESTART_INIT);
 	if (ret != INIT_SUCCESS) {
-		return MCP23008_INIT_FAIL;
+		return ARRAY_MCP23008_INIT_FAIL;
 	}
 
-	ret = init_device(ltc2309_init, ltc2309_deinit, LTC2309, NUM_LTC2309, restart_peripherals);
+	ret = init_device(ltc2309_init, ltc2309_deinit, ARRAY_LTC2309, NUM_ARRAY_LTC2309, restart_peripherals);
 	assert(ret != FIRST_INIT);
 	assert(ret != RESTART_DEINIT);
 	assert(ret != RESTART_INIT);
 	if (ret != INIT_SUCCESS) {
-		return LTC2309_INIT_FAIL;
+		return ARRAY_LTC2309_INIT_FAIL;
 	}
 
-	/*
+	/**
 	 * Introduce a delay to allow the MCP23017 devices to stabilize after power-up and reset.
 	 * After a power-on reset, the device may not respond to I2C commands. Without this
 	 * delay, attempting to communicate with the devices immediately after a reset
@@ -155,12 +159,12 @@ int initExpandedGPIO(bool restart_peripherals) {
 	 */
 	usleep(80 * 1000);
 
-	ret = init_device(mcp23017_init, mcp23017_deinit, MCP23017, NUM_MCP23017, restart_peripherals);
+	ret = init_device(mcp23017_init, mcp23017_deinit, ARRAY_MCP23017, NUM_ARRAY_MCP23017, restart_peripherals);
 	assert(ret != FIRST_INIT);
 	assert(ret != RESTART_DEINIT);
 	assert(ret != RESTART_INIT);
 	if (ret != INIT_SUCCESS) {
-		return MCP23017_INIT_FAIL;
+		return ARRAY_MCP23017_INIT_FAIL;
 	}
 
 	return 0;
@@ -181,43 +185,43 @@ int deinitExpandedGPIO(void) {
 		return NORMAL_GPIO_DEINIT_FAIL;
 	}
 
-	for (size_t i = 0; i < NUM_PCA9685; ++i) {
-		ret = pca9685_deinit(i2c, PCA9685[i]);
+	for (size_t i = 0; i < NUM_ARRAY_PCA9685; ++i) {
+		ret = pca9685_deinit(i2c, ARRAY_PCA9685[i]);
 		assert(ret == 0);
 		if (ret != 0) {
-			return PCA9685_DEINIT_FAIL;
+			return ARRAY_PCA9685_DEINIT_FAIL;
 		}
 	}
 
-	for (size_t i = 0; i < NUM_ADS1015; ++i) {
-		ret = ads1015_deinit(i2c, ADS1015[i]);
+	for (size_t i = 0; i < NUM_ARRAY_ADS1015; ++i) {
+		ret = ads1015_deinit(i2c, ARRAY_ADS1015[i]);
 		assert(ret == 0);
 		if (ret != 0) {
-			return ADS1015_DEINIT_FAIL;
+			return ARRAY_ADS1015_DEINIT_FAIL;
 		}
 	}
 
-	for (size_t i = 0; i < NUM_MCP23008; ++i) {
-		ret = mcp23008_deinit(i2c, MCP23008[i]);
+	for (size_t i = 0; i < NUM_ARRAY_MCP23008; ++i) {
+		ret = mcp23008_deinit(i2c, ARRAY_MCP23008[i]);
 		assert(ret == 0);
 		if (ret != 0) {
-			return MCP23008_DEINIT_FAIL;
+			return ARRAY_MCP23008_DEINIT_FAIL;
 		}
 	}
 
-	for (size_t i = 0; i < NUM_LTC2309; ++i) {
-		ret = ltc2309_deinit(i2c, LTC2309[i]);
+	for (size_t i = 0; i < NUM_ARRAY_LTC2309; ++i) {
+		ret = ltc2309_deinit(i2c, ARRAY_LTC2309[i]);
 		assert(ret == 0);
 		if (ret != 0) {
-			return LTC2309_DEINIT_FAIL;
+			return ARRAY_LTC2309_DEINIT_FAIL;
 		}
 	}
 
-	for (size_t i = 0; i < NUM_MCP23017; ++i) {
-		ret = mcp23017_deinit(i2c, MCP23017[i]);
+	for (size_t i = 0; i < NUM_ARRAY_MCP23017; ++i) {
+		ret = mcp23017_deinit(i2c, ARRAY_MCP23017[i]);
 		assert(ret == 0);
 		if (ret != 0) {
-			return MCP23017_DEINIT_FAIL;
+			return ARRAY_MCP23017_DEINIT_FAIL;
 		}
 	}
 
@@ -242,17 +246,17 @@ int pinMode(uint32_t pin, uint8_t mode) {
 
 	}
 
-	else if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_set_pin_mode(i2c, addr, index, mode == OUTPUT ? MCP23008_OUTPUT : MCP23008_INPUT);
 		if (ret != 0) {
-			return MCP23008_SET_PIN_MODE_FAIL;
+			return ARRAY_MCP23008_SET_PIN_MODE_FAIL;
 		}
 	}
 
-	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_MCP23017, NUM_ARRAY_MCP23017) == 0) {
 		ret = mcp23017_set_pin_mode(i2c, addr, index, mode == OUTPUT ? MCP23017_OUTPUT : MCP23017_INPUT);
 		if (ret != 0) {
-			return MCP23017_SET_PIN_MODE_FAIL;
+			return ARRAY_MCP23017_SET_PIN_MODE_FAIL;
 		}
 	}
 
@@ -276,27 +280,27 @@ int digitalWrite(uint32_t pin, uint8_t value) {
 		}
 	}
 
-	else if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 		ret = pca9685_write(i2c, addr, index, value);
 		assert(ret == 0);
 		if (ret != 0) {
-			return PCA9685_WRITE_FAIL;
+			return ARRAY_PCA9685_WRITE_FAIL;
 		}
 	}
 
-	else if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_write(i2c, addr, index, value);
 		assert(ret == 0);
 		if (ret != 0) {
-			return MCP23008_WRITE_FAIL;
+			return ARRAY_MCP23008_WRITE_FAIL;
 		}
 	}
 
-	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_MCP23017, NUM_ARRAY_MCP23017) == 0) {
 		ret = mcp23017_write(i2c, addr, index, value);
 		assert(ret == 0);
 		if (ret != 0) {
-			return MCP23017_WRITE_FAIL;
+			return ARRAY_MCP23017_WRITE_FAIL;
 		}
 	}
 
@@ -321,7 +325,7 @@ int digitalRead(uint32_t pin) {
 		}
 	}
 
-	else if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_read(i2c, addr, index, (uint8_t*) &value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -329,7 +333,7 @@ int digitalRead(uint32_t pin) {
 		}
 	}
 
-	else if (isAddressIntoArray(addr, LTC2309, NUM_LTC2309) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_LTC2309, NUM_ARRAY_LTC2309) == 0) {
 		ret = ltc2309_read(i2c, addr, index, &value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -338,7 +342,7 @@ int digitalRead(uint32_t pin) {
 		value = value > 1636 ? 1 : 0;
 	}
 
-	else if (isAddressIntoArray(addr, ADS1015, NUM_ADS1015) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_ADS1015, NUM_ARRAY_ADS1015) == 0) {
 		ret = ads1015_unsigned_read(i2c, addr, index, &value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -347,7 +351,7 @@ int digitalRead(uint32_t pin) {
 		value = value > 818 ? 1 : 0;
 	}
 
-	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_MCP23017, NUM_ARRAY_MCP23017) == 0) {
 		ret = mcp23017_read(i2c, addr, index, (uint8_t*) &value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -374,11 +378,11 @@ int analogWrite(uint32_t pin, uint16_t value) {
 	        }
         }
 
-        else if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
+        else if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 		ret = pca9685_pwm_write(i2c, addr, index, value);
 		assert(ret == 0);
 		if (ret != 0) {
-			return PCA9685_PWM_WRITE_FAIL;
+			return ARRAY_PCA9685_PWM_WRITE_FAIL;
 		}
 	}
 
@@ -400,7 +404,7 @@ int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
 	        }
         }
 
-        else if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
+        else if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 	        assert(desired_freq >= 24 && desired_freq <= 1526);
 		if (desired_freq < 24 || desired_freq > 1526) {
 			errno = ERANGE;
@@ -412,7 +416,7 @@ int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
 			errno = EOVERFLOW;
 			return -1;
 		}
-		
+
 		ret = pca9685_pwm_frequency(i2c, addr, prescaler_value);
 	        assert(ret == 0);
 	        if (ret != 0) {
@@ -441,7 +445,7 @@ uint16_t analogRead(uint32_t pin) {
 		}
 	}
 
-	if (isAddressIntoArray(addr, ADS1015, NUM_ADS1015) == 0) {
+	if (isAddressIntoArray(addr, ARRAY_ADS1015, NUM_ARRAY_ADS1015) == 0) {
 		ret = ads1015_unsigned_read(i2c, addr, index, &value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -449,7 +453,7 @@ uint16_t analogRead(uint32_t pin) {
 		}
 	}
 
-	else if (isAddressIntoArray(addr, LTC2309, NUM_LTC2309) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_LTC2309, NUM_ARRAY_LTC2309) == 0) {
 		ret = ltc2309_read(i2c, addr, index, &value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -464,24 +468,24 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 	assert(i2c);
 	int ret = -1;
 
-	if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008) == 0) {
+	if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_write_all(i2c, addr, values);
 		if (ret != 0) {
-			return MCP23008_WRITE_ALL_FAIL;
+			return ARRAY_MCP23008_WRITE_ALL_FAIL;
 		}
 	}
 
-	else if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 		ret = pca9685_write_all(i2c, addr, values);
 		if (ret != 0) {
-			return PCA9685_WRITE_ALL_FAIL;
+			return ARRAY_PCA9685_WRITE_ALL_FAIL;
 		}
 	}
 
-	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_MCP23017, NUM_ARRAY_MCP23017) == 0) {
 		ret = mcp23017_write_all(i2c, addr, values);
 		if (ret != 0) {
-			return MCP23017_WRITE_ALL_FAIL;
+			return ARRAY_MCP23017_WRITE_ALL_FAIL;
 		}
 	}
 
@@ -493,17 +497,17 @@ int digitalReadAll(uint8_t addr, void* values) {
 
 	int ret = -1;
 
-	if (isAddressIntoArray(addr, MCP23008, NUM_MCP23008) == 0) {
+	if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_read_all(i2c, addr, (uint8_t*) values);
 		if (ret != 0) {
-			return MCP23008_READ_ALL_FAIL;
+			return ARRAY_MCP23008_READ_ALL_FAIL;
 		}
 	}
 
-	else if (isAddressIntoArray(addr, MCP23017, NUM_MCP23017) == 0) {
+	else if (isAddressIntoArray(addr, ARRAY_MCP23017, NUM_ARRAY_MCP23017) == 0) {
 		ret = mcp23017_read_all(i2c, addr, (uint16_t*) values);
 		if (ret != 0) {
-			return MCP23017_READ_ALL_FAIL;
+			return ARRAY_MCP23017_READ_ALL_FAIL;
 		}
 	}
 
@@ -515,10 +519,10 @@ int analogWriteAll(uint8_t addr, const void* values) {
 
 	int ret = -1;
 
-	if (isAddressIntoArray(addr, PCA9685, NUM_PCA9685) == 0) {
+	if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 		ret = pca9685_pwm_write_all(i2c, addr, (uint16_t*) values);
 		if (ret != 0) {
-			return PCA9685_PWM_WRITE_ALL_FAIL;
+			return ARRAY_PCA9685_PWM_WRITE_ALL_FAIL;
 		}
 	}
 
