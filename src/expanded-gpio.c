@@ -96,18 +96,18 @@ static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), 
 }
 
 int initExpandedGPIO(bool restart_peripherals) {
-	int ret;
+	int ret = -1;
 
 	ret = normal_gpio_init();
 	assert(ret == 0);
 	if (ret != 0) {
 		return NORMAL_GPIO_INIT_FAIL;
 	}
+
+
 	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
 		return ret;
 	}
-
-
 
 	if (i2c != NULL) {
 		return I2C_ALREADY_INITIALIZED;
@@ -171,18 +171,18 @@ int initExpandedGPIO(bool restart_peripherals) {
 }
 
 int deinitExpandedGPIO(void) {
-	assert(i2c);
-	if (i2c == NULL) {
-		return 1;
-	}
-
-
-	int ret;
+	int ret = -1;
 
 	ret = normal_gpio_deinit();
 	assert(ret == 0);
 	if (ret != 0) {
 		return NORMAL_GPIO_DEINIT_FAIL;
+	}
+
+
+	assert(i2c);
+	if (i2c == NULL) {
+		return 1;
 	}
 
 	for (size_t i = 0; i < NUM_ARRAY_PCA9685; ++i) {
@@ -229,14 +229,10 @@ int deinitExpandedGPIO(void) {
 }
 
 int pinMode(uint32_t pin, uint8_t mode) {
-	assert(i2c);
-
 	int ret = -1;
-
 
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
-
 
 	if (addr == 0) {
 		ret = normal_gpio_set_pin_mode(index, mode == OUTPUT ? NORMAL_GPIO_OUTPUT : NORMAL_GPIO_INPUT);
@@ -246,7 +242,10 @@ int pinMode(uint32_t pin, uint8_t mode) {
 
 	}
 
-	else if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
+
+	assert(i2c);
+
+        if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_set_pin_mode(i2c, addr, index, mode == OUTPUT ? MCP23008_OUTPUT : MCP23008_INPUT);
 		if (ret != 0) {
 			return ARRAY_MCP23008_SET_PIN_MODE_FAIL;
@@ -264,13 +263,10 @@ int pinMode(uint32_t pin, uint8_t mode) {
 }
 
 int digitalWrite(uint32_t pin, uint8_t value) {
-	assert(i2c);
-
 	int ret = -1;
 
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
-
 
 	if (addr == 0) {
 		ret = normal_gpio_write(index, value);
@@ -280,7 +276,10 @@ int digitalWrite(uint32_t pin, uint8_t value) {
 		}
 	}
 
-	else if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
+
+	assert(i2c);
+
+        if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 		ret = pca9685_write(i2c, addr, index, value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -308,24 +307,24 @@ int digitalWrite(uint32_t pin, uint8_t value) {
 }
 
 int digitalRead(uint32_t pin) {
-	assert(i2c);
-
 	uint16_t value = 0;
-	int ret;
+	int ret = -1;
 
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-
 	if (addr == 0) {
-		ret = normal_gpio_read(pin, (uint8_t*) &value);
+		ret = normal_gpio_read(index, (uint8_t*) &value);
 		assert(ret == 0);
 		if (ret != 0) {
 			return 0;
 		}
 	}
 
-	else if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
+
+	assert(i2c);
+
+	if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_read(i2c, addr, index, (uint8_t*) &value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -363,22 +362,23 @@ int digitalRead(uint32_t pin) {
 }
 
 int analogWrite(uint32_t pin, uint16_t value) {
-	assert(i2c);
-
 	int ret = -1;
 
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-        if (addr == 0) {
-	        ret = normal_gpio_pwm_write(pin, value);
+	if (addr == 0) {
+	        ret = normal_gpio_pwm_write(index, value);
 	        assert(ret == 0);
 	        if (ret != 0) {
 		        return NORMAL_GPIO_PWM_WRITE_FAIL;
 	        }
         }
 
-        else if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
+
+	assert(i2c);
+
+        if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 		ret = pca9685_pwm_write(i2c, addr, index, value);
 		assert(ret == 0);
 		if (ret != 0) {
@@ -390,21 +390,23 @@ int analogWrite(uint32_t pin, uint16_t value) {
 }
 
 int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
-	assert(i2c);
-
 	int ret = -1;
 
 	uint8_t addr = pinToDeviceAddress(pin);
+	uint8_t index = pinToDeviceIndex(pin);
 
-        if (addr == 0) {
-	        ret = normal_gpio_pwm_frequency(pin, desired_freq);
+	if (addr == 0) {
+	        ret = normal_gpio_pwm_frequency(index, desired_freq);
 	        assert(ret == 0);
 	        if (ret != 0) {
 		        return NORMAL_GPIO_PWM_CHANGE_FREQ_FAIL;
 	        }
         }
 
-        else if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
+
+	assert(i2c);
+
+        if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 	        assert(desired_freq >= 24 && desired_freq <= 1526);
 		if (desired_freq < 24 || desired_freq > 1526) {
 			errno = ERANGE;
@@ -428,22 +430,22 @@ int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
 }
 
 uint16_t analogRead(uint32_t pin) {
-	assert(i2c);
-
 	uint16_t value = 0;
-	int ret;
-
+	int ret = -1;
 
 	uint8_t addr = pinToDeviceAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
 	if (addr == 0) {
-		ret = normal_gpio_analog_read(pin, &value);
+		ret = normal_gpio_analog_read(index, &value);
 		assert(ret == 0);
 		if (ret != 0) {
 			return 0;
 		}
 	}
+
+
+	assert(i2c);
 
 	if (isAddressIntoArray(addr, ARRAY_ADS1015, NUM_ARRAY_ADS1015) == 0) {
 		ret = ads1015_unsigned_read(i2c, addr, index, &value);
@@ -465,8 +467,10 @@ uint16_t analogRead(uint32_t pin) {
 }
 
 int digitalWriteAll(uint8_t addr, uint32_t values) {
-	assert(i2c);
 	int ret = -1;
+
+
+	assert(i2c);
 
 	if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_write_all(i2c, addr, values);
@@ -493,9 +497,10 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 }
 
 int digitalReadAll(uint8_t addr, void* values) {
+	int ret = -1;
+
 	assert(i2c);
 
-	int ret = -1;
 
 	if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_read_all(i2c, addr, (uint8_t*) values);
@@ -515,9 +520,10 @@ int digitalReadAll(uint8_t addr, void* values) {
 }
 
 int analogWriteAll(uint8_t addr, const void* values) {
+	int ret = -1;
+
 	assert(i2c);
 
-	int ret = -1;
 
 	if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 		ret = pca9685_pwm_write_all(i2c, addr, (uint16_t*) values);
