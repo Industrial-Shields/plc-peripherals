@@ -147,7 +147,10 @@ extern "C" {
 		ARRAY_MCP23017_READ_ALL_FAIL          = 30,
 
 		// analogWriteAll Errors
-		ARRAY_PCA9685_PWM_WRITE_ALL_FAIL      = 31
+		ARRAY_PCA9685_PWM_WRITE_ALL_FAIL      = 31,
+
+		// Others
+		I2C_PIN_WITHOUT_I2C_BUS               = 32
 	};
 
 
