@@ -17,18 +17,18 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../include/expanded-gpio.h"
+#include <expanded-gpio.h>
 
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
 
-#include "../include/i2c-interface.h"
-#include "../include/peripheral-ads1015.h"
-#include "../include/peripheral-mcp23008.h"
-#include "../include/peripheral-pca9685.h"
-#include "../include/peripheral-ltc2309.h"
-#include "../include/peripheral-mcp23017.h"
+#include <i2c-interface.h>
+#include <peripheral-ads1015.h>
+#include <peripheral-mcp23008.h>
+#include <peripheral-pca9685.h>
+#include <peripheral-ltc2309.h>
+#include <peripheral-mcp23017.h>
 
 #include <assert.h>
 

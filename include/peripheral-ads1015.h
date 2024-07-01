@@ -21,7 +21,7 @@
 #define __PERIPHERAL_ADS1015_H__
 
 #include <stdint.h>
-#include "../include/i2c-interface.h"
+#include <i2c-interface.h>
 
 #define ADS1015_NUM_INPUTS 4
 

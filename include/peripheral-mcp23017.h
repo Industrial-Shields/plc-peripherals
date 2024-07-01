@@ -21,7 +21,7 @@
 #define __PERIPHERAL_MCP23017_H__
 
 #include <stdint.h>
-#include "../include/i2c-interface.h"
+#include <i2c-interface.h>
 
 #define MCP23017_NUM_IO 16
 

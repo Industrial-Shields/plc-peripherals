@@ -17,12 +17,12 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../include/i2c-interface.h"
+#include <i2c-interface.h>
 
 #include <stdbool.h>
 #include <string.h>
 
-#include "../include/detect-platform.h"
+#include "detect-platform.h"
 
 #if defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Linux
 #include <stdio.h>

@@ -15,7 +15,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../include/plc-peripherals.h"
+#include <plc-peripherals.h>
 
 #if defined(PLC_ENVIRONMENT) && PLC_ENVIRONMENT == Linux
 

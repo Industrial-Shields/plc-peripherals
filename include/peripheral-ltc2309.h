@@ -21,7 +21,7 @@
 #define __PERIPHERAL_LTC2309_H__
 
 #include <stdint.h>
-#include "../include/i2c-interface.h"
+#include <i2c-interface.h>
 
 #define LTC2309_NUM_INPUTS 8
 

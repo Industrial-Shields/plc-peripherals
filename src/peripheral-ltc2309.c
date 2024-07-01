@@ -17,7 +17,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../include/peripheral-ltc2309.h"
+#include <peripheral-ltc2309.h>
 
 #include <unistd.h>
 #include <stdio.h>

@@ -21,7 +21,7 @@
 #define __PERIPHERAL_PCA9685_H__
 
 #include <stdint.h>
-#include "../include/i2c-interface.h"
+#include <i2c-interface.h>
 
 #define PCA9685_NUM_OUTPUTS 16
 #define PCA9685_INTERNAL_CLOCK 25000000UL // 25 MHz

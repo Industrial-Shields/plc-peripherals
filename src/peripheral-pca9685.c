@@ -17,7 +17,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../include/peripheral-pca9685.h"
+#include <peripheral-pca9685.h>
 
 #include <stdio.h>
 #include <string.h>
