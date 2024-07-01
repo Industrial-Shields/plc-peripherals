@@ -109,6 +109,7 @@ int initExpandedGPIO(bool restart_peripherals) {
 		return ret;
 	}
 
+
 	if (i2c != NULL) {
 		return I2C_ALREADY_INITIALIZED;
 	}
@@ -180,6 +181,11 @@ int deinitExpandedGPIO(void) {
 	}
 
 
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		return ret;
+	}
+
+
 	assert(i2c);
 	if (i2c == NULL) {
 		return 1;
@@ -243,6 +249,11 @@ int pinMode(uint32_t pin, uint8_t mode) {
 	}
 
 
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		return ret;
+	}
+
+
 	assert(i2c);
 
         if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
@@ -274,6 +285,11 @@ int digitalWrite(uint32_t pin, uint8_t value) {
 		if (ret != 0) {
 			return NORMAL_GPIO_WRITE_FAIL;
 		}
+	}
+
+
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		return ret;
 	}
 
 
@@ -319,6 +335,11 @@ int digitalRead(uint32_t pin) {
 		if (ret != 0) {
 			return 0;
 		}
+	}
+
+
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		return ret;
 	}
 
 
@@ -376,6 +397,11 @@ int analogWrite(uint32_t pin, uint16_t value) {
         }
 
 
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		return ret;
+	}
+
+
 	assert(i2c);
 
         if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
@@ -402,6 +428,11 @@ int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
 		        return NORMAL_GPIO_PWM_CHANGE_FREQ_FAIL;
 	        }
         }
+
+
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		return ret;
+	}
 
 
 	assert(i2c);
@@ -445,6 +476,11 @@ uint16_t analogRead(uint32_t pin) {
 	}
 
 
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		return ret;
+	}
+
+
 	assert(i2c);
 
 	if (isAddressIntoArray(addr, ARRAY_ADS1015, NUM_ARRAY_ADS1015) == 0) {
@@ -468,6 +504,12 @@ uint16_t analogRead(uint32_t pin) {
 
 int digitalWriteAll(uint8_t addr, uint32_t values) {
 	int ret = -1;
+
+
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		errno = ENOTSUP;
+		return ret;
+	}
 
 
 	assert(i2c);
@@ -499,8 +541,14 @@ int digitalWriteAll(uint8_t addr, uint32_t values) {
 int digitalReadAll(uint8_t addr, void* values) {
 	int ret = -1;
 
-	assert(i2c);
 
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		errno = ENOTSUP;
+		return ret;
+	}
+
+
+	assert(i2c);
 
 	if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
 		ret = mcp23008_read_all(i2c, addr, (uint8_t*) values);
@@ -522,8 +570,14 @@ int digitalReadAll(uint8_t addr, void* values) {
 int analogWriteAll(uint8_t addr, const void* values) {
 	int ret = -1;
 
-	assert(i2c);
 
+	if (I2C_BUS == PERIPHERALS_NO_I2C_BUS) {
+		errno = ENOTSUP;
+		return ret;
+	}
+
+
+	assert(i2c);
 
 	if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
 		ret = pca9685_pwm_write_all(i2c, addr, (uint16_t*) values);
