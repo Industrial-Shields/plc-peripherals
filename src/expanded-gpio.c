@@ -30,11 +30,19 @@
 #include <peripheral-ltc2309.h>
 #include <peripheral-mcp23017.h>
 
-#include <assert.h>
+
 #if PLC_ENVIRONMENT == Arduino_ESP32
-#undef assert
-#define assert(...) ((void*) 0)
+
+#ifndef NDEBUG
+#define NDEBUG
 #endif
+
+#ifdef DEBUG
+#undef DEBUG
+#endif
+
+#endif
+#include <assert.h>
 
 // TODO: Portable logging methods
 
