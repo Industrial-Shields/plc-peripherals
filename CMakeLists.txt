@@ -18,17 +18,30 @@
 cmake_minimum_required(VERSION 3.18.4)
 project("PLC peripherals of Industrial Shields")
 
+# Name of the library
+set(LIBNAME plc-peripherals)
+
 # Set C and C++ standards
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 
-# Enable some warning flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+
+# Enable some warning flags, and force them as errors
+if(NOT PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS)
+	set(PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS
+		-Wall
+		-Wextra
+		-fanalyzer
+		-Werror
+	)
+endif()
+
+# Force PIE executables
+include(CheckPIESupported)
+check_pie_supported() # If not called, -pie is not passed to the linker
+set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 
 
 # Determine build type
@@ -39,12 +52,12 @@ endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-	set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g -DDEBUG -fno-omit-frame-pointer")
-	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_C_FLAGS_DEBUG}")
+	add_compile_definitions("DEBUG")
+	set(PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS "${PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS} -O0 -g -fno-omit-frame-pointer")
 else()
+	add_compile_definitions("NDEBUG")
 	# Change -O3 optimization to -O2
-	string(REPLACE "-O3" "-O2" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${CMAKE_CXX_FLAGS_RELEASE}")
+	string(REPLACE "-O3" "-O2" PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS "${PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS}")
 endif()
 
 
@@ -52,10 +65,17 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
-include_directories(include)
+# If is not an out of source build, cause fatal error to
+# stop the script from further execution
+if (${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
+	message(FATAL_ERROR "CMake has been ran to create an out of source build.
+This error prevents CMake from running an in-source build.")
+endif ()
 
+
+include_directories(include)
 file(GLOB SOURCES src/*.c)
 
-add_library(plc-peripherals STATIC ${SOURCES})
-
-set_target_properties(plc-peripherals PROPERTIES OUTPUT_NAME "plc-peripherals")
+add_library(${LIBNAME} STATIC ${SOURCES})
+target_compile_options(${LIBNAME} PRIVATE ${PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS})
+set_target_properties(${LIBNAME} PROPERTIES OUTPUT_NAME "${LIBNAME}")
