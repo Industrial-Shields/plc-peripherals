@@ -38,44 +38,75 @@
 
 #define PERIPHERALS_NO_I2C_BUS -1
 
-// Macros to extract device address and index from a pin number
-#define pinToDeviceAddress(pin) (((pin) >> 8) & 0xff)
-#define pinToDeviceIndex(pin) ((pin)&0xff)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 	/*
+	 * The new system makes full use of the 32 bits we already had
+	 * for our pins. The MSB is used to select what type of pin it
+	 * is (direct, or peripheral and what type). The other bytes are
+	 * used as the implementor sees fit.
+	 * This change enables other libraries (that use this as a base)
+	 * to select the used peripherals at both run-time or (with some
+	 * pre-processor tricks) at compile-time. Plus, normal operations
+	 * should be faster due to not searching an array every time an
+	 * access is made.
+	 */
+
+	typedef enum {
+		PLC_DIRECT = 0,
+		PLC_PCA9685,
+		PLC_MCP23008,
+		PLC_MCP23017,
+		PLC_LTC2309,
+		PLC_ADS1015
+	} peripheral_type_t;
+
+        struct peripherals_t {
+		const uint8_t* arrayMCP23008;
+		size_t numArrayMCP23008;
+		const uint8_t* arrayADS1015;
+		size_t numArrayADS1015;
+		const uint8_t* arrayPCA9685;
+		size_t numArrayPCA9685;
+		const uint8_t* arrayLTC2309;
+		size_t numArrayLTC2309;
+		const uint8_t* arrayMCP23017;
+		size_t numArrayMCP23017;
+	};
+
+#define _MAKE_PIN_PLC(type, byte2, byte3, byte4) (((uint32_t)(type & 0xFF) << 24) | \
+                                                  ((uint32_t)(byte2 & 0xFF) << 16) | \
+                                                  ((uint32_t)(byte3 & 0xFF) << 8) | \
+                                                  ((uint32_t)(byte4 & 0xFF)))
+
+	// Direct pins can have a direction of up to 24 bits
+#define MAKE_PIN_DIRECT(index) _MAKE_PIN_PLC(PLC_DIRECT, (index && 0xFF0000) >> 16, (index && 0xFF00) >> 8, index)
+	/*
+	 * The adapted peripherals until now use the 2th byte as I2C address,
+	 * and the 0th byte as the GPIO's index of the peripheral. The 1th
+	 * byte is left as 0x00
+	 */
+#define MAKE_PIN_PCA9685(addr, index) _MAKE_PIN_PLC(PLC_PCA9685, addr, 0x00, index)
+#define MAKE_PIN_MCP23008(addr, index) _MAKE_PIN_PLC(PLC_MCP23008, addr, 0x00, index)
+#define MAKE_PIN_MCP23017(addr, index) _MAKE_PIN_PLC(PLC_MCP23017, addr, 0x00, index)
+#define MAKE_PIN_LTC2309(addr, index) _MAKE_PIN_PLC(PLC_LTC2309, addr, 0x00, index)
+#define MAKE_PIN_ADS1015(addr, index) _MAKE_PIN_PLC(PLC_ADS1015, addr, 0x00, index)
+
+	/*
 	 * Those marked with extern are the variables that are expected
 	 * to be provided by other library. This is used to define which
-	 * I2C bus to use, available peripherals, and basic functions to
-	 * interact with the GPIOs of the device (ESP32, Raspberry...).
-	 * Without these functions the library won't compile, but you can
-	 * compile this library without the capabilities provided by
-	 * expanded-gpio.
+	 * I2C bus to use and basic functions to interact with the GPIOs
+	 * of the device (ESP32, Raspberry...). Without these functions
+	 * the library won't compile, but you can compile this library
+	 * without the capabilities provided by expanded-gpio.
 	 */
-	
+
 	extern const int I2C_BUS;
 
 	extern const uint8_t NORMAL_GPIO_INPUT;
 	extern const uint8_t NORMAL_GPIO_OUTPUT;
-
-	extern const uint8_t ARRAY_MCP23008[];
-	extern const size_t NUM_ARRAY_MCP23008;
-
-	extern const uint8_t ARRAY_ADS1015[];
-	extern const size_t NUM_ARRAY_ADS1015;
-
-	extern const uint8_t ARRAY_PCA9685[];
-	extern const size_t NUM_ARRAY_PCA9685;
-
-	extern const uint8_t ARRAY_LTC2309[];
-	extern const size_t NUM_ARRAY_LTC2309;
-
-	extern const uint8_t ARRAY_MCP23017[];
-	extern const size_t NUM_ARRAY_MCP23017;
-
 
 	extern int normal_gpio_init(void);
 	extern int normal_gpio_deinit(void);
@@ -99,7 +130,6 @@ extern "C" {
 	void delayMicroseconds(uint32_t micros);
 	#endif
 
-
 	// Error codes for error handling
 	enum {
 		// Initialization and Deinitialization Errors
@@ -117,6 +147,8 @@ extern "C" {
 		ARRAY_MCP23008_DEINIT_FAIL            = 12,
 		ARRAY_LTC2309_DEINIT_FAIL             = 13,
 		ARRAY_MCP23017_DEINIT_FAIL            = 14,
+		PLC_PERIHPERALS_STRUCT_INVALID        = 33,
+
 
 		// pinMode Errors
 		NORMAL_GPIO_SET_PIN_MODE_FAIL         = 15,
@@ -159,12 +191,13 @@ extern "C" {
 	/**
 	 * @brief Initializes the expanded GPIO devices.
 	 *
-	 * This function initializes all the GPIOs defined in the library.
+	 * This function initializes all the GPIOs defined in the passed array.
 	 *
-	 * @param restart_peripherals Flag indicating whether to restart the peripherals on initialization failure.
+	 * @param peripherals Struct that indicates which peripherals should be initialized.
+	 * @param restart Flag indicating whether to restart the peripherals on initialization failure.
 	 * @return 0 if successful, appropriate error code otherwise.
 	 */
-	int initExpandedGPIO(bool restart_peripherals);
+	int initExpandedGPIOV2(const struct peripherals_t* peripherals, bool restart);
 
 	/**
 	 * @brief De-initializes the expanded GPIO devices.

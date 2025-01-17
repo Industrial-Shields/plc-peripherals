@@ -32,7 +32,6 @@
 
 
 #if PLC_ENVIRONMENT == Arduino_ESP32
-
 #ifndef NDEBUG
 #define NDEBUG
 #endif
@@ -40,13 +39,21 @@
 #ifdef DEBUG
 #undef DEBUG
 #endif
-
-#endif
+#endif // PLC_ENVIRONMENT == Arduino_ESP32
 #include <assert.h>
 
-// TODO: Portable logging methods
+
+// Macros to extract device address and index from a pin number
+#define pinToPlcTypeEnum(pin) (((pin) >> 24) & 0xFF)
+#define pinToI2CAddress(pin) (((pin) >> 16) & 0xFF)
+#define pinToDeviceIndex(pin) ((pin) & 0xFF)
+
+
 
 static i2c_interface_t* i2c = NULL;
+
+
+
 
 /**
  * @brief Checks if an address exists in an array of addresses.
@@ -56,7 +63,7 @@ static i2c_interface_t* i2c = NULL;
  * @param len Length of the array.
  * @return 0 if the address is found, -1 otherwise.
  */
-static int isAddressIntoArray(uint8_t addr, const uint8_t* arr, uint8_t len) {
+static int isAddressIntoArray(uint8_t addr, const uint8_t* arr, size_t len) {
 	while (len--) {
 		if (*arr++ == addr) {
 			return 0;
@@ -66,13 +73,13 @@ static int isAddressIntoArray(uint8_t addr, const uint8_t* arr, uint8_t len) {
 	return -1;
 }
 
+
 typedef enum {
 	INIT_SUCCESS = 0,
 	FIRST_INIT,
 	RESTART_DEINIT,
 	RESTART_INIT
 } init_fail_type_t;
-
 /**
  * @brief Initializes a device with error handling and optional restart capability.
  *
@@ -107,7 +114,29 @@ static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), 
 	return INIT_SUCCESS;
 }
 
-int initExpandedGPIO(bool restart_peripherals) {
+static const struct peripherals_t* peripherals = NULL;
+#define ARRAY_MCP23008 peripherals->arrayMCP23008
+#define NUM_ARRAY_MCP23008 peripherals->numArrayMCP23008
+#define ARRAY_ADS1015 peripherals->arrayADS1015
+#define NUM_ARRAY_ADS1015 peripherals->numArrayADS1015
+#define ARRAY_PCA9685 peripherals->arrayPCA9685
+#define NUM_ARRAY_PCA9685 peripherals->numArrayPCA9685
+#define ARRAY_LTC2309 peripherals->arrayLTC2309
+#define NUM_ARRAY_LTC2309 peripherals->numArrayLTC2309
+#define ARRAY_MCP23017 peripherals->arrayMCP23017
+#define NUM_ARRAY_MCP23017 peripherals->numArrayMCP23017
+
+int initExpandedGPIOV2(const struct peripherals_t* peripherals, bool restart_peripherals) {
+	if (!peripherals ||
+	    !ARRAY_MCP23008 || !NUM_ARRAY_MCP23008 ||
+	    !ARRAY_ADS1015 || !NUM_ARRAY_ADS1015 ||
+	    !ARRAY_PCA9685 || !NUM_ARRAY_PCA9685 ||
+	    !ARRAY_LTC2309 || !NUM_ARRAY_LTC2309 ||
+	    !ARRAY_MCP23017 || !NUM_ARRAY_MCP23017
+	    ) {
+		return PLC_PERIHPERALS_STRUCT_INVALID;
+	}
+
 	int ret = -1;
 
 	ret = normal_gpio_init();
@@ -235,13 +264,15 @@ int deinitExpandedGPIO(void) {
 	}
 }
 
+
 int pinMode(uint32_t pin, uint8_t mode) {
 	int ret = -1;
 
-	uint8_t addr = pinToDeviceAddress(pin);
+	uint8_t peri = pinToPlcTypeEnum(pin);
+	uint8_t addr = pinToI2CAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-	if (addr == 0) {
+	if (peri == PLC_DIRECT) {
 		ret = normal_gpio_set_pin_mode(index, mode == OUTPUT ? NORMAL_GPIO_OUTPUT : NORMAL_GPIO_INPUT);
 		return ret == 0 ? 0 : NORMAL_GPIO_SET_PIN_MODE_FAIL;
 	}
@@ -250,31 +281,30 @@ int pinMode(uint32_t pin, uint8_t mode) {
 		return I2C_PIN_WITHOUT_I2C_BUS;
 	}
 
-
-        if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
-		ret = mcp23008_set_pin_mode(i2c, addr, index, mode == OUTPUT ? MCP23008_OUTPUT : MCP23008_INPUT);
-		if (ret != 0) {
-			return ARRAY_MCP23008_SET_PIN_MODE_FAIL;
-		}
+	switch (peri) {
+		case PLC_MCP23008:
+			ret = mcp23008_set_pin_mode(i2c, addr, index, mode == OUTPUT ? MCP23008_OUTPUT : MCP23008_INPUT);
+			if (ret != 0)
+				return ARRAY_MCP23008_SET_PIN_MODE_FAIL;
+			break;
+		case PLC_MCP23017:
+			ret = mcp23017_set_pin_mode(i2c, addr, index, mode == OUTPUT ? MCP23017_OUTPUT : MCP23017_INPUT);
+			if (ret != 0)
+				return ARRAY_MCP23017_SET_PIN_MODE_FAIL;
+			break;
+		default:
+			return -1;
 	}
-
-	else if (isAddressIntoArray(addr, ARRAY_MCP23017, NUM_ARRAY_MCP23017) == 0) {
-		ret = mcp23017_set_pin_mode(i2c, addr, index, mode == OUTPUT ? MCP23017_OUTPUT : MCP23017_INPUT);
-		if (ret != 0) {
-			return ARRAY_MCP23017_SET_PIN_MODE_FAIL;
-		}
-	}
-
 	return 0;
 }
 
 int digitalWrite(uint32_t pin, uint8_t value) {
 	int ret = -1;
-
-	uint8_t addr = pinToDeviceAddress(pin);
+	uint8_t peri = pinToPlcTypeEnum(pin);
+	uint8_t addr = pinToI2CAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-	if (addr == 0) {
+	if (peri == PLC_DIRECT) {
 		ret = normal_gpio_write(index, value);
 		return ret == 0 ? 0 : NORMAL_GPIO_WRITE_FAIL;
 	}
@@ -283,28 +313,25 @@ int digitalWrite(uint32_t pin, uint8_t value) {
 		return I2C_PIN_WITHOUT_I2C_BUS;
 	}
 
-
-        if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
-		ret = pca9685_write(i2c, addr, index, value);
-		if (ret != 0) {
-			return ARRAY_PCA9685_WRITE_FAIL;
-		}
+	switch (peri) {
+		case PLC_PCA9685:
+			ret = pca9685_write(i2c, addr, index, value);
+			if (ret != 0)
+				return ARRAY_PCA9685_WRITE_FAIL;
+			break;
+		case PLC_MCP23008:
+			ret = mcp23008_write(i2c, addr, index, value);
+			if (ret != 0)
+				return ARRAY_MCP23008_WRITE_FAIL;
+			break;
+		case PLC_MCP23017:
+			ret = mcp23017_write(i2c, addr, index, value);
+			if (ret != 0)
+				return ARRAY_MCP23017_WRITE_FAIL;
+			break;
+		default:
+			return -1;
 	}
-
-	else if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
-		ret = mcp23008_write(i2c, addr, index, value);
-		if (ret != 0) {
-			return ARRAY_MCP23008_WRITE_FAIL;
-		}
-	}
-
-	else if (isAddressIntoArray(addr, ARRAY_MCP23017, NUM_ARRAY_MCP23017) == 0) {
-		ret = mcp23017_write(i2c, addr, index, value);
-		if (ret != 0) {
-			return ARRAY_MCP23017_WRITE_FAIL;
-		}
-	}
-
 	return 0;
 }
 
@@ -312,10 +339,11 @@ int digitalRead(uint32_t pin) {
 	uint16_t value = 0;
 	int ret = -1;
 
-	uint8_t addr = pinToDeviceAddress(pin);
+	uint8_t peri = pinToPlcTypeEnum(pin);
+	uint8_t addr = pinToI2CAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-	if (addr == 0) {
+	if (peri == PLC_DIRECT) {
 		ret = normal_gpio_read(index, (uint8_t*) &value);
 		assert(ret == 0);
 		return ret == 0 ? (int) value : 0;
@@ -325,53 +353,48 @@ int digitalRead(uint32_t pin) {
 		return I2C_PIN_WITHOUT_I2C_BUS;
 	}
 
-
 	assert(i2c);
-
-	if (isAddressIntoArray(addr, ARRAY_MCP23008, NUM_ARRAY_MCP23008) == 0) {
-		ret = mcp23008_read(i2c, addr, index, (uint8_t*) &value);
-		assert(ret == 0);
-		if (ret != 0) {
-			return 0;
-		}
+	switch (peri) {
+		case PLC_MCP23008:
+			ret = mcp23008_read(i2c, addr, index, (uint8_t*) &value);
+			assert(ret == 0);
+			if (ret != 0)
+				return 0;
+			break;
+		case PLC_LTC2309:
+			ret = ltc2309_read(i2c, addr, index, &value);
+			assert(ret == 0);
+			if (ret != 0)
+				return 0;
+			value = value > 1636 ? 1 : 0;
+			break;
+		case PLC_ADS1015:
+			ret = ads1015_unsigned_read(i2c, addr, index, &value);
+			assert(ret == 0);
+			if (ret != 0)
+				return 0;
+			value = value > 818 ? 1 : 0;
+			break;
+		case PLC_MCP23017:
+			ret = mcp23017_read(i2c, addr, index, (uint8_t*) &value);
+			assert(ret == 0);
+			if (ret != 0)
+				return 0;
+			break;
+		default:
+			return value;
 	}
-
-	else if (isAddressIntoArray(addr, ARRAY_LTC2309, NUM_ARRAY_LTC2309) == 0) {
-		ret = ltc2309_read(i2c, addr, index, &value);
-		assert(ret == 0);
-		if (ret != 0) {
-			return 0;
-		}
-		value = value > 1636 ? 1 : 0;
-	}
-
-	else if (isAddressIntoArray(addr, ARRAY_ADS1015, NUM_ARRAY_ADS1015) == 0) {
-		ret = ads1015_unsigned_read(i2c, addr, index, &value);
-		assert(ret == 0);
-		if (ret != 0) {
-			return 0;
-		}
-		value = value > 818 ? 1 : 0;
-	}
-
-	else if (isAddressIntoArray(addr, ARRAY_MCP23017, NUM_ARRAY_MCP23017) == 0) {
-		ret = mcp23017_read(i2c, addr, index, (uint8_t*) &value);
-		assert(ret == 0);
-		if (ret != 0) {
-			return 0;
-		}
-	}
-
 	return value;
 }
 
 int analogWrite(uint32_t pin, uint16_t value) {
 	int ret = -1;
 
-	uint8_t addr = pinToDeviceAddress(pin);
+	uint8_t peri = pinToPlcTypeEnum(pin);
+	uint8_t addr = pinToI2CAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-	if (addr == 0) {
+	if (peri == PLC_DIRECT) {
 	        ret = normal_gpio_pwm_write(index, value);
 	        return ret == 0 ? 0 : NORMAL_GPIO_PWM_WRITE_FAIL;
         }
@@ -381,11 +404,10 @@ int analogWrite(uint32_t pin, uint16_t value) {
 	}
 
 
-        if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
+	if (peri == PLC_PCA9685) {
 		ret = pca9685_pwm_write(i2c, addr, index, value);
-		if (ret != 0) {
-			return ARRAY_PCA9685_PWM_WRITE_FAIL;
-		}
+			if (ret != 0)
+				return ARRAY_PCA9685_PWM_WRITE_FAIL;
 	}
 
 	return ret;
@@ -394,10 +416,11 @@ int analogWrite(uint32_t pin, uint16_t value) {
 int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
 	int ret = -1;
 
-	uint8_t addr = pinToDeviceAddress(pin);
+	uint8_t peri = pinToPlcTypeEnum(pin);
+	uint8_t addr = pinToI2CAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-	if (addr == 0) {
+	if (peri == PLC_DIRECT) {
 	        ret = normal_gpio_pwm_frequency(index, desired_freq);
 	        return ret == 0 ? 0 : NORMAL_GPIO_PWM_CHANGE_FREQ_FAIL;
         }
@@ -407,8 +430,8 @@ int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
 	}
 
 
-        if (isAddressIntoArray(addr, ARRAY_PCA9685, NUM_ARRAY_PCA9685) == 0) {
-	        assert(desired_freq >= 24 && desired_freq <= 1526);
+	if (peri == PLC_PCA9685) {
+		assert(desired_freq >= 24 && desired_freq <= 1526);
 		if (desired_freq < 24 || desired_freq > 1526) {
 			errno = ERANGE;
 			return -1;
@@ -421,10 +444,10 @@ int analogWriteSetFrequency(uint32_t pin, uint32_t desired_freq) {
 		}
 
 		ret = pca9685_pwm_frequency(i2c, addr, prescaler_value);
-	        assert(ret == 0);
-	        if (ret != 0) {
-		        return NORMAL_GPIO_PWM_CHANGE_FREQ_FAIL;
-	        }
+		assert(ret == 0);
+		if (ret != 0) {
+			return NORMAL_GPIO_PWM_CHANGE_FREQ_FAIL;
+		}
 	}
 
 	return ret;
@@ -434,10 +457,11 @@ uint16_t analogRead(uint32_t pin) {
 	uint16_t value = 0;
 	int ret = -1;
 
-	uint8_t addr = pinToDeviceAddress(pin);
+	uint8_t peri = pinToPlcTypeEnum(pin);
+	uint8_t addr = pinToI2CAddress(pin);
 	uint8_t index = pinToDeviceIndex(pin);
 
-	if (addr == 0) {
+	if (peri == PLC_DIRECT) {
 		ret = normal_gpio_analog_read(index, &value);
 		assert(ret == 0);
 		return ret == 0 ? value : 0;
@@ -449,23 +473,22 @@ uint16_t analogRead(uint32_t pin) {
 
 
 	assert(i2c);
-
-	if (isAddressIntoArray(addr, ARRAY_ADS1015, NUM_ARRAY_ADS1015) == 0) {
-		ret = ads1015_unsigned_read(i2c, addr, index, &value);
-		assert(ret == 0);
-		if (ret != 0) {
-			return 0;
-		}
+	switch (peri){
+		case PLC_ADS1015:
+			ret = ads1015_unsigned_read(i2c, addr, index, &value);
+			assert(ret == 0);
+			if (ret != 0)
+				return 0;
+			break;
+		case PLC_LTC2309:
+			ret = ltc2309_read(i2c, addr, index, &value);
+			assert(ret == 0);
+			if (ret != 0)
+				return 0;
+			break;
+		default:
+			return value;
 	}
-
-	else if (isAddressIntoArray(addr, ARRAY_LTC2309, NUM_ARRAY_LTC2309) == 0) {
-		ret = ltc2309_read(i2c, addr, index, &value);
-		assert(ret == 0);
-		if (ret != 0) {
-			return 0;
-		}
-	}
-
 	return value;
 }
 
