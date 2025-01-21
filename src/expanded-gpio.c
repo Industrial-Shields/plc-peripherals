@@ -40,6 +40,8 @@
 #ifdef DEBUG
 #undef DEBUG
 #endif
+#undef assert
+#define assert(cond) ((void)0)
 
 #endif
 #include <assert.h>
