@@ -114,21 +114,11 @@ static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), 
 	return INIT_SUCCESS;
 }
 
-static const struct peripherals_t* peripherals = NULL;
-#define ARRAY_MCP23008 peripherals->arrayMCP23008
-#define NUM_ARRAY_MCP23008 peripherals->numArrayMCP23008
-#define ARRAY_ADS1015 peripherals->arrayADS1015
-#define NUM_ARRAY_ADS1015 peripherals->numArrayADS1015
-#define ARRAY_PCA9685 peripherals->arrayPCA9685
-#define NUM_ARRAY_PCA9685 peripherals->numArrayPCA9685
-#define ARRAY_LTC2309 peripherals->arrayLTC2309
-#define NUM_ARRAY_LTC2309 peripherals->numArrayLTC2309
-#define ARRAY_MCP23017 peripherals->arrayMCP23017
-#define NUM_ARRAY_MCP23017 peripherals->numArrayMCP23017
+struct peripherals_t _peripherals_struct = {};
 
-int initExpandedGPIOV2(const struct peripherals_t* peripherals, bool restart_peripherals) {
-	if (!peripherals ||
-	    !ARRAY_MCP23008 || !NUM_ARRAY_MCP23008 ||
+
+int initExpandedGPIOV2(bool restart_peripherals) {
+	if (!ARRAY_MCP23008 || !NUM_ARRAY_MCP23008 ||
 	    !ARRAY_ADS1015 || !NUM_ARRAY_ADS1015 ||
 	    !ARRAY_PCA9685 || !NUM_ARRAY_PCA9685 ||
 	    !ARRAY_LTC2309 || !NUM_ARRAY_LTC2309 ||

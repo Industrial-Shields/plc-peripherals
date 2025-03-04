@@ -94,13 +94,26 @@ extern "C" {
 #define MAKE_PIN_LTC2309(addr, index) _MAKE_PIN_PLC(PLC_LTC2309, addr, 0x00, index)
 #define MAKE_PIN_ADS1015(addr, index) _MAKE_PIN_PLC(PLC_ADS1015, addr, 0x00, index)
 
+	extern struct peripherals_t _peripherals_struct;
+#define ARRAY_MCP23008 _peripherals_struct.arrayMCP23008
+#define NUM_ARRAY_MCP23008 _peripherals_struct.numArrayMCP23008
+#define ARRAY_ADS1015 _peripherals_struct.arrayADS1015
+#define NUM_ARRAY_ADS1015 _peripherals_struct.numArrayADS1015
+#define ARRAY_PCA9685 _peripherals_struct.arrayPCA9685
+#define NUM_ARRAY_PCA9685 _peripherals_struct.numArrayPCA9685
+#define ARRAY_LTC2309 _peripherals_struct.arrayLTC2309
+#define NUM_ARRAY_LTC2309 _peripherals_struct.numArrayLTC2309
+#define ARRAY_MCP23017 _peripherals_struct.arrayMCP23017
+#define NUM_ARRAY_MCP23017 _peripherals_struct.numArrayMCP23017
+
 	/*
-	 * Those marked with extern are the variables that are expected
-	 * to be provided by other library. This is used to define which
-	 * I2C bus to use and basic functions to interact with the GPIOs
-	 * of the device (ESP32, Raspberry...). Without these functions
-	 * the library won't compile, but you can compile this library
-	 * without the capabilities provided by expanded-gpio.
+	 * The following marked with extern are the variables that are
+	 * expected to be provided by other library. This is used to
+	 * define which I2C bus to use and basic functions to interact
+	 * with the GPIOs of the device (ESP32, Raspberry...). Without
+	 * these functions the library won't compile, but you can
+	 * compile this library without the capabilities provided by
+	 * expanded-gpio.
 	 */
 
 	extern const int I2C_BUS;
@@ -197,7 +210,7 @@ extern "C" {
 	 * @param restart Flag indicating whether to restart the peripherals on initialization failure.
 	 * @return 0 if successful, appropriate error code otherwise.
 	 */
-	int initExpandedGPIOV2(const struct peripherals_t* peripherals, bool restart);
+	int initExpandedGPIOV2(bool restart);
 
 	/**
 	 * @brief De-initializes the expanded GPIO devices.
