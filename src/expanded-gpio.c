@@ -118,11 +118,11 @@ struct peripherals_t _peripherals_struct = {};
 
 
 int initExpandedGPIOV2(bool restart_peripherals) {
-	if (!ARRAY_MCP23008 || !NUM_ARRAY_MCP23008 ||
-	    !ARRAY_ADS1015 || !NUM_ARRAY_ADS1015 ||
-	    !ARRAY_PCA9685 || !NUM_ARRAY_PCA9685 ||
-	    !ARRAY_LTC2309 || !NUM_ARRAY_LTC2309 ||
-	    !ARRAY_MCP23017 || !NUM_ARRAY_MCP23017
+	if (!ARRAY_MCP23008 ||
+	    !ARRAY_ADS1015 ||
+	    !ARRAY_PCA9685 ||
+	    !ARRAY_LTC2309 ||
+	    !ARRAY_MCP23017
 	    ) {
 		return PLC_PERIHPERALS_STRUCT_INVALID;
 	}
