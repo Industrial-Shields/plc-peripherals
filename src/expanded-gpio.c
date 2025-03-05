@@ -130,7 +130,7 @@ int initExpandedGPIOV2(bool restart_peripherals) {
 	int ret = -1;
 
 	ret = normal_gpio_init();
-	if (ret != 0) {
+	if (ret < 0) {
 		return NORMAL_GPIO_INIT_FAIL;
 	}
 
@@ -201,7 +201,7 @@ int deinitExpandedGPIO(void) {
 	int ret = -1;
 
 	ret = normal_gpio_deinit();
-	if (ret != 0) {
+	if (ret < 0) {
 		return NORMAL_GPIO_DEINIT_FAIL;
 	}
 
