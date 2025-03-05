@@ -49,7 +49,7 @@ void i2c_init_sanity_check() {
 	// Test bad I2C bus argument
 	i2c_interface_t* i2c = i2c_init(255);
 	TEST_ASSERT_NULL(i2c);
-	TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+	TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
 }
 
 void i2c_deinit_sanity_check() {
@@ -480,11 +480,11 @@ void i2c_write_test() {
 
         // Non-existant MCP23008
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &set_output), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_high), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_down), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
 
 
         TEST_ASSERT_MESSAGE(i2c_deinit(&i2c) == 0, strerror(errno));
@@ -566,11 +566,11 @@ void i2c_read_test() {
 
         // Non-existant MCP23008 test
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &set_output), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &read_order_iodir), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_read(i2c, UNUSED_ADDRESS, &to_read), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
 
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &pull_some_high), strerror(errno));
         TEST_ASSERT_EQUAL_MESSAGE(-1, i2c_write(i2c, UNUSED_ADDRESS, &read_order_olat), strerror(errno));

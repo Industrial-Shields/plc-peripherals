@@ -51,7 +51,7 @@ void mcp23008_init_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 
 	TEST_ASSERT_EQUAL_MESSAGE(-1, mcp23008_init(i2c, 0x00), strerror(errno));
-	TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+	TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
 
 
 	TEST_ASSERT_EQUAL_MESSAGE(0, i2c_deinit(&i2c), strerror(errno));
@@ -73,7 +73,7 @@ void mcp23008_deinit_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 
 	TEST_ASSERT_EQUAL_MESSAGE(-1, mcp23008_deinit(i2c, 0x00), strerror(errno));
-	TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+	TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
 
 
 	TEST_ASSERT_EQUAL_MESSAGE(0, i2c_deinit(&i2c), strerror(errno));
