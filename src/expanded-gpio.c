@@ -249,9 +249,11 @@ int deinitExpandedGPIO(void) {
 		return i2c_deinit(&i2c);
 	}
 
-	else {
-		return 0;
-	}
+	return 0;
+}
+
+int deinitExpandedGPIONoReset(void) {
+	return i2c_deinit(&i2c);
 }
 
 

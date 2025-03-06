@@ -222,6 +222,16 @@ extern "C" {
 	int deinitExpandedGPIO(void);
 
 	/**
+	 * @brief De-initializes the expanded GPIO devices.
+	 *
+	 * This function de-initializes all the GPIOs defined in the library without
+	 * resetting the peripherals associated.
+	 *
+	 * @return 0 if successful, appropriate error code otherwise.
+	 */
+	int deinitExpandedGPIONoReset(void);
+
+	/**
 	 * @brief Sets the pin mode for a specified pin.
 	 *
 	 * @param pin The pin number.
