@@ -217,7 +217,6 @@ extern "C" {
 	 *
 	 * This function de-initializes all the GPIOs defined in the library.
 	 *
-	 * @param restart_peripherals Flag indicating whether to restart the peripherals on initialization failure.
 	 * @return 0 if successful, appropriate error code otherwise.
 	 */
 	int deinitExpandedGPIO(void);
