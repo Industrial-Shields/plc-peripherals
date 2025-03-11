@@ -119,6 +119,14 @@ int initExpandedGPIO(bool restart_peripherals) {
 
 
 	if (I2C_BUS != PERIPHERALS_NO_I2C_BUS) {
+		/**
+		 * Introduce a delay to allow some devices to stabilize after power-up and reset.
+		 * After a power-on reset, a device may not respond to I2C commands. Without this
+		 * delay, attempting to communicate with the devices immediately after a reset
+		 * may result in a NACK, causing the program to immediately fail.
+		 */
+		usleep(210 * 1000);
+
 		if (i2c != NULL) {
 			return I2C_ALREADY_INITIALIZED;
 		}
@@ -159,14 +167,6 @@ int initExpandedGPIO(bool restart_peripherals) {
 		if (ret != INIT_SUCCESS) {
 			return ARRAY_LTC2309_INIT_FAIL;
 		}
-
-		/**
-		 * Introduce a delay to allow the MCP23017 devices to stabilize after power-up and reset.
-		 * After a power-on reset, the device may not respond to I2C commands. Without this
-		 * delay, attempting to communicate with the devices immediately after a reset
-		 * may result in a NACK, causing the program to immediately fail.
-		 */
-		usleep(100 * 1000);
 
 		ret = init_device(mcp23017_init, mcp23017_deinit, ARRAY_MCP23017, NUM_ARRAY_MCP23017, restart_peripherals);
 		assert(ret != FIRST_INIT);
