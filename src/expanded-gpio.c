@@ -284,6 +284,10 @@ int pinMode(uint32_t pin, uint8_t mode) {
 			if (ret != 0)
 				return ARRAY_MCP23017_SET_PIN_MODE_FAIL;
 			break;
+		case PLC_ADS1015:
+		case PLC_PCA9685:
+		case PLC_LTC2309:
+			break;
 		default:
 			return -1;
 	}
