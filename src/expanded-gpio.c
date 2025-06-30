@@ -117,7 +117,7 @@ static init_fail_type_t init_device(int (*init_fun)(i2c_interface_t*, uint8_t), 
 struct peripherals_t _peripherals_struct = {};
 
 
-int initExpandedGPIOV2(bool restart_peripherals) {
+int initExpandedGPIO(bool restart_peripherals) {
 	if (!ARRAY_MCP23008 ||
 	    !ARRAY_ADS1015 ||
 	    !ARRAY_PCA9685 ||

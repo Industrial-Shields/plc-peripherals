@@ -210,7 +210,7 @@ extern "C" {
 	 * @param restart Flag indicating whether to restart the peripherals on initialization failure.
 	 * @return 0 if successful, appropriate error code otherwise.
 	 */
-	int initExpandedGPIOV2(bool restart);
+	int initExpandedGPIO(bool restart);
 
 	/**
 	 * @brief De-initializes the expanded GPIO devices.
