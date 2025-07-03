@@ -157,6 +157,7 @@ int mcp23008_init(i2c_interface_t* i2c, uint8_t addr) {
 
 	if ((iocon == (IOCON_SEQOP | IOCON_ODR)) && (gppu == 0x00)) {
 		// Already initialized
+		errno = EALREADY;
 		return 1;
 	}
 
@@ -194,6 +195,7 @@ int mcp23008_deinit(i2c_interface_t* i2c, uint8_t addr) {
 
         if (iocon == 0x00 && gppu == 0x00) {
 		// Not initialized
+	        errno = EALREADY;
 		return 1;
 	}
 

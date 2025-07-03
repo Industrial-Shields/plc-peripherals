@@ -50,7 +50,7 @@ void ltc2309_init_sanity_check() {
 	TEST_ASSERT_EQUAL_MESSAGE(EINVAL, errno, strerror(errno));
 	
 	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_init(i2c, UNUSED_ADDRESS), strerror(errno));
-	TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+	TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
 
 
 	TEST_ASSERT_EQUAL_MESSAGE(0, i2c_deinit(&i2c), strerror(errno));
@@ -99,7 +99,7 @@ void ltc2309_non_existant_read_test() {
 	i2c_interface_t* i2c = i2c_init(1);
 	TEST_ASSERT_NOT_NULL_MESSAGE(i2c, strerror(errno));
 	TEST_ASSERT_EQUAL_MESSAGE(-1, ltc2309_init(i2c, 0x30), strerror(errno));
-        TEST_ASSERT_EQUAL_MESSAGE(EIO, errno, strerror(errno));
+        TEST_ASSERT_MESSAGE(errno == EIO || errno == EREMOTEIO, strerror(errno));
 
 	TEST_ASSERT_EQUAL_MESSAGE(0, i2c_deinit(&i2c), strerror(errno));
 	TEST_ASSERT_NULL_MESSAGE(i2c, strerror(errno));

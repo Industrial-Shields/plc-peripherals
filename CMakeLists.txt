@@ -53,7 +53,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 	add_compile_definitions("DEBUG")
-	set(PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS "${PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS} -O0 -g -fno-omit-frame-pointer")
+	set(PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS ${PLC_PERIPHERALS_DEFAULT_COMPILE_FLAGS} -Og -g -fno-omit-frame-pointer)
 else()
 	add_compile_definitions("NDEBUG")
 	# Change -O3 optimization to -O2

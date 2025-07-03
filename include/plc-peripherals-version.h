@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Industrial Shields. All rights reserved
+ * Copyright (c) 2025 Industrial Shields. All rights reserved
  *
  * This file is part of plc-peripherals.
  *
@@ -17,19 +17,22 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __PLC_PERIPHERALS_H__
-#define __PLC_PERIPHERALS_H__
+#ifndef __PLC_PERIPHERALS_VERSION_H__
+#define __PLC_PERIPHERALS_VERSION_H__
 
-#include "detect-platform.h"
+#define __LIB_PLC_PERIPHERALS_VERSION_MAJOR_NUM 2
+#define __LIB_PLC_PERIPHERALS_VERSION_MINOR_NUM 0
+#define __LIB_PLC_PERIPHERALS_VERSION_PATCH_NUM 0
 
-#include "plc-peripherals-version.h"
 
-#include "i2c-interface.h"
-#include "peripheral-ads1015.h"
-#include "peripheral-ltc2309.h"
-#include "peripheral-mcp23008.h"
-#include "peripheral-pca9685.h"
 
-#include "expanded-gpio.h"
+extern const int LIB_PLC_PERIPHERALS_VERSION_MAJOR_NUM;
+extern const int LIB_PLC_PERIPHERALS_VERSION_MINOR_NUM;
+extern const int LIB_PLC_PERIPHERALS_VERSION_PATCH_NUM;
 
-#endif // __PLC_PERIPHERALS_H__
+extern const char* LIB_PLC_PERIPHERALS_VERSION_MAJOR;
+extern const char* LIB_PLC_PERIPHERALS_VERSION_MINOR;
+extern const char* LIB_PLC_PERIPHERALS_VERSION_PATCH;
+extern const char* LIB_PLC_PERIPHERALS_VERSION;
+
+#endif

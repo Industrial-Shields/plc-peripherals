@@ -276,6 +276,7 @@ int pca9685_init(i2c_interface_t* i2c, uint8_t addr) {
 	}
 
 	if ( (mode1_reg == MODE1_AI) && (mode2_reg == MODE2_OUTDRV) ) {
+		errno = EALREADY;
 		return 1;
 	}
 
@@ -341,6 +342,7 @@ int pca9685_deinit(i2c_interface_t* i2c, uint8_t addr) {
 	}
 
 	if ( (mode1_reg == DEFAULT_MODE1) && (mode2_reg == DEFAULT_MODE2) && (prescale_reg == DEFAULT_PRE_SCALE) ) {
+		errno = EALREADY;
 		return 1;
 	}
 
