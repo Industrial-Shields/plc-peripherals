@@ -90,31 +90,14 @@ static int pca9534d_reset(i2c_interface_t* i2c, uint8_t addr) {
 
 int pca9534d_init(i2c_interface_t* i2c, uint8_t addr) {
 	FAST_CREATE_I2C_WRITE(read_order_config_reg, CONFIGURATION_REGISTER);
-//	FAST_CREATE_I2C_WRITE(read_order_polarity_reg, POLARITY_INVERSION_REGISTER);
 
 	uint8_t config;
 	i2c_read_t read_config_reg = {.buff=&config, .len=1};
-//	i2c_read_t read_polarity_reg = {.buff=&polarity, .len=1};
 
 	int i2c_ret = i2c_write_then_read(i2c, addr, &read_order_config_reg, &read_config_reg);
 	if (i2c_ret != 0) {
 		return i2c_ret;
 	}
-//	i2c_ret = i2c_write_then_read(i2c, addr, &read_order_polarity_reg, &read_polarity_reg);
-//	if (i2c_ret != 0) {
-//		return i2c_ret;
-//	}
-
-//	if ((config == 0xFF) && (polarity == 0x00)) {
-//		// Already initialized
-//		errno = EALREADY;
-//		return 1;
-//	}
-
-//	i2c_ret = pca9534d_reset(i2c, addr);
-//	if (i2c_ret != 0) {
-//		return i2c_ret;
-//	}
 
 	errno = 0;
 	return 0;
