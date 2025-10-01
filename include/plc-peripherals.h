@@ -28,6 +28,8 @@
 #include "peripheral-ads1015.h"
 #include "peripheral-ltc2309.h"
 #include "peripheral-mcp23008.h"
+#include "peripheral-mcp23017.h"
+#include "peripheral-pca9534d.h"
 #include "peripheral-pca9685.h"
 
 #include "expanded-gpio.h"
