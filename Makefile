@@ -1,18 +1,18 @@
-# Copyright (c) 2024 Industrial Shields. All rights reserved
+# Copyright (c) 2025 Industrial Shields. All rights reserved
 #
 # This file is part of plc-peripherals.
 #
 # plc-peripherals is free software: you can redistribute
-# it and/or modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
+# it and/or modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation, either version
+# 3 of the License, or (at your option) any later version.
 #
 # plc-peripherals is distributed in the hope that it will
 # be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
-# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-# General Public License for more details.
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
+# You should have received a copy of the GNU Lesser General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 export CC := gcc
@@ -45,7 +45,7 @@ SRCS := $(filter-out $(SRC_DIR)/expanded-gpio.c, $(wildcard $(SRC_DIR)/*.c))
 OBJS := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
 LIB := $(BUILD_DIR)/$(LIBNAME)
 
-.PHONY: all with_expanded_gpio clean tests
+.PHONY: all clean
 
 all: $(LIB)
 
@@ -59,13 +59,6 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 
 $(LIB): $(OBJS) | $(BUILD_DIR)
 	ar rcs $@ $(OBJS)
-
-
-with_expanded_gpio: $(OBJS) $(BUILD_DIR)/expanded-gpio.o | $(BUILD_DIR)
-	ar rcs $(LIB) $^
-
-tests: $(LIB)
-	make -C tests/
 
 clean:
 	rm -rf $(BUILD_DIR)
