@@ -45,7 +45,7 @@ SRCS := $(filter-out $(SRC_DIR)/expanded-gpio.c, $(wildcard $(SRC_DIR)/*.c))
 OBJS := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
 LIB := $(BUILD_DIR)/$(LIBNAME)
 
-.PHONY: all clean
+.PHONY: all format clean
 
 all: $(LIB)
 
@@ -59,6 +59,9 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 
 $(LIB): $(OBJS) | $(BUILD_DIR)
 	ar rcs $@ $(OBJS)
+
+format:
+	clang-format -i {include,src}/*
 
 clean:
 	rm -rf $(BUILD_DIR)
