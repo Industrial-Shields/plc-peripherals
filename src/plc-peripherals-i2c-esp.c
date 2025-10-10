@@ -61,7 +61,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 	return ret;
 }
 
-int i2c_deinit(i2c_interface_t* interface)
+int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 {
 #if defined(PLC_PERIPHERALS_VALIDATE_ARGS)
 	if (interface == NULL) {
@@ -70,18 +70,18 @@ int i2c_deinit(i2c_interface_t* interface)
 	}
 #endif
 
-	if (!i2cIsInit(interface->bus_number)) {
-		errno = EALREADY;
-		return 1;
-	}
-
-	esp_err_t deinit_result = i2cDeinit(interface->bus_number);
-	if (deinit_result != ESP_OK) {
-		ESP_LOGE(TAG,
-			 "Can't de-initialize I2C bus: %s",
-			 esp_err_to_name(deinit_result));
-		errno = EIO;
-		return -1;
+	if (deinit_i2c_bus) {
+		esp_err_t deinit_result = i2cDeinit(interface->bus_number);
+		if (deinit_result != ESP_OK) {
+			// Report an error if bus is still initialized
+			if (i2cIsInit(interface->bus_number)) {
+				ESP_LOGE(TAG,
+					 "Can't de-initialize I2C bus: %s",
+					 esp_err_to_name(deinit_result));
+				errno = EIO;
+				return -1;
+			}
+		}
 	}
 
 	free(interface);

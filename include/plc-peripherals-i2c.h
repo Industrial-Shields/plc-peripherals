@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/types.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,10 +64,12 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
 /**
  * i2c_deinit
  *
- * De-initialize an I2C interface for the current target environment.
+ * De-initialize an I2C interface for the current target environment, and if
+ * applicable, de-initialize the bus if deinit_i2c_bus is true.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)  - I2C interface to de-initialize.
+ *   i2c (i2c_interface_t*) - I2C interface to de-initialize.
+ *   deinit_i2c_bus (bool)  - If true, also de-initialize the I2C bus.
  *
  * Returns:
  *   int - 0 if successful, 1 if the bus was de-initialized, or -1 if some error
@@ -75,11 +78,10 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
  * Errors:
  *   errno set to:
  *     - EINVAL        : Passed i2c_interface is NULL.
- *     - EALREADY      : Bus already initialized.
  *     - ESP32 specific:
  *       - EIO         : i2cDeinit function reported some error.
  */
-int i2c_deinit(i2c_interface_t* interface);
+int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
 
 /**
  * i2c_write
