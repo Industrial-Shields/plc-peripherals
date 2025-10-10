@@ -40,7 +40,8 @@ typedef uint16_t plc_i2c_addr_t;
 /**
  * i2c_init
  *
- * Initialize an I2C interface for the current target environment.
+ * Initialize an I2C interface for the current target environment, and if
+ * applicable, initialize the I2C bus.
  *
  * Parameters:
  *   bus (uint8_t) - I2C bus number.
@@ -53,7 +54,6 @@ typedef uint16_t plc_i2c_addr_t;
  *
  * Errors:
  *   errno set to:
- *     - EALREADY      : Bus already initialized.
  *     - ENOMEM        : Out of memory during allocation.
  *     - ESP32 specific:
  *       - EIO         : i2cInit function reported some error.

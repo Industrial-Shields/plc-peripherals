@@ -42,18 +42,16 @@ static inline bool is_i2c_platform_correct(i2c_interface_t* i2c)
 
 i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 {
-	if (i2cIsInit(bus)) {
-		errno = EALREADY;
-		return NULL;
-	}
-
 	esp_err_t init_result = i2cInit(bus, sda, scl, 0);
 	if (init_result != ESP_OK) {
-		ESP_LOGE(TAG,
-			 "Can't initialize I2C bus: %s",
-			 esp_err_to_name(init_result));
-		errno = EIO;
-		return NULL;
+		// Report an error if bus isn't initialized
+		if (!i2cIsInit(bus)) {
+			ESP_LOGE(TAG,
+				 "Can't initialize I2C bus: %s",
+				 esp_err_to_name(init_result));
+			errno = EIO;
+			return NULL;
+		}
 	}
 
 	i2c_interface_t* ret = malloc(sizeof(struct _i2c_interface_t));
