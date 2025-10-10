@@ -91,7 +91,7 @@ ssize_t i2c_write(i2c_interface_t* i2c,
 		  const uint8_t* to_write,
 		  size_t to_write_len)
 {
-#if defined(PLC_PERIPHERALS_VALIDATE_ARGS)
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (!is_i2c_platform_correct(i2c) || addr >= 1024 || to_write == NULL) {
 		errno = EINVAL;
 		return -1;
@@ -122,7 +122,7 @@ ssize_t i2c_read(i2c_interface_t* i2c,
 		 uint8_t* to_read,
 		 size_t to_read_len)
 {
-#if defined(PLC_PERIPHERALS_VALIDATE_ARGS)
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (!is_i2c_platform_correct(i2c) || addr >= 1024 || to_read == NULL) {
 		errno = EINVAL;
 		return -1;
