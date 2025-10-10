@@ -63,12 +63,10 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 
 int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 {
-#if defined(PLC_PERIPHERALS_VALIDATE_ARGS)
 	if (interface == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
 
 	if (deinit_i2c_bus) {
 		esp_err_t deinit_result = i2cDeinit(interface->bus_number);
