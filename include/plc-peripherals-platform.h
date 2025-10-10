@@ -25,11 +25,15 @@
 #define PLC_ARDUINO_ESP32 1
 #define PLC_ESP_IDF 2
 
-#if defined(ARDUINO_ESP32) || defined(ARDUINO_ARCH_ESP32)
-#define PLC_ENVIRONMENT PLC_ARDUINO_ESP32
+#if defined(ARDUINO)
+#include <Arduino.h>
+#endif
 
-#elif defined(__linux__)
+#if defined(__linux__)
 #define PLC_ENVIRONMENT LINUX
+
+#elif defined(ESP_ARDUINO_VERSION)
+#define PLC_ENVIRONMENT PLC_ARDUINO_ESP32
 
 #elif defined(ESP_IDF) || defined(ESP_PLATFORM) ||       \
 	defined(__ESP_PLATFORM__) || defined(IDF_VER) || \
