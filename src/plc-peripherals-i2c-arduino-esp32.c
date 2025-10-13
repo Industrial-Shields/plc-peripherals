@@ -34,10 +34,15 @@ struct _i2c_interface_t {
 	uint8_t bus_number;
 };
 static uint32_t MAXIMUM_I2C_TIMEOUT = 25;
+static uint16_t MAXIMUM_I2C_ADDRESS = 1024;
 
 static inline bool is_i2c_platform_correct(i2c_interface_t* i2c)
 {
 	return i2c != NULL && i2c->bus_number < SOC_I2C_NUM;
+}
+static inline bool is_i2c_address_valid(plc_i2c_addr_t addr)
+{
+	return addr < MAXIMUM_I2C_ADDRESS;
 }
 
 i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
@@ -92,7 +97,8 @@ ssize_t i2c_write(i2c_interface_t* i2c,
 		  size_t to_write_len)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (is_i2c_platform_correct(i2c) || addr >= 1024 || to_write == NULL) {
+	if (is_i2c_platform_correct(i2c) || is_i2c_address_valid(addr) ||
+	    to_write == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -123,7 +129,8 @@ ssize_t i2c_read(i2c_interface_t* i2c,
 		 size_t to_read_len)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (is_i2c_platform_correct(i2c) || addr >= 1024 || to_read == NULL) {
+	if (is_i2c_platform_correct(i2c) || is_i2c_address_valid(addr) ||
+	    to_read == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -158,8 +165,8 @@ ssize_t i2c_write_then_read(i2c_interface_t* i2c,
 			    size_t* read_bytes)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (is_i2c_platform_correct(i2c) || addr >= 1024 || to_write == NULL ||
-	    to_read == NULL) {
+	if (is_i2c_platform_correct(i2c) || is_i2c_address_valid(addr) ||
+	    to_write == NULL || to_read == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
