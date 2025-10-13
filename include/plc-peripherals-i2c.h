@@ -25,6 +25,12 @@
 #include <sys/types.h>
 #include <stdbool.h>
 
+/*
+ * If uncommented, the I2C functions check that the arguments are valid (check
+ * for NULLs, invalid addresses...)
+ */
+// #define PLC_PERIPHERALS_CHECK_ARGUMENTS
+
 #ifdef __cplusplus
 extern "C" {
 #endif

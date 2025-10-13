@@ -23,10 +23,4 @@
 #include <plc-peripherals-i2c.h>
 #include <plc-peripherals-version.h>
 
-/*
- * If uncommented, the I2C functions check that the arguments are valid (check
- * for NULLs, invalid addresses...)
- */
-#define PLC_PERIPHERALS_CHECK_ARGUMENTS
-
 #endif // PLC_PERIPHERALS_H_
