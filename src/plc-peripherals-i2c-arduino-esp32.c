@@ -20,7 +20,7 @@
 #include <plc-peripherals-i2c.h>
 #include <plc-peripherals-platform.h>
 
-#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
 
 #include <stdbool.h>
 #include <malloc.h>
