@@ -41,6 +41,8 @@ typedef uint16_t plc_i2c_addr_t;
 /**
  * i2c_init
  *
+ * It's a platform-specific function.
+ *
  * Initialize an I2C interface for the current target environment, and if
  * applicable, initialize the I2C bus.
  *
@@ -64,6 +66,8 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
 /**
  * i2c_deinit
  *
+ * It's a platform-specific function.
+ *
  * De-initialize an I2C interface for the current target environment, and if
  * applicable, de-initialize the bus if deinit_i2c_bus is true.
  *
@@ -85,6 +89,8 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
 
 /**
  * i2c_write
+ *
+ * It's a platform-specific function.
  *
  * Write "to_write_len" bytes from the "to_write" buffer to the I2C device "addr".
  *
@@ -112,6 +118,8 @@ ssize_t i2c_write(i2c_interface_t* i2c,
 
 /**
  * i2c_read
+ *
+ * It's a platform-specific function.
  *
  * Read "to_read_len" bytes from the I2C device "addr" and put them in the
  * "to_read" buffer.
@@ -141,6 +149,8 @@ ssize_t i2c_read(i2c_interface_t* i2c,
 
 /**
  * i2c_write_then_read
+ *
+ * It's a platform-specific function.
  *
  * First write "to_write_len" bytes from "to_write" to "addr". Then read
  * "to_read_bytes" bytes to "to_read" from the same transaction.
