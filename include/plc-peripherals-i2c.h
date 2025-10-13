@@ -126,7 +126,7 @@ ssize_t i2c_write(i2c_interface_t* i2c,
  *
  * Parameters:
  *   i2c (i2c_interface_t*)     - I2C interface to read from.
- *   addr (uint16_t)            - I2C address to read from.
+ *   addr (plc_i2c_addr_t)      - I2C address to read from.
  *   to_read (const uint8_t*)   - Array of bytes to read from the passed I2C address.
  *   to_read_len (size_t)       - Number of bytes to read. It must be equal or
  *                                greater than the array length.
@@ -157,7 +157,7 @@ ssize_t i2c_read(i2c_interface_t* i2c,
  *
  * Parameters:
  *   i2c (i2c_interface_t*)     - I2C interface to read from.
- *   addr (uint16_t)            - I2C address to read from.
+ *   addr (plc_i2c_addr_t)      - I2C address to read from.
  *   to_write (const uint8_t*)  - Array of bytes to write from the passed I2C address.
  *   to_write_len (size_t)      - Number of bytes to write.
  *   to_read (const uint8_t*)   - Array of bytes to read from the passed I2C address.

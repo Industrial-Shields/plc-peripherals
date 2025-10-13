@@ -194,4 +194,4 @@ ssize_t i2c_write_then_read(i2c_interface_t* i2c,
 	}
 }
 
-#endif // PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+#endif // PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
