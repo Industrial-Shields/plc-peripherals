@@ -68,7 +68,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 
 int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 {
-	if (interface == NULL) {
+	if (!is_i2c_platform_correct(interface)) {
 		errno = EINVAL;
 		return -1;
 	}
