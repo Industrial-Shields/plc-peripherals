@@ -30,6 +30,7 @@ int i2c_write8_8b(i2c_interface_t* i2c,
 	uint16_t buffer = (((uint16_t)to_write) << 8) | reg;
 	ssize_t i2c_write_result =
 		i2c_write(i2c, addr, (const uint8_t*)&buffer, 2);
+
 	return i2c_write_result == 2 ? 0 : -1;
 }
 
@@ -41,6 +42,7 @@ int i2c_write8_16b(i2c_interface_t* i2c,
 	uint32_t buffer = (((uint32_t)to_write) << 8) | reg;
 	ssize_t i2c_write_result =
 		i2c_write(i2c, addr, (const uint8_t*)&buffer, 3);
+
 	return i2c_write_result == 3 ? 0 : -1;
 }
 
