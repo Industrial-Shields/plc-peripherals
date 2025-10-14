@@ -38,36 +38,36 @@ static void ads101x_config_check(plc_i2c_addr_t addr, bool restart, ADS101X_GAIN
   TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, shutdown));
 }
 
-void test_ads101x_init_deinit_singleshot(void) {
+void test_ads101x_init_deinit(void) {
   ads101x_config_check(ADS1015_ADDR, true, ADS101X_NO_FSR, ADS101X_NO_SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0x8583, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0xC583, ads101x_config_check_results[1]);
+  TEST_ASSERT_EQUAL_HEX(0x0483, ads101x_config_check_results[0]);
+  TEST_ASSERT_EQUAL_HEX(0x4483, ads101x_config_check_results[1]);
 
   ads101x_config_check(ADS1015_ADDR, true, ADS101X_NO_FSR, ADS101X_2400SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0x85A3, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0xC5A3, ads101x_config_check_results[1]);
+  TEST_ASSERT_EQUAL_HEX(0x04A3, ads101x_config_check_results[0]);
+  TEST_ASSERT_EQUAL_HEX(0x44A3, ads101x_config_check_results[1]);
 
   ads101x_config_check(ADS1015_ADDR, true, ADS101X_FSR_4_096V, ADS101X_NO_SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0x8383, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0xC383, ads101x_config_check_results[1]);
+  TEST_ASSERT_EQUAL_HEX(0x0283, ads101x_config_check_results[0]);
+  TEST_ASSERT_EQUAL_HEX(0x4283, ads101x_config_check_results[1]);
 
   ads101x_config_check(ADS1015_ADDR, true, ADS101X_FSR_4_096V, ADS101X_2400SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0x83A3, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0xC3A3, ads101x_config_check_results[1]);
+  TEST_ASSERT_EQUAL_HEX(0x02A3, ads101x_config_check_results[0]);
+  TEST_ASSERT_EQUAL_HEX(0x42A3, ads101x_config_check_results[1]);
 
   ads101x_config_check(ADS1015_ADDR, false, ADS101X_NO_FSR, ADS101X_NO_SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0xC3A3, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0xC3A3, ads101x_config_check_results[1]);
+  TEST_ASSERT_EQUAL_HEX(0x42A3, ads101x_config_check_results[0]);
+  TEST_ASSERT_EQUAL_HEX(0x42A3, ads101x_config_check_results[1]);
 
   ads101x_config_check(ADS1015_ADDR, true, ADS101X_FSR_4_096V, ADS101X_2400SPS, true);
-  TEST_ASSERT_EQUAL_HEX(0x83A3, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0xC3A3, ads101x_config_check_results[1]);
+  TEST_ASSERT_EQUAL_HEX(0x02A3, ads101x_config_check_results[0]);
+  TEST_ASSERT_EQUAL_HEX(0x42A3, ads101x_config_check_results[1]);
   uint16_t config_after_shutdown;
   TEST_ASSERT_EQUAL(0, i2c_read8_16b(i2c_iface, ADS1015_ADDR, 0x01, &config_after_shutdown));
   TEST_ASSERT_EQUAL_HEX(0xC3A3, config_after_shutdown);
 }
 
-void test_ads101x_read_singleshot(void) {
+void test_ads101x_read(void) {
   ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, ADS1015_FSR, ADS101X_NO_SPS);
   TEST_ASSERT(ads1015 != NULL);
 
@@ -103,8 +103,8 @@ void setup() {
 int main(void) {
 #endif
   UNITY_BEGIN();
-  RUN_TEST(test_ads101x_init_deinit_singleshot);
-  RUN_TEST(test_ads101x_read_singleshot);
+  RUN_TEST(test_ads101x_init_deinit);
+  RUN_TEST(test_ads101x_read);
   UNITY_END();
 }
 

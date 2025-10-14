@@ -54,6 +54,26 @@ struct _ads101x_t {
 #define ADS101X_RESET_REG(i2c, addr, register_name) \
 	i2c_write8_16b(i2c, addr, register_name, register_name##_RESET_VALUE)
 
+// Calculate the conversion time of the ADS101X in microseconds.
+// 1 / DR + 10% clock variation
+static inline uint32_t get_ads101x_conversion_time_us(ADS101X_DATA_RATE dr)
+{
+	uint32_t dr_decimal;
+	// clang-format off
+	switch (dr) {
+	case ADS101X_128SPS: dr_decimal = 128; break;
+	case ADS101X_250SPS: dr_decimal = 250; break;
+	case ADS101X_490SPS:  dr_decimal = 490;  break;
+	case ADS101X_920SPS:  dr_decimal = 920;  break;
+	case ADS101X_1600SPS: dr_decimal = 1600; break;
+	case ADS101X_2400SPS: dr_decimal = 2400; break;
+	default: dr_decimal = 3300; break;
+	}
+	// clang-format on
+
+	return 1100000 / dr_decimal;
+}
+
 ads101x_t* ads101x_init(i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
 			bool restart,
@@ -81,11 +101,8 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 		}
 	}
 
-	// Cleanup OS bit, we don't want to start a conversion
-	configuration_reg &= ~CONFIG_REG_OS;
-	// Force single-shot mode
-	configuration_reg |= CONFIG_REG_MODE;
-
+	// Force continuous conversion mode
+	configuration_reg &= ~CONFIG_REG_MODE;
 	if (fsr != ADS101X_NO_FSR) {
 		configuration_reg &= ~CONFIG_REG_PGA;
 		configuration_reg |= fsr << CONFIG_REG_PGA_SHIFT;
@@ -142,24 +159,26 @@ int ads101x_read(ads101x_t* ads, ADS101X_INPUT index, int16_t* return_value)
 	}
 #endif
 
-	uint16_t new_config_reg;
+	uint16_t old_config_reg;
 	int first_read_result =
-		i2c_read8_16b(ads->i2c, ads->addr, CONFIG_REG, &new_config_reg);
+		i2c_read8_16b(ads->i2c, ads->addr, CONFIG_REG, &old_config_reg);
 	if (first_read_result != 0) {
 		return -1;
 	}
+	uint16_t new_config_reg = old_config_reg & (~CONFIG_REG_MUX);
 	new_config_reg |= index << CONFIG_REG_MUX_SHIFT;
 
-	new_config_reg |= CONFIG_REG_OS;
-
-	int write_result =
-		i2c_write8_16b(ads->i2c, ads->addr, CONFIG_REG, new_config_reg);
-	if (write_result != 0) {
-		return -1;
+	if (new_config_reg != old_config_reg) {
+		int write_result = i2c_write8_16b(
+			ads->i2c, ads->addr, CONFIG_REG, new_config_reg);
+		if (write_result != 0) {
+			return -1;
+		}
+		// Delay to wait for the first conversion
+		ADS101X_DATA_RATE dr = (new_config_reg & CONFIG_REG_DR) >>
+				       CONFIG_REG_DR_SHIFT;
+		usleep(get_ads101x_conversion_time_us(dr));
 	}
-
-	// Delay to wait for the single-shot conversion
-	usleep(650);
 
 	uint16_t read_value;
 	int second_read_result =
