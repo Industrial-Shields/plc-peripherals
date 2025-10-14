@@ -20,6 +20,7 @@
 #include <plc-peripherals-i2c.h>
 
 #include <stdbool.h>
+#include <arpa/inet.h>
 
 int i2c_write8_8b(i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
@@ -66,5 +67,14 @@ int i2c_read8_16b(i2c_interface_t* i2c,
 		i2c, addr, &reg, 1, (uint8_t*)to_read, 2, &bytes_read);
 
 	bool is_correct = i2c_write_then_read_result == 1 && bytes_read == 2;
-	return is_correct ? 0 : -1;
+	if (is_correct) {
+		/*
+                 * I2C returns an array in big-endian, set it to the host
+		 * endianness to make the uint16_t cast correct.
+		 */
+		*to_read = ntohs(*to_read);
+		return 0;
+	}
+
+	return -1;
 }
