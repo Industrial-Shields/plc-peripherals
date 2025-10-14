@@ -111,6 +111,28 @@ init_error_ret:
 	return NULL;
 }
 
+int ads101x_deinit(ads101x_t* ads, bool shutdown)
+{
+	if (shutdown) {
+		uint16_t config_reg;
+		int read_result = i2c_read8_16b(
+			ads->i2c, ads->addr, CONFIG_REG, &config_reg);
+		if (read_result != 0) {
+			return -1;
+		}
+
+		config_reg |= CONFIG_REG_MODE;
+		int write_result = i2c_write8_16b(
+			ads->i2c, ads->addr, CONFIG_REG, config_reg);
+		if (write_result != 0) {
+			return -1;
+		}
+	}
+
+	free(ads);
+	return 0;
+}
+
 int ads101x_read(ads101x_t* ads, ADS101X_INPUT index, int16_t* return_value)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)

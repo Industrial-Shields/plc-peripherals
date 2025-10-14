@@ -104,6 +104,26 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 			ADS101X_DATA_RATE dr);
 
 /**
+ * ads101x_deinit
+ *
+ * Initialize an ADS101X peripheral with address "addr". This function currently
+ * supports ADS1015 only.
+ *
+ * Parameters:
+ *   ads (ads101x_t)         - The ADS101X to interact with.
+ *   shutdown (bool)         - true if you want to leave the peripheral in a
+ *                             powered-down state.
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL : Passed ads101x_t is NULL, or address is invalid.
+ *     - EIO    : Communication with the ADS101X couldn't be established.
+ */
+int ads101x_deinit(ads101x_t* ads, bool shutdown);
+
+/**
  * ads101x_read
  *
  * Start a single-shot reading, and retrieve the value.
