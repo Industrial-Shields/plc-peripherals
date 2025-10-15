@@ -26,6 +26,7 @@
 
 typedef struct {
 	plc_resource_t resource;
+	plc_mutex_t* mutex;
 	UT_hash_handle hh;
 } lock_hash_table_t;
 static lock_hash_table_t* locks = NULL;
@@ -53,6 +54,9 @@ int plc_resource_deinit(void)
 	if (locks != NULL) {
 		HASH_ITER(hh, locks, current_lock, tmp)
 		{
+			if (plc_mutex_destroy(current_lock->mutex) != 0) {
+				return -1;
+			}
 			HASH_DEL(locks, current_lock);
 			free(current_lock);
 		}
@@ -83,6 +87,12 @@ int plc_resource_add(plc_resource_t resource)
 			goto plc_resource_add_exit;
 		}
 		tmp->resource = resource;
+		tmp->mutex = plc_mutex_create();
+		if (tmp->mutex == NULL) {
+			free(tmp);
+			ret = -1;
+			goto plc_resource_add_exit;
+		}
 		HASH_ADD_INT(locks, resource, tmp);
 		ret = 0;
 	} else {
@@ -106,6 +116,9 @@ int plc_resource_remove(plc_resource_t resource)
 	int ret;
 	HASH_FIND_INT(locks, &resource, tmp);
 	if (tmp != NULL) {
+		if (plc_mutex_destroy(tmp->mutex) != 0) {
+			return -1;
+		}
 		HASH_DEL(locks, tmp);
 		free(tmp);
 		ret = 0;
@@ -121,7 +134,18 @@ int plc_resource_remove(plc_resource_t resource)
 /*
 int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms)
 {
-	return -1;
+	lock_hash_table_t* tmp = NULL;
+
+	if (plc_mutex_acquire(hash_mutex, 1) != 0) {
+		return -1;
+	}
+	HASH_FIND_INT(locks, &resource, tmp);
+	plc_mutex_release(hash_mutex);
+
+	if (tmp == NULL) {
+		errno = ENODEV;
+		return -1;
+	}
 }
 
 int plc_resource_unlock(plc_resource_t resource, uint32_t timeout_ms)
