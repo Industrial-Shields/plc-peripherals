@@ -29,69 +29,93 @@ typedef struct {
 	UT_hash_handle hh;
 } lock_hash_table_t;
 static lock_hash_table_t* locks = NULL;
-static atomic_bool initialized = false;
+static plc_mutex_t* hash_mutex = NULL;
 
 int plc_resource_init(void)
 {
-	if (initialized) {
+	if (hash_mutex != NULL) {
 		return 1;
 	}
-	initialized = true;
-	return 0;
+
+	hash_mutex = plc_mutex_create();
+	return hash_mutex != NULL ? 0 : -1;
 }
 
 int plc_resource_deinit(void)
 {
-	if (!initialized) {
+	if (hash_mutex == NULL) {
 		return 1;
 	}
 
 	lock_hash_table_t* current_lock;
 	lock_hash_table_t* tmp;
 
-	HASH_ITER(hh, locks, current_lock, tmp)
-	{
-		HASH_DEL(locks, current_lock);
-		free(current_lock);
+	if (locks != NULL) {
+		HASH_ITER(hh, locks, current_lock, tmp)
+		{
+			HASH_DEL(locks, current_lock);
+			free(current_lock);
+		}
+		locks = NULL;
 	}
 
-	locks = NULL;
-	initialized = false;
-	return 0;
+	if (plc_mutex_destroy(hash_mutex) == 0) {
+		hash_mutex = NULL;
+		return 0;
+	}
+	return -1;
 }
 
 int plc_resource_add(plc_resource_t resource)
 {
+	if (plc_mutex_acquire(hash_mutex, 0) != 0) {
+		return -1;
+	}
+
 	lock_hash_table_t* tmp = NULL;
 
+	int ret;
 	HASH_FIND_INT(locks, &resource, tmp);
 	if (tmp == NULL) {
 		tmp = (lock_hash_table_t*)malloc(sizeof(lock_hash_table_t));
 		if (tmp == NULL) {
-			return -1;
+			ret = -1;
+			goto plc_resource_add_exit;
 		}
 		tmp->resource = resource;
 		HASH_ADD_INT(locks, resource, tmp);
-		return 0;
+		ret = 0;
 	} else {
 		errno = EEXIST;
-		return 1; // Already added
+		ret = 1; // Already added
 	}
+
+plc_resource_add_exit:
+	plc_mutex_release(hash_mutex);
+	return ret;
 }
 
 int plc_resource_remove(plc_resource_t resource)
 {
+	if (plc_mutex_acquire(hash_mutex, 0) != 0) {
+		return -1;
+	}
+
 	lock_hash_table_t* tmp = NULL;
 
+	int ret;
 	HASH_FIND_INT(locks, &resource, tmp);
 	if (tmp != NULL) {
 		HASH_DEL(locks, tmp);
 		free(tmp);
-		return 0;
+		ret = 0;
 	} else {
 		errno = ENODEV;
-		return 1; // Not added
+		ret = 1; // Not added
 	}
+
+	plc_mutex_release(hash_mutex);
+	return ret;
 }
 
 /*

@@ -62,13 +62,19 @@ int plc_resource_init(void);
  *
  * Returns:
  *   int - 0 if successful, 1 if already de-initialized, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - Linux specific:
+ *       - EBUSY : The PLC resource protector is in use.
  */
 int plc_resource_deinit(void);
 
 /**
  * plc_resource_add
  *
- * Add a new shared resource.
+ * Add a new shared resource. This function will fail if other thread is using
+ * the resource protector.
  *
  * Parameters:
  *   resource (plc_resource_t) - The resource to lock.
@@ -81,6 +87,9 @@ int plc_resource_deinit(void);
  *   errno set to:
  *     - ENOMEM : Out of memory during allocation.
  *     - EEXIST : The resource was already added.
+ *     - EBUSY  : Mutex couldn't be taken.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
  */
 int plc_resource_add(plc_resource_t resource);
 
@@ -99,13 +108,17 @@ int plc_resource_add(plc_resource_t resource);
  * Errors:
  *   errno set to:
  *     - ENODEV : The resource is not present.
+ *     - EBUSY  : Mutex couldn't be taken.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
  */
 int plc_resource_remove(plc_resource_t resource);
 
 /**
  * plc_resource_lock
  *
- * Ask to lock a shared resource.
+ * Ask to lock a shared resource. You must ensure that you aren't adding or
+ * removing resources while locking or unlocking.
  *
  * Parameters:
  *   resource (plc_resource_t) - The resource to lock.
