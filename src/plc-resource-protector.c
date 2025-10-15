@@ -21,6 +21,8 @@
 #include <plc-peripherals-platform.h>
 #include <uthash.h>
 
+#include <errno.h>
+
 typedef struct {
 	plc_resource_t resource;
 	UT_hash_handle hh;
@@ -61,6 +63,7 @@ int plc_resource_add(plc_resource_t resource)
 		HASH_ADD_INT(locks, resource, tmp);
 		return 0;
 	} else {
+		errno = EEXIST;
 		return 1; // Already added
 	}
 }
@@ -75,6 +78,7 @@ int plc_resource_remove(plc_resource_t resource)
 		free(tmp);
 		return 0;
 	} else {
+		errno = EEXIST;
 		return 1; // Not added
 	}
 }

@@ -34,6 +34,8 @@ typedef enum {
 
 typedef uint64_t plc_resource_t;
 
+typedef void plc_mutex_t;
+
 #define I2C_RESOURCE(address) \
 	(((plc_resource_t)((uint64_t)PLC_RESOURCE_I2C << 56) | address))
 
@@ -41,7 +43,7 @@ typedef uint64_t plc_resource_t;
  * plc_resource_init
  *
  * Initialize the PLC resource protector. It must be called before any other
- * function.
+ * function. This function is NOT multi-thread safe.
  *
  * Returns:
  *   int - 0 if successful, 1 if already initialized, -1 otherwise.
@@ -52,9 +54,10 @@ int plc_resource_init(void);
  * plc_resource_deinit
  *
  * De-initialize the PLC resource protector. Removes and frees all locks.
+ * This function is NOT multi-thread safe.
  *
  * Returns:
- *   int - 0 if successful, -1 otherwise.
+ *   int - 0 if successful, 1 if already de-initialized, -1 otherwise.
  */
 int plc_resource_deinit(void);
 
@@ -116,6 +119,80 @@ int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms);
  *   int - 0 if successful, -1 otherwise.
  */
 int plc_resource_unlock(plc_resource_t resource, uint32_t timeout_ms);
+
+/**
+ * plc_mutex_create
+ *
+ * Create a single mutex, and return it as argument.
+ *
+ * Returns:
+ *   plc_mutex_t* - Pointer to the initialized interface on success.
+ *                  NULL on failure.
+ *
+ * Errors:
+ *   errno set to:
+ *     - ENOMEM : Out of memory during allocation.
+ */
+plc_mutex_t* plc_mutex_create(void);
+
+/**
+ * plc_mutex_destroy
+ *
+ * Destroy a single mutex.
+ *
+ * WARNING: ESP32 can't report if a semaphore is locked, so it will destroy the
+ * mutex anyway.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL: The passed mutex is invalid.
+ *     - Linux specific:
+ *       - EBUSY : Mutex can't be destroyed while in use.
+ */
+int plc_mutex_destroy(plc_mutex_t* mutex);
+
+/**
+ * plc_mutex_acquire
+ *
+ * Try to acquire a single mutex.
+ *
+ * Parameters:
+ *   mutex (plc_mutex_t)   - The mutex to acquire to lock.
+ *   timeout_ms (uint32_t) - The maximum time to wait for the unlock
+ *                           (in ms).
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled): The passed mutex is invalid
+ *     - EBUSY              : Mutex couldn't be taken within the timeout given.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout);
+
+/**
+ * plc_mutex_release
+ *
+ * Try to release an acquired mutex.
+ *
+ * Parameters:
+ *   mutex (plc_mutex_t)   - The mutex to acquire to lock.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise (it probably wasn't taken!).
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled): The passed mutex is invalid.
+ *     - EBUSY              : Mutex couldn't be taken within the timeout given.
+ */
+int plc_mutex_release(plc_mutex_t* mutex);
 
 #ifdef __cplusplus
 }

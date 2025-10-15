@@ -18,7 +18,7 @@
 export CC := gcc
 export CPPFLAGS += -I$(realpath include)
 export CFLAGS += -Wall -Wextra -Werror -fanalyzer
-export LDFLAGS
+export LDFLAGS += -lpthread
 
 BUILD_TYPE ?= Release
 ifeq ($(BUILD_TYPE),Debug)
