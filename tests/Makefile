@@ -1,4 +1,10 @@
-.PHONY: make_symlinks
+build:
+	mkdir -p build
+
+
+tests:
+	echo "Nothing to do"
+
 
 make_symlinks:
 	shopt -s nullglob; for dir in */; do \
@@ -7,3 +13,6 @@ make_symlinks:
 	  ln -sr Unity/src/unity.h $${dir}; \
 	  ln -sr Unity/src/unity_internals.h $${dir}; \
 	done
+
+clean:
+	rm -rf build/

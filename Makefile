@@ -28,7 +28,7 @@ ifeq ($(BUILD_TYPE),Debug)
 else ifeq ($(BUILD_TYPE),Debug_Sanitize)
 	CPPFLAGS += -DDEBUG
 	CFLAGS += -Og -g -fno-omit-frame-pointer -fsanitize=address
-	LDFLAGS += -fstack-protector-strong -static-libasan
+	LDFLAGS += -fstack-protector-strong -lasan
 else
 	CFLAGS += -O2
 endif
@@ -45,7 +45,7 @@ SRCS := $(filter-out $(SRC_DIR)/expanded-gpio.c, $(wildcard $(SRC_DIR)/*.c))
 OBJS := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
 LIB := $(BUILD_DIR)/$(LIBNAME)
 
-.PHONY: all format clean
+.PHONY: all tests format clean
 
 all: $(LIB)
 
@@ -60,8 +60,12 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 $(LIB): $(OBJS) | $(BUILD_DIR)
 	ar rcs $@ $(OBJS)
 
+tests: $(LIB)
+	$(MAKE) -C tests/ tests
+
 format:
 	clang-format -i {include,src}/*
 
 clean:
 	rm -rf $(BUILD_DIR)
+	$(MAKE) -C tests clean

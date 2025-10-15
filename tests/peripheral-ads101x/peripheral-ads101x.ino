@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "plc-peripherals.h"
 #include "plc-peripherals-platform.h"
+#include <assert.h>
 
 static i2c_interface_t* i2c_iface;
 
