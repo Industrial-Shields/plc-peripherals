@@ -208,8 +208,8 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout);
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled): The passed mutex is invalid.
- *     - EBUSY              : Mutex couldn't be taken within the timeout given.
+ *     - EINVAL (if enabled) : The passed mutex is invalid.
+ *     - EALREADY            : Mutex is already free!
  */
 int plc_mutex_release(plc_mutex_t* mutex);
 

@@ -22,16 +22,16 @@ void test_plc_mutex_simple_cycle(void) {
   errno = 0;
 
 #if PLC_ENVIRONMENT != PLC_ARDUINO_ESP32 && PLC_ENVIRONMENT != PLC_ESP_IDF
-    // ESP32 can't detect if a semaphore is being freed while the mutex is locked
-    TEST_ASSERT_EQUAL(-1, plc_mutex_destroy(mutex));
-    TEST_ASSERT_EQUAL(EBUSY, errno);
-    errno = 0;
+  // ESP32 can't detect if a semaphore is being freed while the mutex is locked
+  TEST_ASSERT_EQUAL(-1, plc_mutex_destroy(mutex));
+  TEST_ASSERT_EQUAL(EBUSY, errno);
+  errno = 0;
 #endif
 
   TEST_ASSERT_EQUAL(0, plc_mutex_release(mutex));
   TEST_ASSERT_EQUAL(0, errno);
   TEST_ASSERT_EQUAL(-1, plc_mutex_release(mutex));
-  TEST_ASSERT_EQUAL(EBUSY, errno);
+  TEST_ASSERT_EQUAL(EALREADY, errno);
   errno = 0;
 
   TEST_ASSERT_EQUAL(0, plc_mutex_destroy(mutex));

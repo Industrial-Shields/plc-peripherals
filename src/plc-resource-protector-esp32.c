@@ -71,7 +71,7 @@ int plc_mutex_release(plc_mutex_t* mutex)
 		return 0;
 	}
 
-	errno = EBUSY;
+	errno = EALREADY;
 	return -1;
 }
 

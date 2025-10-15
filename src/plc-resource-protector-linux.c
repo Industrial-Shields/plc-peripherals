@@ -125,9 +125,8 @@ int plc_mutex_release(plc_mutex_t* mutex)
 	}
 
 	if (local_errno == EPERM) {
-		errno = EBUSY;
-	}
-	else {
+		errno = EALREADY;
+	} else {
 		errno = local_errno;
 	}
 	return -1;
