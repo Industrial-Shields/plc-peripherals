@@ -47,6 +47,10 @@ typedef void plc_mutex_t;
  *
  * Returns:
  *   int - 0 if successful, 1 if already initialized, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - ENOMEM : Out of memory during allocation.
  */
 int plc_resource_init(void);
 
@@ -73,6 +77,10 @@ int plc_resource_deinit(void);
  *   int - 0 if successful, 1 if it was already added, and -1 if there was an
  *         error.
  *
+ * Errors:
+ *   errno set to:
+ *     - ENOMEM : Out of memory during allocation.
+ *     - EEXIST : The resource was already added.
  */
 int plc_resource_add(plc_resource_t resource);
 
@@ -87,6 +95,10 @@ int plc_resource_add(plc_resource_t resource);
  * Returns:
  *   int - 0 if successful, 1 if it wasn't already present, and -1 if there was
  *         an error.
+ *
+ * Errors:
+ *   errno set to:
+ *     - ENODEV : The resource is not present.
  */
 int plc_resource_remove(plc_resource_t resource);
 
@@ -99,9 +111,6 @@ int plc_resource_remove(plc_resource_t resource);
  *   resource (plc_resource_t) - The resource to lock.
  *   timeout_ms (uint32_t)     - The maximum time to wait for the unlock
  *                               (in ms).
- *
- * Returns:
- *   int - 0 if successful, -1 otherwise.
  */
 int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms);
 
@@ -114,9 +123,6 @@ int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms);
  *   resource (plc_resource_t) - The resource to unlock.
  *   timeout_ms (uint32_t)     - The maximum time to wait for the unlock
  *                               (in ms).
- *
- * Returns:
- *   int - 0 if successful, -1 otherwise.
  */
 int plc_resource_unlock(plc_resource_t resource, uint32_t timeout_ms);
 

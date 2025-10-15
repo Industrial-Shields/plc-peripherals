@@ -19,6 +19,7 @@
 
 #include <plc-resource-protector.h>
 #include <plc-peripherals-platform.h>
+#include <stdatomic.h>
 #include <uthash.h>
 
 #include <errno.h>
@@ -28,14 +29,23 @@ typedef struct {
 	UT_hash_handle hh;
 } lock_hash_table_t;
 static lock_hash_table_t* locks = NULL;
+static atomic_bool initialized = false;
 
 int plc_resource_init(void)
 {
-	return locks == NULL ? 0 : -1;
+	if (initialized) {
+		return 1;
+	}
+	initialized = true;
+	return 0;
 }
 
 int plc_resource_deinit(void)
 {
+	if (!initialized) {
+		return 1;
+	}
+
 	lock_hash_table_t* current_lock;
 	lock_hash_table_t* tmp;
 
@@ -46,6 +56,7 @@ int plc_resource_deinit(void)
 	}
 
 	locks = NULL;
+	initialized = false;
 	return 0;
 }
 
@@ -78,7 +89,7 @@ int plc_resource_remove(plc_resource_t resource)
 		free(tmp);
 		return 0;
 	} else {
-		errno = EEXIST;
+		errno = ENODEV;
 		return 1; // Not added
 	}
 }

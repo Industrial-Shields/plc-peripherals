@@ -45,6 +45,7 @@ void test_plc_resource_simple_cycle(void) {
   static plc_resource_t example = I2C_RESOURCE(0x48);
   static plc_resource_t non_existant = I2C_RESOURCE(0x49);
   TEST_ASSERT_EQUAL(0, plc_resource_init());
+  TEST_ASSERT_EQUAL(1, plc_resource_init());
   TEST_ASSERT_EQUAL(0, plc_resource_add(example));
 
   TEST_ASSERT_EQUAL(1, plc_resource_add(example));
@@ -52,11 +53,13 @@ void test_plc_resource_simple_cycle(void) {
   errno = 0;
 
   TEST_ASSERT_EQUAL(1, plc_resource_remove(non_existant));
-  TEST_ASSERT_EQUAL(EEXIST, errno);
+  TEST_ASSERT_EQUAL(ENODEV, errno);
   errno = 0;
 
   TEST_ASSERT_EQUAL(0, plc_resource_remove(example));
+
   TEST_ASSERT_EQUAL(0, plc_resource_deinit());
+  TEST_ASSERT_EQUAL(1, plc_resource_deinit());
 }
 
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
