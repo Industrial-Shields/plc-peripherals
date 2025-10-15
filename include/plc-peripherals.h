@@ -20,8 +20,9 @@
 #ifndef PLC_PERIPHERALS_H_
 #define PLC_PERIPHERALS_H_
 
-#include <plc-peripherals-i2c.h>
 #include <plc-peripherals-version.h>
+#include <plc-peripherals-i2c.h>
+#include <plc-resource-protector.h>
 #include <peripheral-ads101x.h>
 
 #endif // PLC_PERIPHERALS_H_
