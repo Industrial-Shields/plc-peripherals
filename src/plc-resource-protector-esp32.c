@@ -24,33 +24,42 @@
 
 #include <errno.h>
 
+typedef struct {
+	SemaphoreHandle_t m;
+} error_checker_mutex_t;
+#define ECM(m) ((error_checker_mutex_t*)m)
+
 plc_mutex_t* plc_mutex_create(void)
 {
-	SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
-	return (plc_mutex_t*)mutex;
+	error_checker_mutex_t* mutex_struct =
+		(error_checker_mutex_t*)malloc(sizeof(error_checker_mutex_t));
+	ECM(mutex_struct)->m = xSemaphoreCreateMutex();
+	return (plc_mutex_t*)mutex_struct;
 }
 
-int plc_mutex_destroy(plc_mutex_t* mutex)
+int plc_mutex_destroy(plc_mutex_t* mutex_struct)
 {
-	if (mutex == NULL) {
+	if (mutex_struct == NULL || ECM(mutex_struct)->m == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	vSemaphoreDelete(mutex);
+	vSemaphoreDelete(ECM(mutex_struct)->m);
+	free(mutex_struct);
 	return 0;
 }
 
-int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout)
+int plc_mutex_acquire(plc_mutex_t* mutex_struct, uint32_t timeout)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (mutex == NULL) {
+	if (mutex_struct == NULL || ECM(mutex_struct)->m == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
 #endif
 
-	if (xSemaphoreTake(mutex, pdMS_TO_TICKS(timeout)) == pdTRUE) {
+	if (xSemaphoreTake(ECM(mutex_struct)->m, pdMS_TO_TICKS(timeout)) ==
+	    pdTRUE) {
 		return 0;
 	}
 
@@ -58,16 +67,16 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout)
 	return -1;
 }
 
-int plc_mutex_release(plc_mutex_t* mutex)
+int plc_mutex_release(plc_mutex_t* mutex_struct)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (mutex == NULL) {
+	if (mutex_struct == NULL || ECM(mutex_struct)->m == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
 #endif
 
-	if (xSemaphoreGive(mutex) == pdTRUE) {
+	if (xSemaphoreGive(ECM(mutex_struct)->m) == pdTRUE) {
 		return 0;
 	}
 
