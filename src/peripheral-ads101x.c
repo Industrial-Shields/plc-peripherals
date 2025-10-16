@@ -122,6 +122,13 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 		goto init_error_cleanup;
 	}
 
+	/*
+	 * Delay to wait for the first conversion. Needed so ads101x_read with
+	 * the same initial index works (i.e, when calling read right after the
+	 * init).
+	 */
+	usleep(get_ads101x_conversion_time_us(dr));
+
 	ret->i2c = i2c;
 	ret->addr = addr;
 	ret->is_protected = false;
