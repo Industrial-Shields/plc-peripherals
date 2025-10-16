@@ -100,17 +100,17 @@ int main(void) {
   UNITY_BEGIN();
   int n;
 
-  n = 2;
+  n = 100;
   do {
     RUN_TEST(test_plc_mutex_simple_cycle);
   } while (--n);
 
-  n = 2;
+  n = 100;
   do {
     RUN_TEST(test_plc_resource_simple_cycle);
   } while (--n);
 
-  n = 2;
+  n = 100;
   do {
     RUN_TEST(test_plc_resource_lock_unlock);
   } while (--n);

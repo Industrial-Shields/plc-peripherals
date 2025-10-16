@@ -70,7 +70,7 @@ typedef enum {
  * ads101x_init
  *
  * Initialize an ADS101X peripheral with address "addr". This function currently
- * supports ADS1015 only.
+ * supports ADS1015 only. You must only have one interface per device.
  *
  * Parameters:
  *   i2c (i2c_interface_t*)       - The I2C interface to access the peripheral.
@@ -124,6 +124,47 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 int ads101x_deinit(ads101x_t* ads, bool shutdown);
 
 /**
+ * ads101x_protect
+ *
+ * Protect the ADS101X with a mutex.
+ *
+ * Parameters:
+ *   ads (ads101x_t)         - The ADS101X to protect.
+ * Returns:
+ *   int - 0 if successful, 1 if already protected, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - ENOMEM : Out of memory during allocation.
+ *     - EINVAL : Passed ads101x_t is NULL, or address is invalid.
+ *     - EEXIST : The resource was already added.
+ *     - EBUSY  : Hutex couldn't be taken.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int ads101x_protect(ads101x_t* ads);
+
+/**
+ * ads101x_unprotect
+ *
+ * Remove the mutex associated with the ADS101X
+ *
+ * Parameters:
+ *   ads (ads101x_t)         - The ADS101X to unprotect.
+ * Returns:
+ *   int - 0 if successful, 1 if already unprotected, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL : Passed ads101x_t is NULL, or address is invalid.
+ *     - ENODEV : The resource is not present.
+ *     - EBUSY  : Hash mutex couldn't be taken.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int ads101x_unprotect(ads101x_t* ads);
+
+/**
  * ads101x_read
  *
  * Start a single-shot reading, and retrieve the value.
@@ -132,6 +173,8 @@ int ads101x_deinit(ads101x_t* ads, bool shutdown);
  *   ads (ads101x_t)         - The ADS101X to interact with.
  *   index (ADS101X_INPUT)   - The input to read from the ADS101X.
  *   return_value (int16_t*) - The value in which the reading will be stored.
+ *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
+ *                             applicable when the ADS101X is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -140,8 +183,14 @@ int ads101x_deinit(ads101x_t* ads, bool shutdown);
  *   errno set to:
  *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
  *     - EIO                 : Communication with the ADS101X couldn't be established.
+ *     - EBUSY               : Mutex couldn't be taken within the timeout given.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_read(ads101x_t* ads, ADS101X_INPUT index, int16_t* return_value);
+int ads101x_read(ads101x_t* ads,
+		 ADS101X_INPUT index,
+		 int16_t* return_value,
+		 uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

@@ -17,11 +17,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "plc-peripherals-i2c.h"
+#include <plc-peripherals-i2c.h>
+#include <plc-resource-protector.h>
 #include <peripheral-ads101x.h>
 
 #include <malloc.h>
 #include <unistd.h>
+#include <errno.h>
 
 // clang-format off
 #define CONVERSION_REG                                                         0x00
@@ -49,6 +51,8 @@
 struct _ads101x_t {
 	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
+	plc_resource_t cached_resource;
+	bool is_protected;
 };
 
 #define ADS101X_RESET_REG(i2c, addr, register_name) \
@@ -120,6 +124,7 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 
 	ret->i2c = i2c;
 	ret->addr = addr;
+	ret->is_protected = false;
 	return ret;
 
 init_error_cleanup:
@@ -143,11 +148,48 @@ int ads101x_deinit(ads101x_t* ads, bool shutdown)
 		}
 	}
 
+	if (ads->is_protected) {
+		plc_resource_remove(ads->cached_resource);
+	}
+
 	free(ads);
 	return 0;
 }
 
-int ads101x_read(ads101x_t* ads, ADS101X_INPUT index, int16_t* return_value)
+int ads101x_protect(ads101x_t* ads)
+{
+	if (ads == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	plc_resource_t res = I2C_RESOURCE(ads->addr);
+	int result = plc_resource_add(res);
+	if (result >= 0) {
+		ads->is_protected = true;
+		ads->cached_resource = res;
+	}
+	return result;
+}
+
+int ads101x_unprotect(ads101x_t* ads)
+{
+	if (ads == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	int result = plc_resource_remove(ads->cached_resource);
+	if (result < 0) {
+		ads->is_protected = false;
+	}
+	return result;
+}
+
+int ads101x_read(ads101x_t* ads,
+		 ADS101X_INPUT index,
+		 int16_t* return_value,
+		 uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (return_value == NULL) {
@@ -157,8 +199,16 @@ int ads101x_read(ads101x_t* ads, ADS101X_INPUT index, int16_t* return_value)
 #endif
 	uint16_t new_cfg_reg, old_cfg_reg;
 	uint16_t read_value;
+	int ret;
+
+	if (ads->is_protected) {
+		if (plc_resource_lock(ads->cached_resource, timeout_ms) != 0) {
+			return -1;
+		}
+	}
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &old_cfg_reg) != 0) {
+		ret = -1;
 		goto ads101x_read_exit;
 	}
 	new_cfg_reg = old_cfg_reg & (~CONFIG_REG_MUX);
@@ -167,6 +217,7 @@ int ads101x_read(ads101x_t* ads, ADS101X_INPUT index, int16_t* return_value)
 	if (new_cfg_reg != old_cfg_reg) {
 		if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, new_cfg_reg) !=
 		    0) {
+			ret = -1;
 			goto ads101x_read_exit;
 		}
 		// Delay to wait for the first conversion
@@ -176,12 +227,17 @@ int ads101x_read(ads101x_t* ads, ADS101X_INPUT index, int16_t* return_value)
 	}
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
+		ret = -1;
 		goto ads101x_read_exit;
 	}
 
 	*return_value = ((int16_t)read_value) >> 4;
-	return 0;
+	ret = 0;
 
 ads101x_read_exit:
-	return -1;
+	if (ads->is_protected) {
+		plc_resource_unlock(ads->cached_resource);
+	}
+
+	return ret;
 }

@@ -73,7 +73,7 @@ int plc_resource_deinit(void);
 /**
  * plc_resource_add
  *
- * Add a new shared resource. This function will fail if other thread is using
+ * Add a new shared resource. This function can fail if other thread is using
  * the resource protector.
  *
  * Parameters:
@@ -87,7 +87,7 @@ int plc_resource_deinit(void);
  *   errno set to:
  *     - ENOMEM : Out of memory during allocation.
  *     - EEXIST : The resource was already added.
- *     - EBUSY  : Mutex couldn't be taken.
+ *     - EBUSY  : Hash mutex couldn't be taken.
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
@@ -97,6 +97,9 @@ int plc_resource_add(plc_resource_t resource);
  * plc_resource_remove
  *
  * Remove a new shared resource.
+ *
+ * WARNING: ESP32 can't report if a semaphore is locked, so it will destroy the
+ * mutex anyway.
  *
  * Parameters:
  *   resource (plc_resource_t) - The resource to lock.
@@ -108,7 +111,7 @@ int plc_resource_add(plc_resource_t resource);
  * Errors:
  *   errno set to:
  *     - ENODEV : The resource is not present.
- *     - EBUSY  : Mutex couldn't be taken.
+ *     - EBUSY  : Hash mutex couldn't be taken.
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
@@ -124,6 +127,16 @@ int plc_resource_remove(plc_resource_t resource);
  *   resource (plc_resource_t) - The resource to lock.
  *   timeout_ms (uint32_t)     - The maximum time to wait for the unlock
  *                               (in ms).
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled): The passed mutex is invalid
+ *     - EBUSY              : Mutex couldn't be taken within the timeout given.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
  */
 int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms);
 
@@ -135,6 +148,14 @@ int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms);
  *
  * Parameters:
  *   resource (plc_resource_t) - The resource to unlock.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise (it probably wasn't taken!).
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled) : The passed mutex is invalid.
+ *     - EALREADY            : Mutex is already free!
  */
 int plc_resource_unlock(plc_resource_t resource);
 
@@ -192,7 +213,7 @@ int plc_mutex_destroy(plc_mutex_t* mutex);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout);
+int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms);
 
 /**
  * plc_mutex_release
