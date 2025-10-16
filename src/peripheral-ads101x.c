@@ -53,6 +53,7 @@ struct _ads101x_t {
 
 #define ADS101X_RESET_REG(i2c, addr, register_name) \
 	i2c_write8_16b(i2c, addr, register_name, register_name##_RESET_VALUE)
+#define PASS_ADS(ads) ads->i2c, ads->addr
 
 // Calculate the conversion time of the ADS101X in microseconds.
 // 1 / DR + 10% clock variation
@@ -80,41 +81,40 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 			ADS101X_GAIN_AMPLIFIER fsr,
 			ADS101X_DATA_RATE dr)
 {
-	ads101x_t* ret = malloc(sizeof(struct _ads101x_t));
-	if (ret == NULL) {
-		goto init_error_ret;
-	}
+	uint16_t cfg_reg;
+	ads101x_t* ret;
 
-	uint16_t configuration_reg;
+	ret = malloc(sizeof(struct _ads101x_t));
+	if (ret == NULL) {
+		return NULL;
+	}
 
 	if (restart) {
 		if (ADS101X_RESET_REG(i2c, addr, HIGH_THRESHOLD_REG) != 0 ||
 		    ADS101X_RESET_REG(i2c, addr, LOW_THRESHOLD_REG) != 0) {
 			goto init_error_cleanup;
 		}
-		configuration_reg = CONFIG_REG_RESET_VALUE;
+		cfg_reg = CONFIG_REG_RESET_VALUE;
 	} else {
-		int read_result = i2c_read8_16b(
-			i2c, addr, CONFIG_REG, &configuration_reg);
-		if (read_result != 0) {
+		if (i2c_read8_16b(i2c, addr, CONFIG_REG, &cfg_reg) != 0) {
 			goto init_error_cleanup;
 		}
 	}
 
 	// Force continuous conversion mode
-	configuration_reg &= ~CONFIG_REG_MODE;
+	cfg_reg &= ~CONFIG_REG_MODE;
+
+	// Setup PGA and DR
 	if (fsr != ADS101X_NO_FSR) {
-		configuration_reg &= ~CONFIG_REG_PGA;
-		configuration_reg |= fsr << CONFIG_REG_PGA_SHIFT;
+		cfg_reg &= ~CONFIG_REG_PGA;
+		cfg_reg |= fsr << CONFIG_REG_PGA_SHIFT;
 	}
 	if (dr != ADS101X_NO_SPS) {
-		configuration_reg &= ~CONFIG_REG_DR;
-		configuration_reg |= dr << CONFIG_REG_DR_SHIFT;
+		cfg_reg &= ~CONFIG_REG_DR;
+		cfg_reg |= dr << CONFIG_REG_DR_SHIFT;
 	}
 
-	int write_result =
-		i2c_write8_16b(i2c, addr, CONFIG_REG, configuration_reg);
-	if (write_result != 0) {
+	if (i2c_write8_16b(i2c, addr, CONFIG_REG, cfg_reg) != 0) {
 		goto init_error_cleanup;
 	}
 
@@ -124,24 +124,21 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 
 init_error_cleanup:
 	free(ret);
-init_error_ret:
 	return NULL;
 }
 
 int ads101x_deinit(ads101x_t* ads, bool shutdown)
 {
+	uint16_t cfg_reg;
+
 	if (shutdown) {
-		uint16_t config_reg;
-		int read_result = i2c_read8_16b(
-			ads->i2c, ads->addr, CONFIG_REG, &config_reg);
-		if (read_result != 0) {
+		if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &cfg_reg) != 0) {
 			return -1;
 		}
 
-		config_reg |= CONFIG_REG_MODE;
-		int write_result = i2c_write8_16b(
-			ads->i2c, ads->addr, CONFIG_REG, config_reg);
-		if (write_result != 0) {
+		cfg_reg |= CONFIG_REG_MODE;
+
+		if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, cfg_reg) != 0) {
 			return -1;
 		}
 	}
@@ -158,35 +155,33 @@ int ads101x_read(ads101x_t* ads, ADS101X_INPUT index, int16_t* return_value)
 		return -1;
 	}
 #endif
+	uint16_t new_cfg_reg, old_cfg_reg;
+	uint16_t read_value;
 
-	uint16_t old_config_reg;
-	int first_read_result =
-		i2c_read8_16b(ads->i2c, ads->addr, CONFIG_REG, &old_config_reg);
-	if (first_read_result != 0) {
-		return -1;
+	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &old_cfg_reg) != 0) {
+		goto ads101x_read_exit;
 	}
-	uint16_t new_config_reg = old_config_reg & (~CONFIG_REG_MUX);
-	new_config_reg |= index << CONFIG_REG_MUX_SHIFT;
+	new_cfg_reg = old_cfg_reg & (~CONFIG_REG_MUX);
+	new_cfg_reg |= index << CONFIG_REG_MUX_SHIFT;
 
-	if (new_config_reg != old_config_reg) {
-		int write_result = i2c_write8_16b(
-			ads->i2c, ads->addr, CONFIG_REG, new_config_reg);
-		if (write_result != 0) {
-			return -1;
+	if (new_cfg_reg != old_cfg_reg) {
+		if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, new_cfg_reg) !=
+		    0) {
+			goto ads101x_read_exit;
 		}
 		// Delay to wait for the first conversion
-		ADS101X_DATA_RATE dr = (new_config_reg & CONFIG_REG_DR) >>
+		ADS101X_DATA_RATE dr = (new_cfg_reg & CONFIG_REG_DR) >>
 				       CONFIG_REG_DR_SHIFT;
 		usleep(get_ads101x_conversion_time_us(dr));
 	}
 
-	uint16_t read_value;
-	int second_read_result =
-		i2c_read8_16b(ads->i2c, ads->addr, CONVERSION_REG, &read_value);
-	if (second_read_result != 0) {
-		return -1;
+	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
+		goto ads101x_read_exit;
 	}
 
 	*return_value = ((int16_t)read_value) >> 4;
 	return 0;
+
+ads101x_read_exit:
+	return -1;
 }
