@@ -22,10 +22,12 @@
 
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
 
+#include <stdatomic.h>
 #include <errno.h>
 
 typedef struct {
 	SemaphoreHandle_t m;
+	atomic_bool is_locked;
 } error_checker_mutex_t;
 #define ECM(m) ((error_checker_mutex_t*)m)
 
@@ -34,6 +36,7 @@ plc_mutex_t* plc_mutex_create(void)
 	error_checker_mutex_t* mutex_struct =
 		(error_checker_mutex_t*)malloc(sizeof(error_checker_mutex_t));
 	ECM(mutex_struct)->m = xSemaphoreCreateMutex();
+	ECM(mutex_struct)->is_locked = false;
 	return (plc_mutex_t*)mutex_struct;
 }
 
@@ -41,6 +44,11 @@ int plc_mutex_destroy(plc_mutex_t* mutex_struct)
 {
 	if (mutex_struct == NULL || ECM(mutex_struct)->m == NULL) {
 		errno = EINVAL;
+		return -1;
+	}
+
+	if (ECM(mutex_struct)->is_locked) {
+		errno = EBUSY;
 		return -1;
 	}
 
@@ -60,6 +68,7 @@ int plc_mutex_acquire(plc_mutex_t* mutex_struct, uint32_t timeout)
 
 	if (xSemaphoreTake(ECM(mutex_struct)->m, pdMS_TO_TICKS(timeout)) ==
 	    pdTRUE) {
+		ECM(mutex_struct)->is_locked = true;
 		return 0;
 	}
 
@@ -67,6 +76,7 @@ int plc_mutex_acquire(plc_mutex_t* mutex_struct, uint32_t timeout)
 	return -1;
 }
 
+static portMUX_TYPE release_spinlock = portMUX_INITIALIZER_UNLOCKED;
 int plc_mutex_release(plc_mutex_t* mutex_struct)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
@@ -75,13 +85,19 @@ int plc_mutex_release(plc_mutex_t* mutex_struct)
 		return -1;
 	}
 #endif
+	int ret;
 
+	portENTER_CRITICAL(&release_spinlock);
 	if (xSemaphoreGive(ECM(mutex_struct)->m) == pdTRUE) {
-		return 0;
+		ECM(mutex_struct)->is_locked = false;
+		ret = 0;
+	} else {
+		errno = EALREADY;
+		ret = -1;
 	}
+	portEXIT_CRITICAL(&release_spinlock);
 
-	errno = EALREADY;
-	return -1;
+	return ret;
 }
 
 #endif // PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF

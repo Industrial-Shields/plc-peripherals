@@ -65,8 +65,7 @@ int plc_resource_init(void);
  *
  * Errors:
  *   errno set to:
- *     - Linux specific:
- *       - EBUSY : The PLC resource protector is in use.
+ *     - EBUSY : The PLC resource protector is in use.
  */
 int plc_resource_deinit(void);
 
@@ -97,9 +96,6 @@ int plc_resource_add(plc_resource_t resource);
  * plc_resource_remove
  *
  * Remove a new shared resource.
- *
- * WARNING: ESP32 can't report if a semaphore is locked, so it will destroy the
- * mutex anyway.
  *
  * Parameters:
  *   resource (plc_resource_t) - The resource to lock.
@@ -179,17 +175,13 @@ plc_mutex_t* plc_mutex_create(void);
  *
  * Destroy a single mutex.
  *
- * WARNING: ESP32 can't report if a semaphore is locked, so it will destroy the
- * mutex anyway.
- *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
  *
  * Errors:
  *   errno set to:
  *     - EINVAL: The passed mutex is invalid.
- *     - Linux specific:
- *       - EBUSY : Mutex can't be destroyed while in use.
+ *     - EBUSY : Mutex can't be destroyed while in use.
  */
 int plc_mutex_destroy(plc_mutex_t* mutex);
 
