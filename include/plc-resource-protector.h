@@ -118,7 +118,7 @@ int plc_resource_remove(plc_resource_t resource);
  * plc_resource_lock
  *
  * Ask to lock a shared resource. You must ensure that you aren't adding or
- * removing resources while locking or unlocking.
+ * removing resources while locking.
  *
  * Parameters:
  *   resource (plc_resource_t) - The resource to lock.
@@ -130,14 +130,13 @@ int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms);
 /**
  * plc_resource_unlock
  *
- * Ask to unlock a shared resource.
+ * Ask to unlock a shared resource. You must ensure that you aren't adding or
+ * removing resources while unlocking.
  *
  * Parameters:
  *   resource (plc_resource_t) - The resource to unlock.
- *   timeout_ms (uint32_t)     - The maximum time to wait for the unlock
- *                               (in ms).
  */
-int plc_resource_unlock(plc_resource_t resource, uint32_t timeout_ms);
+int plc_resource_unlock(plc_resource_t resource);
 
 /**
  * plc_mutex_create

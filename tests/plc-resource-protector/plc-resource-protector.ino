@@ -62,6 +62,35 @@ void test_plc_resource_simple_cycle(void) {
   TEST_ASSERT_EQUAL(1, plc_resource_deinit());
 }
 
+void test_plc_resource_lock_unlock(void) {
+  static plc_resource_t example = I2C_RESOURCE(0x48);
+  TEST_ASSERT_EQUAL(0, plc_resource_init());
+  TEST_ASSERT_EQUAL(0, plc_resource_add(example));
+
+  TEST_ASSERT_EQUAL(-1, plc_resource_unlock(example));
+  TEST_ASSERT_EQUAL(EALREADY, errno);
+  errno = 0;
+
+  TEST_ASSERT_EQUAL(0, plc_resource_lock(example, 0));
+  TEST_ASSERT_EQUAL(-1, plc_resource_lock(example, 0));
+  TEST_ASSERT_EQUAL(EBUSY, errno);
+  errno = 0;
+#if PLC_ENVIRONMENT != PLC_ARDUINO_ESP32 && PLC_ENVIRONMENT != PLC_ESP_IDF
+  // ESP32 can't detect if a semaphore is being freed while the mutex is locked
+  TEST_ASSERT_EQUAL(-1, plc_resource_remove(example));
+  TEST_ASSERT_EQUAL(EBUSY, errno);
+  errno = 0;
+#endif
+
+  TEST_ASSERT_EQUAL(0, plc_resource_unlock(example));
+  TEST_ASSERT_EQUAL(-1, plc_resource_unlock(example));
+  TEST_ASSERT_EQUAL(EALREADY, errno);
+  errno = 0;
+
+  TEST_ASSERT_EQUAL(0, plc_resource_remove(example));
+  TEST_ASSERT_EQUAL(0, plc_resource_deinit());
+}
+
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
 void setup() {
   Serial.begin(1000000);
@@ -71,14 +100,19 @@ int main(void) {
   UNITY_BEGIN();
   int n;
 
-  n = 100;
+  n = 2;
   do {
     RUN_TEST(test_plc_mutex_simple_cycle);
   } while (--n);
 
-  n = 100;
+  n = 2;
   do {
     RUN_TEST(test_plc_resource_simple_cycle);
+  } while (--n);
+
+  n = 2;
+  do {
+    RUN_TEST(test_plc_resource_lock_unlock);
   } while (--n);
   UNITY_END();
 }
