@@ -248,3 +248,34 @@ ads101x_read_exit:
 
 	return ret;
 }
+
+int ads101x_unsigned_read(ads101x_t* ads,
+			  ADS101X_INPUT index,
+			  uint16_t* return_value,
+			  uint32_t timeout_ms)
+
+{
+	int16_t signed_read_value;
+
+	if (ads101x_read(ads, index, &signed_read_value, timeout_ms) != 0) {
+		return -1;
+	}
+
+	if (signed_read_value < -8) {
+		/*
+		 * Quote from the ADS101X datasheet, page 22:
+		 * Single-ended signal measurements, where VAINN = 0 V and VAINP = 0 V to +FS, only use
+		 * the positive code range from 0000h to 7FF0h. However, because of device offset, the
+		 * ADS101x can still output negative codes in case VAINP is close to 0 V.
+		 *
+		 * We accept up to three bits of error.
+		 */
+		errno = ERANGE;
+		return -1;
+	} else if (signed_read_value < 0) {
+		signed_read_value = 0;
+	}
+
+	*return_value = (uint16_t)signed_read_value;
+	return 0;
+}

@@ -119,6 +119,56 @@ void test_ads101x_read_locked(void) {
   TEST_ASSERT_EQUAL(0, plc_resource_deinit());
 }
 
+void test_ads101x_unsigned_read(void) {
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, ADS1015_FSR, ADS101X_NO_SPS);
+  TEST_ASSERT(ads1015 != NULL);
+
+  uint16_t i0_12_reading;
+  TEST_ASSERT_EQUAL(0, ads101x_unsigned_read(ads1015, I0_12, &i0_12_reading, 1000));
+  TEST_ASSERT_FLOAT_WITHIN(100, 5. * ADS1015_MAX_VALUE / 10., i0_12_reading);
+
+  uint16_t i0_11_reading;
+  TEST_ASSERT_EQUAL(0, ads101x_unsigned_read(ads1015, I0_11, &i0_11_reading, 1000));
+  TEST_ASSERT_FLOAT_WITHIN(80, 3.3 * ADS1015_MAX_VALUE / 10., i0_11_reading);
+
+  uint16_t i0_10_reading;
+  TEST_ASSERT_EQUAL(0, ads101x_unsigned_read(ads1015, I0_10, &i0_10_reading, 1000));
+  TEST_ASSERT_FLOAT_WITHIN(8., 0., i0_10_reading);
+
+  TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
+}
+
+void test_ads101x_unsigned_read_locked(void) {
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, ADS1015_FSR, ADS101X_NO_SPS);
+  TEST_ASSERT(ads1015 != NULL);
+  TEST_ASSERT_EQUAL(0, plc_resource_init());
+
+  TEST_ASSERT_EQUAL(0, ads101x_protect(ads1015));
+  TEST_ASSERT_EQUAL(1, ads101x_protect(ads1015));
+  TEST_ASSERT_EQUAL(EALREADY, errno);
+  errno = 0;
+
+  uint16_t i0_12_reading;
+  TEST_ASSERT_EQUAL(0, ads101x_unsigned_read(ads1015, I0_12, &i0_12_reading, 1000));
+  TEST_ASSERT_FLOAT_WITHIN(100, 5. * ADS1015_MAX_VALUE / 10., i0_12_reading);
+
+  uint16_t i0_11_reading;
+  TEST_ASSERT_EQUAL(0, ads101x_unsigned_read(ads1015, I0_11, &i0_11_reading, 1000));
+  TEST_ASSERT_FLOAT_WITHIN(80, 3.3 * ADS1015_MAX_VALUE / 10., i0_11_reading);
+
+  uint16_t i0_10_reading;
+  TEST_ASSERT_EQUAL(0, ads101x_unsigned_read(ads1015, I0_10, &i0_10_reading, 1000));
+  TEST_ASSERT_FLOAT_WITHIN(8., 0., i0_10_reading);
+
+  TEST_ASSERT_EQUAL(0, ads101x_unprotect(ads1015));
+  TEST_ASSERT_EQUAL(1, ads101x_unprotect(ads1015));
+  TEST_ASSERT_EQUAL(EALREADY, errno);
+  errno = 0;
+
+  TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
+  TEST_ASSERT_EQUAL(0, plc_resource_deinit());
+}
+
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
 void setup() {
   Serial.begin(1000000);
@@ -126,15 +176,32 @@ void setup() {
 int main(void) {
 #endif
   UNITY_BEGIN();
+
   int n;
+
   n = 100;
   do {
     RUN_TEST(test_ads101x_init_deinit);
   } while (--n);
+
   n = 100;
   do {
     RUN_TEST(test_ads101x_read);
   } while (--n);
+  n = 100;
+  do {
+    RUN_TEST(test_ads101x_read_locked);
+  } while (--n);
+
+  n = 100;
+  do {
+    RUN_TEST(test_ads101x_unsigned_read);
+  } while (--n);
+  n = 100;
+  do {
+    RUN_TEST(test_ads101x_unsigned_read_locked);
+  } while (--n);
+
   UNITY_END();
 }
 
