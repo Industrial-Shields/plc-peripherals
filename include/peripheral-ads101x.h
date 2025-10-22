@@ -167,7 +167,9 @@ int ads101x_unprotect(ads101x_t* ads);
 /**
  * ads101x_read
  *
- * Start a single-shot reading, and retrieve the value.
+ * Retrieve the reading from an ADS101X channel. If the asked channel is not the
+ * one being mesured, this function will block until a valid reading is
+ * available.
  *
  * Parameters:
  *   ads (ads101x_t)         - The ADS101X to interact with.
