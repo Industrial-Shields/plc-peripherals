@@ -100,6 +100,7 @@ typedef enum {
 ads101x_t* ads101x_init(i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
 			bool restart,
+			bool set_continuous_mode,
 			ADS101X_GAIN_AMPLIFIER fsr,
 			ADS101X_DATA_RATE dr);
 
@@ -166,7 +167,7 @@ int ads101x_protect(ads101x_t* ads);
 int ads101x_unprotect(ads101x_t* ads);
 
 /**
- * ads101x_read
+ * ads101x_continuous_read
  *
  * Retrieve the reading from an ADS101X channel. If the asked channel is not the
  * one being mesured, this function will block until a valid reading is
@@ -174,7 +175,7 @@ int ads101x_unprotect(ads101x_t* ads);
  *
  * Parameters:
  *   ads (ads101x_t)         - The ADS101X to interact with.
- *   index (ADS101X_INPUT)   - The input to read from the ADS101X.
+ *   index (ADS101x_INPUT)   - The input to continuous_read from the ADS101X.
  *   return_value (int16_t*) - The value in which the reading will be stored.
  *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
  *                             applicable when the ADS101X is protected.
@@ -190,13 +191,13 @@ int ads101x_unprotect(ads101x_t* ads);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_read(ads101x_t* ads,
-		 ADS101X_INPUT index,
-		 int16_t* return_value,
-		 uint32_t timeout_ms);
+int ads101x_continuous_read(ads101x_t* ads,
+			    ADS101X_INPUT index,
+			    int16_t* return_value,
+			    uint32_t timeout_ms);
 
 /**
- * ads101x_unsigned_read
+ * ads101x_unsigned_continuous_read
  *
  * Retrieve the reading from an ADS101X channel. If the asked channel is not the
  * one being mesured, this function will block until a valid reading is
@@ -207,7 +208,7 @@ int ads101x_read(ads101x_t* ads,
  *
  * Parameters:
  *   ads (ads101x_t)          - The ADS101X to interact with.
- *   index (ADS101X_INPUT)    - The input to read from the ADS101X.
+ *   index (ADS101x_INPUT)    - The input to continuous_read from the ADS101X.
  *   return_value (uint16_t*) - The value in which the reading will be stored.
  *   timeout_ms (uint32_t)    - The maximum time to wait for a reading. Only
  *                              applicable when the ADS101X is protected.
@@ -224,10 +225,10 @@ int ads101x_read(ads101x_t* ads,
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_unsigned_read(ads101x_t* ads,
-			  ADS101X_INPUT index,
-			  uint16_t* return_value,
-			  uint32_t timeout_ms);
+int ads101x_unsigned_continuous_read(ads101x_t* ads,
+				     ADS101X_INPUT index,
+				     uint16_t* return_value,
+				     uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

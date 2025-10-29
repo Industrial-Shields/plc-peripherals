@@ -53,6 +53,7 @@ struct _ads101x_t {
 	plc_i2c_addr_t addr;
 	plc_resource_t cached_resource;
 	bool is_protected;
+	bool enabled_continuous_mode;
 };
 
 #define ADS101X_RESET_REG(i2c, addr, register_name) \
@@ -82,6 +83,7 @@ static inline uint32_t get_ads101x_conversion_time_us(ADS101X_DATA_RATE dr)
 ads101x_t* ads101x_init(i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
 			bool restart,
+			bool set_continuous_mode,
 			ADS101X_GAIN_AMPLIFIER fsr,
 			ADS101X_DATA_RATE dr)
 {
@@ -105,8 +107,13 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 		}
 	}
 
-	// Force continuous conversion mode
-	cfg_reg &= ~CONFIG_REG_MODE;
+	if (set_continuous_mode) {
+		// Force continuous conversion mode
+		cfg_reg &= ~CONFIG_REG_MODE;
+	} else {
+		// Force single-shot conversion mode
+		cfg_reg |= CONFIG_REG_MODE;
+	}
 
 	// Setup PGA and DR
 	if (fsr != ADS101X_NO_FSR) {
@@ -122,16 +129,19 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 		goto init_error_cleanup;
 	}
 
-	/*
-	 * Delay to wait for the first conversion. Needed so ads101x_read with
-	 * the same initial index works (i.e, when calling read right after the
-	 * init).
-	 */
-	usleep(get_ads101x_conversion_time_us(dr));
+	if (set_continuous_mode) {
+		/*
+		 * Delay to wait for the first conversion. Needed so
+		 * ads101x_continuous_read with the same initial index works (i.e, when
+		 * calling read right after the init).
+		 */
+		usleep(get_ads101x_conversion_time_us(dr));
+	}
 
 	ret->i2c = i2c;
 	ret->addr = addr;
 	ret->is_protected = false;
+	ret->enabled_continuous_mode = set_continuous_mode;
 	return ret;
 
 init_error_cleanup:
@@ -196,13 +206,13 @@ int ads101x_unprotect(ads101x_t* ads)
 	return result;
 }
 
-int ads101x_read(ads101x_t* ads,
-		 ADS101X_INPUT index,
-		 int16_t* return_value,
-		 uint32_t timeout_ms)
+int ads101x_continuous_read(ads101x_t* ads,
+			    ADS101X_INPUT index,
+			    int16_t* return_value,
+			    uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (return_value == NULL) {
+	if (return_value == NULL || !ads->enabled_continuous_mode) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -219,7 +229,7 @@ int ads101x_read(ads101x_t* ads,
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &old_cfg_reg) != 0) {
 		ret = -1;
-		goto ads101x_read_exit;
+		goto ads101x_continuous_read_exit;
 	}
 	new_cfg_reg = old_cfg_reg & (~CONFIG_REG_MUX);
 	new_cfg_reg |= index << CONFIG_REG_MUX_SHIFT;
@@ -228,7 +238,7 @@ int ads101x_read(ads101x_t* ads,
 		if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, new_cfg_reg) !=
 		    0) {
 			ret = -1;
-			goto ads101x_read_exit;
+			goto ads101x_continuous_read_exit;
 		}
 		// Delay to wait for the first conversion
 		ADS101X_DATA_RATE dr = (new_cfg_reg & CONFIG_REG_DR) >>
@@ -238,13 +248,13 @@ int ads101x_read(ads101x_t* ads,
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
 		ret = -1;
-		goto ads101x_read_exit;
+		goto ads101x_continuous_read_exit;
 	}
 
 	*return_value = ((int16_t)read_value) >> 4;
 	ret = 0;
 
-ads101x_read_exit:
+ads101x_continuous_read_exit:
 	if (ads->is_protected) {
 		plc_resource_unlock(ads->cached_resource);
 	}
@@ -252,15 +262,16 @@ ads101x_read_exit:
 	return ret;
 }
 
-int ads101x_unsigned_read(ads101x_t* ads,
-			  ADS101X_INPUT index,
-			  uint16_t* return_value,
-			  uint32_t timeout_ms)
+int ads101x_unsigned_continuous_read(ads101x_t* ads,
+				     ADS101X_INPUT index,
+				     uint16_t* return_value,
+				     uint32_t timeout_ms)
 
 {
 	int16_t signed_read_value;
 
-	if (ads101x_read(ads, index, &signed_read_value, timeout_ms) != 0) {
+	if (ads101x_continuous_read(
+		    ads, index, &signed_read_value, timeout_ms) != 0) {
 		return -1;
 	}
 
