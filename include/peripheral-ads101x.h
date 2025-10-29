@@ -120,6 +120,7 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
  *   errno set to:
  *     - EINVAL : Passed ads101x_t is NULL, or address is invalid.
  *     - EIO    : Communication with the ADS101X couldn't be established.
+ *     - EBUSY  : Hash mutex couldn't be taken.
  */
 int ads101x_deinit(ads101x_t* ads, bool shutdown);
 

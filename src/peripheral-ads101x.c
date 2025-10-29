@@ -156,7 +156,10 @@ int ads101x_deinit(ads101x_t* ads, bool shutdown)
 	}
 
 	if (ads->is_protected) {
-		plc_resource_remove(ads->cached_resource);
+		int ret = plc_resource_remove(ads->cached_resource);
+		if (ret < 0) {
+			return ret;
+		}
 	}
 
 	free(ads);
