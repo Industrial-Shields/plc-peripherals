@@ -95,6 +95,27 @@ static inline uint32_t get_ads101x_conversion_time_us(ADS101X_DATA_RATE dr)
 	// clang-format on
 
 	return 1100000 / dr_decimal;
+
+static int convert_ads101x_signed_to_unsigned(int16_t signed_read_value,
+					      uint16_t* return_value)
+{
+	if (signed_read_value < -8) {
+		/*
+		 * Quote from the ADS101X datasheet, page 22:
+		 * Single-ended signal measurements, where VAINN = 0 V and VAINP = 0 V to +FS, only use
+		 * the positive code range from 0000h to 7FF0h. However, because of device offset, the
+		 * ADS101x can still output negative codes in case VAINP is close to 0 V.
+		 *
+		 * We accept up to three bits of error.
+		 */
+		errno = ERANGE;
+		return -1;
+	} else if (signed_read_value < 0) {
+		signed_read_value = 0;
+	}
+
+	*return_value = (uint16_t)signed_read_value;
+	return 0;
 }
 
 ads101x_t* ads101x_init(i2c_interface_t* i2c,
@@ -286,21 +307,6 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
 		return -1;
 	}
 
-	if (signed_read_value < -8) {
-		/*
-		 * Quote from the ADS101X datasheet, page 22:
-		 * Single-ended signal measurements, where VAINN = 0 V and VAINP = 0 V to +FS, only use
-		 * the positive code range from 0000h to 7FF0h. However, because of device offset, the
-		 * ADS101x can still output negative codes in case VAINP is close to 0 V.
-		 *
-		 * We accept up to three bits of error.
-		 */
-		errno = ERANGE;
-		return -1;
-	} else if (signed_read_value < 0) {
-		signed_read_value = 0;
-	}
-
-	*return_value = (uint16_t)signed_read_value;
-	return 0;
+	return convert_ads101x_signed_to_unsigned(signed_read_value,
+						  return_value);
 }
