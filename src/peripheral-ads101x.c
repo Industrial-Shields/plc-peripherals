@@ -60,6 +60,23 @@ struct _ads101x_t {
 	i2c_write8_16b(i2c, addr, register_name, register_name##_RESET_VALUE)
 #define PASS_ADS(ads) ads->i2c, ads->addr
 
+#define ADS101X_LOCK(ads, timeout_ms)                                 \
+	do {                                                          \
+		if ((ads)->is_protected) {                            \
+			if (plc_resource_lock((ads)->cached_resource, \
+					      (timeout_ms)) != 0) {   \
+				return -1;                            \
+			}                                             \
+		}                                                     \
+	} while (0)
+
+#define ADS101X_UNLOCK(ads)                                        \
+	do {                                                       \
+		if (ads->is_protected) {                           \
+			plc_resource_unlock(ads->cached_resource); \
+		}                                                  \
+	} while (0)
+
 // Calculate the conversion time of the ADS101X in microseconds.
 // 1 / DR + 10% clock variation
 static inline uint32_t get_ads101x_conversion_time_us(ADS101X_DATA_RATE dr)
@@ -221,11 +238,7 @@ int ads101x_continuous_read(ads101x_t* ads,
 	uint16_t read_value;
 	int ret;
 
-	if (ads->is_protected) {
-		if (plc_resource_lock(ads->cached_resource, timeout_ms) != 0) {
-			return -1;
-		}
-	}
+	ADS101X_LOCK(ads, timeout_ms);
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &old_cfg_reg) != 0) {
 		ret = -1;
@@ -255,9 +268,7 @@ int ads101x_continuous_read(ads101x_t* ads,
 	ret = 0;
 
 ads101x_continuous_read_exit:
-	if (ads->is_protected) {
-		plc_resource_unlock(ads->cached_resource);
-	}
+	ADS101X_UNLOCK(ads);
 
 	return ret;
 }
