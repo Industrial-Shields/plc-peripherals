@@ -95,7 +95,7 @@ void test_ads101x_read_locked(void) {
 
   TEST_ASSERT_EQUAL(0, ads101x_protect(ads1015));
   TEST_ASSERT_EQUAL(1, ads101x_protect(ads1015));
-  TEST_ASSERT_EQUAL(EALREADY, errno);
+  TEST_ASSERT_EQUAL(EEXIST, errno);
   errno = 0;
 
   int16_t i0_12_reading;
@@ -112,7 +112,7 @@ void test_ads101x_read_locked(void) {
 
   TEST_ASSERT_EQUAL(0, ads101x_unprotect(ads1015));
   TEST_ASSERT_EQUAL(1, ads101x_unprotect(ads1015));
-  TEST_ASSERT_EQUAL(EALREADY, errno);
+  TEST_ASSERT_EQUAL(ENODEV, errno);
   errno = 0;
 
   TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
@@ -145,7 +145,7 @@ void test_ads101x_unsigned_read_locked(void) {
 
   TEST_ASSERT_EQUAL(0, ads101x_protect(ads1015));
   TEST_ASSERT_EQUAL(1, ads101x_protect(ads1015));
-  TEST_ASSERT_EQUAL(EALREADY, errno);
+  TEST_ASSERT_EQUAL(EEXIST, errno);
   errno = 0;
 
   uint16_t i0_12_reading;
@@ -162,7 +162,7 @@ void test_ads101x_unsigned_read_locked(void) {
 
   TEST_ASSERT_EQUAL(0, ads101x_unprotect(ads1015));
   TEST_ASSERT_EQUAL(1, ads101x_unprotect(ads1015));
-  TEST_ASSERT_EQUAL(EALREADY, errno);
+  TEST_ASSERT_EQUAL(ENODEV, errno);
   errno = 0;
 
   TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
