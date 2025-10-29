@@ -295,6 +295,26 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
 				     uint16_t* return_value,
 				     uint32_t timeout_ms);
 
+/**
+ * ads101x_get_fs
+ *
+ * Retrieve the sampling frequency set in the ADS101X.
+ *
+ * Parameters:
+ *   ads (ads101x_t)         - The ADS101X to interact with.
+ *   dr (ADS101X_DATA_RATE*) - Pointer to where the sampling frequency will be
+ *                             saved.
+ *
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
+ *     - EIO                 : Communication with the ADS101X couldn't be established.
+ */
+int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr);
+
 #ifdef __cplusplus
 }
 #endif

@@ -383,3 +383,15 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
 	return ads101x_convert_signed_to_unsigned(signed_read_value,
 						  return_value);
 }
+
+int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr)
+{
+	uint16_t cfg_reg;
+	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &cfg_reg) != 0) {
+		return -1;
+	}
+
+	*dr = ADS101X_GET_DR(cfg_reg);
+	return 0;
+}
+
