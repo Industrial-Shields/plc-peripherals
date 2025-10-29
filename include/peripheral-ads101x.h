@@ -315,6 +315,32 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
  */
 int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr);
 
+/**
+ * ads101x_set_fs
+ *
+ * Retrieve the reading from an ADS101X channel. If the asked channel is not the
+ * one being mesured, this function will block until a valid reading is
+ * available. To use it, the ADS101X must be in continuous mode.
+ *
+ * Parameters:
+ *   ads (ads101x_t)         - The ADS101X to interact with.
+ *   dr (ADS101X_DATA_RATE)  - Sampling frequency to set.
+ *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
+ *                             applicable when the ADS101X is protected.
+ *
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
+ *     - EIO                 : Communication with the ADS101X couldn't be established.
+ *     - EBUSY               : Mutex couldn't be taken within the timeout given.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif

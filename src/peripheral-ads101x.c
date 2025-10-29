@@ -120,6 +120,11 @@ static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 }
 
 #define ADS101X_GET_DR(cfg) ((cfg & CONFIG_REG_DR) >> CONFIG_REG_DR_SHIFT)
+#define ADS101X_SET_DR(cfg, dr)                   \
+	do {                                      \
+		cfg &= ~CONFIG_REG_DR;            \
+		cfg |= dr << CONFIG_REG_DR_SHIFT; \
+	} while (0)
 static void ads101x_delay_until_conversion(ADS101X_DATA_RATE dr)
 {
 	usleep(ads101x_get_conversion_time_us(dr));
@@ -395,3 +400,25 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr)
 	return 0;
 }
 
+int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms)
+{
+	if (dr == ADS101X_NO_SPS) {
+		return 0;
+	}
+
+	ADS101X_LOCK(ads, timeout_ms);
+
+	uint16_t cfg_reg;
+	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &cfg_reg) != 0) {
+		return -1;
+	}
+
+	ADS101X_SET_DR(cfg_reg, dr);
+
+	if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, cfg_reg) != 0) {
+		return -1;
+	}
+
+	ADS101X_UNLOCK(ads);
+	return 0;
+}

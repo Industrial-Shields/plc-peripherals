@@ -122,6 +122,18 @@ void test_ads101x_get_fs(void) {
   TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
 }
 
+void test_ads101x_set_fs(void) {
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  TEST_ASSERT(ads1015 != NULL);
+
+  ADS101X_DATA_RATE read_dr;
+  TEST_ASSERT_EQUAL(0, ads101x_set_fs(ads1015, ADS101X_128SPS, 1000));
+  TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &read_dr));
+  TEST_ASSERT_EQUAL(read_dr, ADS101X_128SPS);
+
+  TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
+}
+
 void test_ads101x_single_read(void) {
   ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
   TEST_ASSERT(ads1015 != NULL);
@@ -340,6 +352,11 @@ int main(void) {
   n = 5;
   do {
     RUN_TEST(test_ads101x_get_fs);
+  } while (--n);
+
+  n = 5;
+  do {
+    RUN_TEST(test_ads101x_set_fs);
   } while (--n);
 
   n = 100;
