@@ -244,6 +244,71 @@ int ads101x_unprotect(ads101x_t* ads)
 	return result;
 }
 
+int ads101x_single_read(ads101x_t* ads,
+			ADS101X_INPUT index,
+			int16_t* return_value,
+			uint32_t timeout_ms)
+{
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+	if (return_value == NULL || ads->enabled_continuous_mode) {
+		errno = EINVAL;
+		return -1;
+	}
+#endif
+	uint16_t read_value;
+	uint16_t cfg_reg;
+	int ret;
+
+	ADS101X_LOCK(ads, timeout_ms);
+
+	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &cfg_reg) != 0) {
+		ret = -1;
+		goto ads101x_single_read_exit;
+	}
+	cfg_reg = cfg_reg & (~CONFIG_REG_MUX);
+	cfg_reg |= index << CONFIG_REG_MUX_SHIFT;
+	cfg_reg |= CONFIG_REG_OS;
+
+	if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, cfg_reg) != 0) {
+		ret = -1;
+		goto ads101x_single_read_exit;
+	}
+
+	// Delay to wait for the first conversion
+	ADS101X_DATA_RATE dr = (cfg_reg & CONFIG_REG_DR) >> CONFIG_REG_DR_SHIFT;
+	usleep(get_ads101x_conversion_time_us(dr));
+
+	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
+		ret = -1;
+		goto ads101x_single_read_exit;
+	}
+
+	*return_value = ((int16_t)read_value) >> 4;
+	ret = 0;
+
+ads101x_single_read_exit:
+	ADS101X_UNLOCK(ads);
+
+	return ret;
+}
+
+int ads101x_unsigned_single_read(ads101x_t* ads,
+				 ADS101X_INPUT index,
+				 uint16_t* return_value,
+				 uint32_t timeout_ms)
+
+{
+	int16_t signed_read_value;
+
+	if (ads101x_single_read(ads, index, &signed_read_value, timeout_ms) !=
+	    0) {
+		return -1;
+	}
+
+	return convert_ads101x_signed_to_unsigned(signed_read_value,
+						  return_value);
+}
+
 int ads101x_continuous_read(ads101x_t* ads,
 			    ADS101X_INPUT index,
 			    int16_t* return_value,
