@@ -78,7 +78,7 @@ struct _ads101x_t {
 	} while (0)
 
 // Calculate the conversion time of the ADS101X in microseconds.
-// 1 / DR + 10% clock variation
+// 1 / DR + 10% clock variation + 5% for edge cases
 static inline uint32_t get_ads101x_conversion_time_us(ADS101X_DATA_RATE dr)
 {
 	uint32_t dr_decimal;
@@ -94,7 +94,8 @@ static inline uint32_t get_ads101x_conversion_time_us(ADS101X_DATA_RATE dr)
 	}
 	// clang-format on
 
-	return 1100000 / dr_decimal;
+	return (1100000 + 50000) / dr_decimal;
+}
 
 static int convert_ads101x_signed_to_unsigned(int16_t signed_read_value,
 					      uint16_t* return_value)
