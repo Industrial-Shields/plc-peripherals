@@ -119,6 +119,18 @@ static int convert_ads101x_signed_to_unsigned(int16_t signed_read_value,
 	return 0;
 }
 
+#define ADS101X_GET_DR(cfg) ((cfg & CONFIG_REG_DR) >> CONFIG_REG_DR_SHIFT)
+static void delay_ads101x_until_conversion(ADS101X_DATA_RATE dr)
+{
+	usleep(get_ads101x_conversion_time_us(dr));
+}
+
+#define ADS101X_CHANGE_CHANNEL(new_cfg, old_cfg, channel_index)   \
+	do {                                                      \
+		new_cfg = old_cfg & (~CONFIG_REG_MUX);            \
+		new_cfg |= channel_index << CONFIG_REG_MUX_SHIFT; \
+	} while (0)
+
 ads101x_t* ads101x_init(i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
 			bool restart,
@@ -174,7 +186,7 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 		 * ads101x_continuous_read with the same initial index works (i.e, when
 		 * calling read right after the init).
 		 */
-		usleep(get_ads101x_conversion_time_us(dr));
+		delay_ads101x_until_conversion(dr);
 	}
 
 	ret->i2c = i2c;
@@ -266,8 +278,7 @@ int ads101x_single_read(ads101x_t* ads,
 		ret = -1;
 		goto ads101x_single_read_exit;
 	}
-	cfg_reg = cfg_reg & (~CONFIG_REG_MUX);
-	cfg_reg |= index << CONFIG_REG_MUX_SHIFT;
+	ADS101X_CHANGE_CHANNEL(cfg_reg, cfg_reg, index);
 	cfg_reg |= CONFIG_REG_OS;
 
 	if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, cfg_reg) != 0) {
@@ -275,9 +286,8 @@ int ads101x_single_read(ads101x_t* ads,
 		goto ads101x_single_read_exit;
 	}
 
-	// Delay to wait for the first conversion
-	ADS101X_DATA_RATE dr = (cfg_reg & CONFIG_REG_DR) >> CONFIG_REG_DR_SHIFT;
-	usleep(get_ads101x_conversion_time_us(dr));
+	// Delay until the first conversion
+	delay_ads101x_until_conversion(ADS101X_GET_DR(cfg_reg));
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
 		ret = -1;
@@ -331,8 +341,7 @@ int ads101x_continuous_read(ads101x_t* ads,
 		ret = -1;
 		goto ads101x_continuous_read_exit;
 	}
-	new_cfg_reg = old_cfg_reg & (~CONFIG_REG_MUX);
-	new_cfg_reg |= index << CONFIG_REG_MUX_SHIFT;
+	ADS101X_CHANGE_CHANNEL(new_cfg_reg, old_cfg_reg, index);
 
 	if (new_cfg_reg != old_cfg_reg) {
 		if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, new_cfg_reg) !=
@@ -340,10 +349,8 @@ int ads101x_continuous_read(ads101x_t* ads,
 			ret = -1;
 			goto ads101x_continuous_read_exit;
 		}
-		// Delay to wait for the first conversion
-		ADS101X_DATA_RATE dr = (new_cfg_reg & CONFIG_REG_DR) >>
-				       CONFIG_REG_DR_SHIFT;
-		usleep(get_ads101x_conversion_time_us(dr));
+		// Delay until the first conversion
+		delay_ads101x_until_conversion(ADS101X_GET_DR(new_cfg_reg));
 	}
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
