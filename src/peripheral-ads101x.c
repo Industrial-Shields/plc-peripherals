@@ -79,7 +79,7 @@ struct _ads101x_t {
 
 // Calculate the conversion time of the ADS101X in microseconds.
 // 1 / DR + 10% clock variation + 5% for edge cases
-static inline uint32_t get_ads101x_conversion_time_us(ADS101X_DATA_RATE dr)
+static inline uint32_t ads101x_get_conversion_time_us(ADS101X_DATA_RATE dr)
 {
 	uint32_t dr_decimal;
 	// clang-format off
@@ -97,7 +97,7 @@ static inline uint32_t get_ads101x_conversion_time_us(ADS101X_DATA_RATE dr)
 	return (1100000 + 50000) / dr_decimal;
 }
 
-static int convert_ads101x_signed_to_unsigned(int16_t signed_read_value,
+static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 					      uint16_t* return_value)
 {
 	if (signed_read_value < -8) {
@@ -120,9 +120,9 @@ static int convert_ads101x_signed_to_unsigned(int16_t signed_read_value,
 }
 
 #define ADS101X_GET_DR(cfg) ((cfg & CONFIG_REG_DR) >> CONFIG_REG_DR_SHIFT)
-static void delay_ads101x_until_conversion(ADS101X_DATA_RATE dr)
+static void ads101x_delay_until_conversion(ADS101X_DATA_RATE dr)
 {
-	usleep(get_ads101x_conversion_time_us(dr));
+	usleep(ads101x_get_conversion_time_us(dr));
 }
 
 #define ADS101X_CHANGE_CHANNEL(new_cfg, old_cfg, channel_index)   \
@@ -186,7 +186,7 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 		 * ads101x_continuous_read with the same initial index works (i.e, when
 		 * calling read right after the init).
 		 */
-		delay_ads101x_until_conversion(dr);
+		ads101x_delay_until_conversion(dr);
 	}
 
 	ret->i2c = i2c;
@@ -287,7 +287,7 @@ int ads101x_single_read(ads101x_t* ads,
 	}
 
 	// Delay until the first conversion
-	delay_ads101x_until_conversion(ADS101X_GET_DR(cfg_reg));
+	ads101x_delay_until_conversion(ADS101X_GET_DR(cfg_reg));
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
 		ret = -1;
@@ -316,7 +316,7 @@ int ads101x_unsigned_single_read(ads101x_t* ads,
 		return -1;
 	}
 
-	return convert_ads101x_signed_to_unsigned(signed_read_value,
+	return ads101x_convert_signed_to_unsigned(signed_read_value,
 						  return_value);
 }
 
@@ -350,7 +350,7 @@ int ads101x_continuous_read(ads101x_t* ads,
 			goto ads101x_continuous_read_exit;
 		}
 		// Delay until the first conversion
-		delay_ads101x_until_conversion(ADS101X_GET_DR(new_cfg_reg));
+		ads101x_delay_until_conversion(ADS101X_GET_DR(new_cfg_reg));
 	}
 
 	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
@@ -380,6 +380,6 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
 		return -1;
 	}
 
-	return convert_ads101x_signed_to_unsigned(signed_read_value,
+	return ads101x_convert_signed_to_unsigned(signed_read_value,
 						  return_value);
 }
