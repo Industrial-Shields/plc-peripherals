@@ -30,14 +30,13 @@ typedef struct _ads101x_t ads101x_t;
 
 typedef enum {
 	// clang-format off
-	ADS101X_NO_FSR     = 0b111, // Do not change FSR
+	ADS101X_FSR_6_144V   = 0b000,
+	ADS101X_FSR_4_096V   = 0b001,
+	ADS101X_FSR_2_048V   = 0b010,
+	ADS101X_FSR_1_024V   = 0b011,
+	ADS101X_FSR_0_512V   = 0b100,
+	ADS101X_FSR_0_256V   = 0b101,
 	// clang-format on
-	ADS101X_FSR_6_144V = 0b000,
-	ADS101X_FSR_4_096V = 0b001,
-	ADS101X_FSR_2_048V = 0b010,
-	ADS101X_FSR_1_024V = 0b011,
-	ADS101X_FSR_0_512V = 0b100,
-	ADS101X_FSR_0_256V = 0b101,
 } ADS101X_GAIN_AMPLIFIER;
 
 typedef enum {
@@ -49,8 +48,6 @@ typedef enum {
 	ADS101X_1600SPS   = 0b100,
 	ADS101X_2400SPS   = 0b101,
 	ADS101X_3300SPS   = 0b110,
-	ADS101X_3300SPS_2 = 0b111,
-	ADS101X_NO_SPS    = 0b1000, // Do not change SPS
 	// clang-format on
 } ADS101X_DATA_RATE;
 

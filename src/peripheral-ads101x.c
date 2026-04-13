@@ -172,14 +172,11 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 	}
 
 	// Setup PGA and DR
-	if (fsr != ADS101X_NO_FSR) {
-		cfg_reg &= ~CONFIG_REG_PGA;
-		cfg_reg |= fsr << CONFIG_REG_PGA_SHIFT;
-	}
-	if (dr != ADS101X_NO_SPS) {
-		cfg_reg &= ~CONFIG_REG_DR;
-		cfg_reg |= dr << CONFIG_REG_DR_SHIFT;
-	}
+	cfg_reg &= ~CONFIG_REG_PGA;
+	cfg_reg |= fsr << CONFIG_REG_PGA_SHIFT;
+
+	cfg_reg &= ~CONFIG_REG_DR;
+	cfg_reg |= dr << CONFIG_REG_DR_SHIFT;
 
 	if (i2c_write8_16b(i2c, addr, CONFIG_REG, cfg_reg) != 0) {
 		goto init_error_cleanup;
@@ -391,21 +388,20 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
 
 int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr)
 {
+	ADS101X_DATA_RATE local_dr;
 	uint16_t cfg_reg;
 	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &cfg_reg) != 0) {
 		return -1;
 	}
 
-	*dr = ADS101X_GET_DR(cfg_reg);
+	local_dr = ADS101X_GET_DR(cfg_reg);
+	// Ensure we return a valid enum (0b111 is equivalent to 3300 SPS)
+	*dr = local_dr == 0b111 ? ADS101X_3300SPS : local_dr;
 	return 0;
 }
 
 int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms)
 {
-	if (dr == ADS101X_NO_SPS) {
-		return 0;
-	}
-
 	ADS101X_LOCK(ads, timeout_ms);
 
 	uint16_t cfg_reg;

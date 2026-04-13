@@ -41,24 +41,8 @@ static void ads101x_config_check(plc_i2c_addr_t addr, bool restart, bool set_con
 }
 
 void test_ads101x_init_deinit(void) {
-  ads101x_config_check(ADS1015_ADDR, true, true, ADS101X_NO_FSR, ADS101X_NO_SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0x0483, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0x4483, ads101x_config_check_results[1]);
-
-  ads101x_config_check(ADS1015_ADDR, true, true, ADS101X_NO_FSR, ADS101X_2400SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0x04A3, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0x44A3, ads101x_config_check_results[1]);
-
-  ads101x_config_check(ADS1015_ADDR, true, true, ADS101X_FSR_4_096V, ADS101X_NO_SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0x0283, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0x4283, ads101x_config_check_results[1]);
-
   ads101x_config_check(ADS1015_ADDR, true, true, ADS101X_FSR_4_096V, ADS101X_2400SPS, false);
   TEST_ASSERT_EQUAL_HEX(0x02A3, ads101x_config_check_results[0]);
-  TEST_ASSERT_EQUAL_HEX(0x42A3, ads101x_config_check_results[1]);
-
-  ads101x_config_check(ADS1015_ADDR, false, true, ADS101X_NO_FSR, ADS101X_NO_SPS, false);
-  TEST_ASSERT_EQUAL_HEX(0x42A3, ads101x_config_check_results[0]);
   TEST_ASSERT_EQUAL_HEX(0x42A3, ads101x_config_check_results[1]);
 
   ads101x_config_check(ADS1015_ADDR, true, true, ADS101X_FSR_4_096V, ADS101X_2400SPS, true);
@@ -115,27 +99,51 @@ void test_ads101x_get_fs(void) {
   TEST_ASSERT_EQUAL(dr, ADS101X_3300SPS);
   TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
 
-  ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS_2);
+  ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, (ADS101X_DATA_RATE) 0b111 /* 3300 SPS */);
   TEST_ASSERT(ads1015 != NULL);
   TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &dr));
-  TEST_ASSERT_EQUAL(dr, ADS101X_3300SPS_2);
+  TEST_ASSERT_EQUAL(dr, ADS101X_3300SPS);
   TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
 }
 
 void test_ads101x_set_fs(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_1600SPS);
   TEST_ASSERT(ads1015 != NULL);
-
   ADS101X_DATA_RATE read_dr;
+
   TEST_ASSERT_EQUAL(0, ads101x_set_fs(ads1015, ADS101X_128SPS, 1000));
   TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &read_dr));
   TEST_ASSERT_EQUAL(read_dr, ADS101X_128SPS);
+
+  TEST_ASSERT_EQUAL(0, ads101x_set_fs(ads1015, ADS101X_250SPS, 1000));
+  TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &read_dr));
+  TEST_ASSERT_EQUAL(read_dr, ADS101X_250SPS);
+
+  TEST_ASSERT_EQUAL(0, ads101x_set_fs(ads1015, ADS101X_490SPS, 1000));
+  TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &read_dr));
+  TEST_ASSERT_EQUAL(read_dr, ADS101X_490SPS);
+
+  TEST_ASSERT_EQUAL(0, ads101x_set_fs(ads1015, ADS101X_920SPS, 1000));
+  TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &read_dr));
+  TEST_ASSERT_EQUAL(read_dr, ADS101X_920SPS);
+
+  TEST_ASSERT_EQUAL(0, ads101x_set_fs(ads1015, ADS101X_1600SPS, 1000));
+  TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &read_dr));
+  TEST_ASSERT_EQUAL(read_dr, ADS101X_1600SPS);
+
+  TEST_ASSERT_EQUAL(0, ads101x_set_fs(ads1015, ADS101X_2400SPS, 1000));
+  TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &read_dr));
+  TEST_ASSERT_EQUAL(read_dr, ADS101X_2400SPS);
+
+  TEST_ASSERT_EQUAL(0, ads101x_set_fs(ads1015, ADS101X_3300SPS, 1000));
+  TEST_ASSERT_EQUAL(0, ads101x_get_fs(ads1015, &read_dr));
+  TEST_ASSERT_EQUAL(read_dr, ADS101X_3300SPS);
 
   TEST_ASSERT_EQUAL(0, ads101x_deinit(ads1015, true));
 }
 
 void test_ads101x_single_read(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS);
   TEST_ASSERT(ads1015 != NULL);
 
   int16_t i0_12_reading;
@@ -154,7 +162,7 @@ void test_ads101x_single_read(void) {
 }
 
 void test_ads101x_single_read_locked(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS);
   TEST_ASSERT(ads1015 != NULL);
   TEST_ASSERT_EQUAL(0, plc_resource_init());
 
@@ -185,7 +193,7 @@ void test_ads101x_single_read_locked(void) {
 }
 
 void test_ads101x_unsigned_single_read(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS);
   TEST_ASSERT(ads1015 != NULL);
 
   uint16_t i0_12_reading;
@@ -204,7 +212,7 @@ void test_ads101x_unsigned_single_read(void) {
 }
 
 void test_ads101x_unsigned_single_read_locked(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS);
   TEST_ASSERT(ads1015 != NULL);
   TEST_ASSERT_EQUAL(0, plc_resource_init());
 
@@ -235,7 +243,7 @@ void test_ads101x_unsigned_single_read_locked(void) {
 }
 
 void test_ads101x_continuous_read(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS);
   TEST_ASSERT(ads1015 != NULL);
 
   int16_t i0_12_reading;
@@ -254,7 +262,7 @@ void test_ads101x_continuous_read(void) {
 }
 
 void test_ads101x_continuous_read_locked(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS);
   TEST_ASSERT(ads1015 != NULL);
   TEST_ASSERT_EQUAL(0, plc_resource_init());
 
@@ -285,7 +293,7 @@ void test_ads101x_continuous_read_locked(void) {
 }
 
 void test_ads101x_unsigned_continuous_read(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS);
   TEST_ASSERT(ads1015 != NULL);
 
   uint16_t i0_12_reading;
@@ -304,7 +312,7 @@ void test_ads101x_unsigned_continuous_read(void) {
 }
 
 void test_ads101x_unsigned_continuous_read_locked(void) {
-  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_NO_SPS);
+  ads101x_t* ads1015 = ads101x_init(i2c_iface, ADS1015_ADDR, true, true, ADS1015_FSR, ADS101X_3300SPS);
   TEST_ASSERT(ads1015 != NULL);
   TEST_ASSERT_EQUAL(0, plc_resource_init());
 
