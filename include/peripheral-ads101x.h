@@ -105,8 +105,8 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 /**
  * ads101x_deinit
  *
- * Initialize an ADS101X peripheral with address "addr". This function currently
- * supports ADS1015 only.
+ * Deinitialize an ADS101X peripheral "ads". This function currently supports ADS1015
+ * only.
  *
  * Parameters:
  *   ads (ads101x_t)         - The ADS101X to interact with.
@@ -147,7 +147,7 @@ int ads101x_protect(ads101x_t* ads);
 /**
  * ads101x_unprotect
  *
- * Remove the mutex associated with the ADS101X
+ * Remove the mutex associated with the ADS101X.
  *
  * Parameters:
  *   ads (ads101x_t)         - The ADS101X to unprotect.
@@ -315,9 +315,7 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr);
 /**
  * ads101x_set_fs
  *
- * Retrieve the reading from an ADS101X channel. If the asked channel is not the
- * one being mesured, this function will block until a valid reading is
- * available. To use it, the ADS101X must be in continuous mode.
+ * Set a new sampling frequency for the ADS101X.
  *
  * Parameters:
  *   ads (ads101x_t)         - The ADS101X to interact with.
