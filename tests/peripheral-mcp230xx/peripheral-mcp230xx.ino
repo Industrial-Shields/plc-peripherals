@@ -7,16 +7,28 @@
 
 static i2c_interface_t* i2c_iface;
 
-#if defined(ESP32PLC)
+#define TEST_MCP_23008 0
+#define TEST_MCP_23017 1
+
 // clang-format off
+#if defined(ESP32PLC)
+#define TO_TEST               TEST_MCP_23008
 #define MCP230XX_ADDR         0x21
 #define MCP230XX_CHIP_TYPE    MCP230XX_008
+#define MCP230XX_N_REGISTERS  11
 #define I0_0                  0x06
 #define GPIO_0                0x07
-// clang-format on
+#elif defined(PLC14IOS)
+#define TO_TEST               TEST_MCP_23017
+#define MCP230XX_ADDR         0x20
+#define MCP230XX_CHIP_TYPE    MCP230XX_017
+#define MCP230XX_N_REGISTERS  22
+#define I0_0                  0x0B
+#define R0_0                  0x07
 #else
 #error "PLC not supported"
 #endif
+// clang-format on
 
 void setUp(void)
 {
@@ -30,9 +42,9 @@ void tearDown(void)
 	assert(result == 0);
 }
 
-void are_mcp230xx_registers_correct(const uint8_t expected[11])
+void are_mcp230xx_registers_correct(const uint8_t expected[MCP230XX_N_REGISTERS])
 {
-	uint8_t mcp230xx_registers[11];
+	uint8_t mcp230xx_registers[MCP230XX_N_REGISTERS];
 	size_t mcp230xx_read_bytes;
 
 	TEST_ASSERT_EQUAL(1,
@@ -60,6 +72,7 @@ void test_mcp230xx_init_deinit(void)
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
+#if TO_TEST == TEST_MCP_23008
 	are_mcp230xx_registers_correct(((const uint8_t[]){
 		0xFF,
 		0,
@@ -73,6 +86,14 @@ void test_mcp230xx_init_deinit(void)
 		0,
 		0,
 	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
 
 	mcp = mcp230xx_init(i2c_iface,
 			    MCP230XX_ADDR,
@@ -84,6 +105,7 @@ void test_mcp230xx_init_deinit(void)
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
+#if TO_TEST == TEST_MCP_23008
 	are_mcp230xx_registers_correct(((const uint8_t[]){
 		0xFF,
 		0,
@@ -97,6 +119,14 @@ void test_mcp230xx_init_deinit(void)
 		0,
 		0,
 	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x14,
+		0x14, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
 
 	mcp = mcp230xx_init(i2c_iface,
 			    MCP230XX_ADDR,
@@ -108,6 +138,7 @@ void test_mcp230xx_init_deinit(void)
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
+#if TO_TEST == TEST_MCP_23008
 	are_mcp230xx_registers_correct(((const uint8_t[]){
 		0xFF,
 		0,
@@ -121,6 +152,14 @@ void test_mcp230xx_init_deinit(void)
 		0,
 		0,
 	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x02,
+		0x02, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
 
 	mcp = mcp230xx_init(i2c_iface,
 			    MCP230XX_ADDR,
@@ -131,6 +170,7 @@ void test_mcp230xx_init_deinit(void)
 			    MCP230XX_INT_POLARITY_NONE);
 	TEST_ASSERT_NOT_NULL(mcp);
 
+#if TO_TEST == TEST_MCP_23008
 	are_mcp230xx_registers_correct(((const uint8_t[]){
 		0xFF,
 		0,
@@ -144,8 +184,18 @@ void test_mcp230xx_init_deinit(void)
 		0,
 		0,
 	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x04,
+		0x04, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
 
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
+
+#if TO_TEST == TEST_MCP_23008
 	are_mcp230xx_registers_correct(((const uint8_t[]){
 		0xFF,
 		0,
@@ -159,6 +209,14 @@ void test_mcp230xx_init_deinit(void)
 		0,
 		0,
 	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
 }
 
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
@@ -169,6 +227,10 @@ void setup()
 int main(void)
 {
 #endif
+
+	// Wait a second to let the chips initialize.
+	sleep(1);
+
 	UNITY_BEGIN();
 
 	int n;

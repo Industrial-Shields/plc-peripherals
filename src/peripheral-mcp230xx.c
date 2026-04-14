@@ -17,6 +17,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * The functions of this driver assume that both SEQOP and BANK bits are
+ * always in it's default state (0).
+ */
+
 #include <plc-peripherals-i2c.h>
 #include <plc-resource-protector.h>
 #include <peripheral-mcp230xx.h>
@@ -48,25 +53,42 @@
 struct _mcp230xx_t {
 	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
+	MCP230XX_TYPE type;
 };
 
 #define MCP230XX_RESET_REG(i2c, addr, register_name) \
 	i2c_write8_8b(i2c, addr, register_name, register_name##_RESET_VALUE)
 #define PASS_MCP(mcp) mcp->i2c, mcp->addr
 #define UINT8T_ARR(arr) arr, sizeof(arr)
-#include <stdio.h>
-static int mcp230xx_reset(i2c_interface_t* i2c, plc_i2c_addr_t addr)
+
+#define REG_A(reg, type) type == MCP230XX_017 ? reg << 1 : reg
+
+static int
+mcp230xx_reset(i2c_interface_t* i2c, plc_i2c_addr_t addr, MCP230XX_TYPE type)
 {
 	// First 0x00 is the register address
 	static const uint8_t reset_mcp23008[] = {
 		0x00, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	};
+	// First 0x00 is the register address
+	static const uint8_t reset_mcp23017[] = {
+		0x00, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0,	  0, 0, 0, 0, 0, 0, 0, 0,
+	};
+	ssize_t bytes_written;
 
-	// Assume SEQOP is enabled
-	ssize_t bytes_written =
-		i2c_write(i2c, addr, UINT8T_ARR(reset_mcp23008));
-	if (bytes_written != sizeof(reset_mcp23008)) {
-		return -1;
+	if (type == MCP230XX_017) {
+		bytes_written =
+			i2c_write(i2c, addr, UINT8T_ARR(reset_mcp23017));
+		if (bytes_written != sizeof(reset_mcp23017)) {
+			return -1;
+		}
+	} else {
+		bytes_written =
+			i2c_write(i2c, addr, UINT8T_ARR(reset_mcp23008));
+		if (bytes_written != sizeof(reset_mcp23008)) {
+			return -1;
+		}
 	}
 
 	return 0;
@@ -80,13 +102,12 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 			  MCP230XX_INT_TYPE int_type,
 			  MCP230XX_INT_POLARITY int_pol)
 {
+	uint8_t iocon_reg = REG_A(IOCON_REG, type);
 	uint8_t cfg_reg;
 	mcp230xx_t* ret;
 
-	if (type != MCP230XX_008 ||
-	    // Invalid configuration
-	    (int_type == MCP230XX_OPEN_DRAIN_INT &&
-	     int_pol != MCP230XX_INT_POLARITY_NONE)) {
+	if (int_type == MCP230XX_OPEN_DRAIN_INT &&
+	    int_pol != MCP230XX_INT_POLARITY_NONE) {
 		errno = EINVAL;
 		return NULL;
 	}
@@ -97,13 +118,13 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 	}
 
 	if (restart) {
-		int result = mcp230xx_reset(i2c, addr);
+		int result = mcp230xx_reset(i2c, addr, type);
 		if (result != 0) {
 			goto init_error_cleanup;
 		}
 		cfg_reg = IOCON_REG_RESET_VALUE;
 	} else {
-		if (i2c_read8_8b(i2c, addr, IOCON_REG, &cfg_reg) != 0) {
+		if (i2c_read8_8b(i2c, addr, iocon_reg, &cfg_reg) != 0) {
 			goto init_error_cleanup;
 		}
 	}
@@ -122,12 +143,13 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 		cfg_reg |= int_pol << IOCON_REG_INTPOL_SHIFT;
 	}
 
-	if (i2c_write8_8b(i2c, addr, IOCON_REG, cfg_reg) != 0) {
+	if (i2c_write8_8b(i2c, addr, iocon_reg, cfg_reg) != 0) {
 		goto init_error_cleanup;
 	}
 
 	ret->i2c = i2c;
 	ret->addr = addr;
+	ret->type = type;
 	return ret;
 
 init_error_cleanup:
@@ -138,7 +160,7 @@ init_error_cleanup:
 int mcp230xx_deinit(mcp230xx_t* mcp, bool restart)
 {
 	if (restart) {
-		int result = mcp230xx_reset(PASS_MCP(mcp));
+		int result = mcp230xx_reset(PASS_MCP(mcp), mcp->type);
 		if (result != 0) {
 			return result;
 		}

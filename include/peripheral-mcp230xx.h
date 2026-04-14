@@ -30,6 +30,7 @@ typedef struct _mcp230xx_t mcp230xx_t;
 
 typedef enum {
 	MCP230XX_008, // MCP23008
+	MCP230XX_017, // MCP23017
 } MCP230XX_TYPE;
 
 typedef enum {
@@ -47,7 +48,7 @@ typedef enum {
  * mcp230xx_init
  *
  * Initialize an MCP230XX peripheral with address "addr". This function currently
- * supports MCP23008. You must only have one interface per device.
+ * supports MCP23008 and MCP23017. You must only have one interface per device.
  *
  * Parameters:
  *   i2c (i2c_interface_t*)          - The I2C interface to access the peripheral.
@@ -90,7 +91,7 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
  * mcp230xx_deinit
  *
  * Initialize an MCP230XX peripheral. This function currently supports MCP23008
- * only.
+ * and MCP23017.
  *
  * Parameters:
  *   ads (mcp230xx_t)        - The MCP230XX to interact with.
