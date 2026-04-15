@@ -253,9 +253,10 @@ int ads101x_unprotect(ads101x_t* ads)
 	}
 
 	int result = plc_resource_remove(ads->cached_resource);
-	if (result < 0) {
+	if (result >= 0) {
 		ads->is_protected = false;
 	}
+
 	return result;
 }
 
