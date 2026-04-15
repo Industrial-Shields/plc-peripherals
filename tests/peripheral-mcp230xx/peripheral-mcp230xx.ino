@@ -219,6 +219,99 @@ void test_mcp230xx_init_deinit(void)
 #endif
 }
 
+void test_mcp230xx_set_input_output(void)
+{
+	mcp230xx_t* mcp = mcp230xx_init(i2c_iface,
+					MCP230XX_ADDR,
+					true,
+					MCP230XX_CHIP_TYPE,
+					false,
+					MCP230XX_ACTIVE_DRIVER_INT,
+					MCP230XX_INT_ACTIVE_LOW);
+	TEST_ASSERT_NOT_NULL(mcp);
+
+#if TO_TEST == TEST_MCP_23008
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, 0x01));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, 0x01 + 0x08));
+#endif
+
+#if TO_TEST == TEST_MCP_23008
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFD,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFD, 0xFD, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, 0x01));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, 0x01 + 0x08));
+#endif
+
+#if TO_TEST == TEST_MCP_23008
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
+}
+
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
 void setup()
 {
@@ -238,6 +331,11 @@ int main(void)
 	n = 100;
 	do {
 		RUN_TEST(test_mcp230xx_init_deinit);
+	} while (--n);
+
+	n = 10;
+	do {
+		RUN_TEST(test_mcp230xx_set_input_output);
 	} while (--n);
 
 	UNITY_END();

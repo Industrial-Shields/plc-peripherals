@@ -25,6 +25,11 @@
 extern "C" {
 #endif
 
+// clang-format off
+#define MCP23008_MAX_GPIOS     8
+#define MCP23017_MAX_GPIOS     16
+// clang-format on
+
 struct _mcp230xx_t;
 typedef struct _mcp230xx_t mcp230xx_t;
 
@@ -106,6 +111,46 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
  *     - EIO    : Communication with the MCP230XX couldn't be established.
  */
 int mcp230xx_deinit(mcp230xx_t* mcp, bool restart);
+
+/**
+ * mcp230xx_set_input
+ *
+ * Set a GPIO of the MCP230XX "mcp" as an input.
+ *
+ * Parameters:
+ *   ads (mcp230xx_t)        - The MCP230XX to interact with.
+ *   index (uint9_t)         - The input you want to set as
+ * Returns:
+ *   int - 0 if successful, 1 if it was already an input, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled) : Passed mcp230xx_t is NULL, or address or
+ *                             index are invalid.
+ *     - EIO                 : Communication with the MCP230XX couldn't
+ *                             be established.
+ */
+int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index);
+
+/**
+ * mcp230xx_set_output
+ *
+ * Set a GPIO of the MCP230XX "mcp" as an output.
+ *
+ * Parameters:
+ *   ads (mcp230xx_t)        - The MCP230XX to interact with.
+ *   index (uint9_t)         - The output you want to set as
+ * Returns:
+ *   int - 0 if successful, 1 if it was already an output, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled) : Passed mcp230xx_t is NULL, or address or
+ *                             index are invalid.
+ *     - EIO                 : Communication with the MCP230XX couldn't
+ *                             be established.
+ */
+int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index);
 
 #ifdef __cplusplus
 }

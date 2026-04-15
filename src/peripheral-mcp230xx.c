@@ -62,6 +62,7 @@ struct _mcp230xx_t {
 #define UINT8T_ARR(arr) arr, sizeof(arr)
 
 #define REG_A(reg, type) type == MCP230XX_017 ? reg << 1 : reg
+#define REG_B(reg, type) type == MCP230XX_017 ? (reg << 1) + 1 : reg + 1
 
 static int
 mcp230xx_reset(i2c_interface_t* i2c, plc_i2c_addr_t addr, MCP230XX_TYPE type)
@@ -168,4 +169,79 @@ int mcp230xx_deinit(mcp230xx_t* mcp, bool restart)
 
 	free(mcp);
 	return 0;
+}
+
+#if !defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+static __attribute__((unused)) int check_arguments(mcp230xx_t* mcp,
+						   uint8_t index)
+#else
+static int check_arguments(mcp230xx_t* mcp, uint8_t index)
+#endif
+{
+	if (mcp == NULL ||
+	    (mcp->type == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
+	    (mcp->type == MCP230XX_017 && index >= MCP23017_MAX_GPIOS)) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	return 0;
+}
+
+int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index)
+{
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+	int _check = check_arguments(mcp, index);
+	if (_check != 0) {
+		return _check;
+	}
+#endif
+
+	const uint8_t iodir_addr = index < MCP23008_MAX_GPIOS ?
+					   REG_A(IODIR_REG, mcp->type) :
+					   REG_B(IODIR_REG, mcp->type);
+	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
+	uint8_t iodir_reg;
+
+	if (i2c_read8_8b(PASS_MCP(mcp), iodir_addr, &iodir_reg) != 0) {
+		return -1;
+	}
+
+	if ((iodir_reg & pin_mask)) {
+		// It's already an input
+		return 1;
+	}
+
+	iodir_reg |= pin_mask;
+
+	return i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg);
+}
+
+int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index)
+{
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+	int _check = check_arguments(mcp, index);
+	if (_check != 0) {
+		return _check;
+	}
+#endif
+
+	const uint8_t iodir_addr = index < MCP23008_MAX_GPIOS ?
+					   REG_A(IODIR_REG, mcp->type) :
+					   REG_B(IODIR_REG, mcp->type);
+	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
+	uint8_t iodir_reg;
+
+	if (i2c_read8_8b(PASS_MCP(mcp), iodir_addr, &iodir_reg) != 0) {
+		return -1;
+	}
+
+	if (!(iodir_reg & pin_mask)) {
+		// It's already an output
+		return 1;
+	}
+
+	iodir_reg &= ~pin_mask;
+
+	return i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg);
 }
