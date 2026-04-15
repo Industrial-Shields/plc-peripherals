@@ -113,13 +113,56 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 int mcp230xx_deinit(mcp230xx_t* mcp, bool restart);
 
 /**
+ * mcp230xx_protect
+ *
+ * Protect the MCP230XX with a mutex.
+ *
+ * Parameters:
+ *   mcp (mcp230xx_t)         - The MCP230XX to protect.
+ * Returns:
+ *   int - 0 if successful, 1 if already protected, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - ENOMEM : Out of memory during allocation.
+ *     - EINVAL : Passed mcp230xx_t is NULL, or address is invalid.
+ *     - EEXIST : The resource was already added.
+ *     - EBUSY  : Hutex couldn't be taken.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int mcp230xx_protect(mcp230xx_t* mcp);
+
+/**
+ * mcp230xx_unprotect
+ *
+ * Remove the mutex associated with the MCP230XX.
+ *
+ * Parameters:
+ *   mcp (mcp230xx_t)         - The MCP230XX to unprotect.
+ * Returns:
+ *   int - 0 if successful, 1 if already unprotected, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL : Passed mcp230xx_t is NULL, or address is invalid.
+ *     - ENODEV : The resource is not present.
+ *     - EBUSY  : Hash mutex couldn't be taken.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int mcp230xx_unprotect(mcp230xx_t* mcp);
+
+/**
  * mcp230xx_set_input
  *
  * Set a GPIO of the MCP230XX "mcp" as an input.
  *
  * Parameters:
- *   ads (mcp230xx_t)        - The MCP230XX to interact with.
- *   index (uint9_t)         - The input you want to set as
+ *   mcp (mcp230xx_t)        - The MCP230XX to interact with.
+ *   index (uint8_t)         - The input you want to set as input.
+ *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
+ *                             applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already an input, otherwise -1.
  *
@@ -129,8 +172,12 @@ int mcp230xx_deinit(mcp230xx_t* mcp, bool restart);
  *                             index are invalid.
  *     - EIO                 : Communication with the MCP230XX couldn't
  *                             be established.
+ *     - EBUSY               : Mutex couldn't be taken within the timeout
+ *                             given.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
  */
-int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index);
+int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
 
 /**
  * mcp230xx_set_output
@@ -138,8 +185,10 @@ int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index);
  * Set a GPIO of the MCP230XX "mcp" as an output.
  *
  * Parameters:
- *   ads (mcp230xx_t)        - The MCP230XX to interact with.
- *   index (uint9_t)         - The output you want to set as
+ *   mcp (mcp230xx_t)        - The MCP230XX to interact with.
+ *   index (uint8_t)         - The output you want to set as output.
+ *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
+ *                             applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already an output, otherwise -1.
  *
@@ -149,8 +198,12 @@ int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index);
  *                             index are invalid.
  *     - EIO                 : Communication with the MCP230XX couldn't
  *                             be established.
+ *     - EBUSY               : Mutex couldn't be taken within the timeout
+ *                             given.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
  */
-int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index);
+int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

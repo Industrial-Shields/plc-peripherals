@@ -34,10 +34,14 @@ void setUp(void)
 {
 	i2c_iface = i2c_init(0, SDA, SCL);
 	assert(i2c_iface);
+
+	assert(plc_resource_init() == 0);
 }
 
 void tearDown(void)
 {
+	assert(plc_resource_deinit() == 0);
+
 	int result = i2c_deinit(i2c_iface, false);
 	assert(result == 0);
 }
@@ -219,6 +223,104 @@ void test_mcp230xx_init_deinit(void)
 #endif
 }
 
+void test_mcp230xx_set_input_output_locked(void)
+{
+	mcp230xx_t* mcp = mcp230xx_init(i2c_iface,
+					MCP230XX_ADDR,
+					true,
+					MCP230XX_CHIP_TYPE,
+					false,
+					MCP230XX_ACTIVE_DRIVER_INT,
+					MCP230XX_INT_ACTIVE_LOW);
+	TEST_ASSERT_NOT_NULL(mcp);
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_protect(mcp));
+	TEST_ASSERT_EQUAL(1, mcp230xx_protect(mcp));
+	TEST_ASSERT_EQUAL(EEXIST, errno);
+	errno = 0;
+
+#if TO_TEST == TEST_MCP_23008
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, 0x01, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, 0x01 + 0x08, 100));
+#endif
+
+#if TO_TEST == TEST_MCP_23008
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFD,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFD, 0xFD, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, 0x01, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, 0x01 + 0x08, 100));
+#endif
+
+#if TO_TEST == TEST_MCP_23008
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	are_mcp230xx_registers_correct(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
+}
+
 void test_mcp230xx_set_input_output(void)
 {
 	mcp230xx_t* mcp = mcp230xx_init(i2c_iface,
@@ -253,9 +355,9 @@ void test_mcp230xx_set_input_output(void)
 #error "Invalid MCP type"
 #endif
 
-	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, 0x01));
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, 0x01, 100));
 #if TO_TEST == TEST_MCP_23017
-	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, 0x01 + 0x08));
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, 0x01 + 0x08, 100));
 #endif
 
 #if TO_TEST == TEST_MCP_23008
@@ -281,9 +383,9 @@ void test_mcp230xx_set_input_output(void)
 #error "Invalid MCP type"
 #endif
 
-	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, 0x01));
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, 0x01, 100));
 #if TO_TEST == TEST_MCP_23017
-	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, 0x01 + 0x08));
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, 0x01 + 0x08, 100));
 #endif
 
 #if TO_TEST == TEST_MCP_23008
@@ -336,6 +438,11 @@ int main(void)
 	n = 10;
 	do {
 		RUN_TEST(test_mcp230xx_set_input_output);
+	} while (--n);
+
+	n = 10;
+	do {
+		RUN_TEST(test_mcp230xx_set_input_output_locked);
 	} while (--n);
 
 	UNITY_END();

@@ -53,6 +53,8 @@
 struct _mcp230xx_t {
 	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
+	plc_resource_t cached_resource;
+	bool is_protected;
 	MCP230XX_TYPE type;
 };
 
@@ -63,6 +65,23 @@ struct _mcp230xx_t {
 
 #define REG_A(reg, type) type == MCP230XX_017 ? reg << 1 : reg
 #define REG_B(reg, type) type == MCP230XX_017 ? (reg << 1) + 1 : reg + 1
+
+#define MCP230XX_LOCK(mcp, timeout_ms)                                \
+	do {                                                          \
+		if ((mcp)->is_protected) {                            \
+			if (plc_resource_lock((mcp)->cached_resource, \
+					      (timeout_ms)) != 0) {   \
+				return -1;                            \
+			}                                             \
+		}                                                     \
+	} while (0)
+
+#define MCP230XX_UNLOCK(mcp)                                       \
+	do {                                                       \
+		if (mcp->is_protected) {                           \
+			plc_resource_unlock(mcp->cached_resource); \
+		}                                                  \
+	} while (0)
 
 static int
 mcp230xx_reset(i2c_interface_t* i2c, plc_i2c_addr_t addr, MCP230XX_TYPE type)
@@ -150,6 +169,7 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 
 	ret->i2c = i2c;
 	ret->addr = addr;
+	ret->is_protected = false;
 	ret->type = type;
 	return ret;
 
@@ -167,8 +187,47 @@ int mcp230xx_deinit(mcp230xx_t* mcp, bool restart)
 		}
 	}
 
+	if (mcp->is_protected) {
+		int ret = mcp230xx_unprotect(mcp);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
 	free(mcp);
 	return 0;
+}
+
+int mcp230xx_protect(mcp230xx_t* mcp)
+{
+	if (mcp == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	plc_resource_t res = I2C_RESOURCE(mcp->addr);
+	int result = plc_resource_add(res);
+	if (result >= 0) {
+		mcp->is_protected = true;
+		mcp->cached_resource = res;
+	}
+
+	return result;
+}
+
+int mcp230xx_unprotect(mcp230xx_t* mcp)
+{
+	if (mcp == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	int result = plc_resource_remove(mcp->cached_resource);
+	if (result >= 0) {
+		mcp->is_protected = false;
+	}
+
+	return result;
 }
 
 #if !defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
@@ -188,7 +247,7 @@ static int check_arguments(mcp230xx_t* mcp, uint8_t index)
 	return 0;
 }
 
-int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index)
+int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	int _check = check_arguments(mcp, index);
@@ -202,22 +261,31 @@ int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index)
 					   REG_B(IODIR_REG, mcp->type);
 	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
 	uint8_t iodir_reg;
+	int result;
+
+	MCP230XX_LOCK(mcp, timeout_ms);
 
 	if (i2c_read8_8b(PASS_MCP(mcp), iodir_addr, &iodir_reg) != 0) {
-		return -1;
+		result = -1;
+		goto set_input_error_cleanup;
 	}
 
-	if ((iodir_reg & pin_mask)) {
+	if (iodir_reg & pin_mask) {
 		// It's already an input
-		return 1;
+		result = 1;
+		goto set_input_error_cleanup;
 	}
 
 	iodir_reg |= pin_mask;
 
-	return i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg);
+	result = i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg);
+
+set_input_error_cleanup:
+	MCP230XX_UNLOCK(mcp);
+	return result;
 }
 
-int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index)
+int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	int _check = check_arguments(mcp, index);
@@ -231,17 +299,26 @@ int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index)
 					   REG_B(IODIR_REG, mcp->type);
 	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
 	uint8_t iodir_reg;
+	int result;
+
+	MCP230XX_LOCK(mcp, timeout_ms);
 
 	if (i2c_read8_8b(PASS_MCP(mcp), iodir_addr, &iodir_reg) != 0) {
-		return -1;
+		result = -1;
+		goto set_output_error_cleanup;
 	}
 
 	if (!(iodir_reg & pin_mask)) {
 		// It's already an output
-		return 1;
+		result = 1;
+		goto set_output_error_cleanup;
 	}
 
 	iodir_reg &= ~pin_mask;
 
-	return i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg);
+	result = i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg);
+
+set_output_error_cleanup:
+	MCP230XX_UNLOCK(mcp);
+	return result;
 }
