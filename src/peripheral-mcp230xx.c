@@ -285,6 +285,34 @@ set_input_error_cleanup:
 	return result;
 }
 
+int mcp230xx_read_gpio(mcp230xx_t* mcp,
+		       uint8_t index,
+		       uint8_t* return_value,
+		       uint32_t timeout_ms)
+{
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+	int _check = check_arguments(mcp, index);
+	if (_check != 0) {
+		return _check;
+	}
+#endif
+
+	const uint8_t gpio_addr = index < MCP23008_MAX_GPIOS ?
+					  REG_A(GPIO_REG, mcp->type) :
+					  REG_B(GPIO_REG, mcp->type);
+	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
+	uint8_t gpio_reg;
+	int result;
+
+	MCP230XX_LOCK(mcp, timeout_ms);
+	result = i2c_read8_8b(PASS_MCP(mcp), gpio_addr, &gpio_reg);
+	MCP230XX_UNLOCK(mcp);
+
+	*return_value = (gpio_reg & pin_mask) != 0 ? MCP230XX_HIGH :
+						     MCP230XX_LOW;
+	return result;
+}
+
 int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
@@ -319,6 +347,51 @@ int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms)
 	result = i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg);
 
 set_output_error_cleanup:
+	MCP230XX_UNLOCK(mcp);
+	return result;
+}
+
+int mcp230xx_write_gpio(mcp230xx_t* mcp,
+			uint8_t index,
+			uint8_t to_write,
+			uint32_t timeout_ms)
+{
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+	int _check = check_arguments(mcp, index);
+	if (_check != 0) {
+		return _check;
+	}
+#endif
+
+	const uint8_t olat_addr = index < MCP23008_MAX_GPIOS ?
+					  REG_A(OLAT_REG, mcp->type) :
+					  REG_B(OLAT_REG, mcp->type);
+	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
+	uint8_t old_olat_reg, new_olat_reg;
+	int result;
+
+	MCP230XX_LOCK(mcp, timeout_ms);
+
+	if (i2c_read8_8b(PASS_MCP(mcp), olat_addr, &old_olat_reg) != 0) {
+		result = -1;
+		goto write_gpio_error_cleanup;
+	}
+
+	if (to_write) {
+		new_olat_reg = old_olat_reg | pin_mask;
+	} else {
+		new_olat_reg = old_olat_reg & (~pin_mask);
+	}
+
+	if (old_olat_reg != new_olat_reg) {
+		result = i2c_write8_8b(PASS_MCP(mcp), olat_addr, new_olat_reg);
+	} else {
+		// The output is already set
+		result = 1;
+		goto write_gpio_error_cleanup;
+	}
+
+write_gpio_error_cleanup:
 	MCP230XX_UNLOCK(mcp);
 	return result;
 }

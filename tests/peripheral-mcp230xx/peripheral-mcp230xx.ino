@@ -16,15 +16,16 @@ static i2c_interface_t* i2c_iface;
 #define MCP230XX_ADDR         0x21
 #define MCP230XX_CHIP_TYPE    MCP230XX_008
 #define MCP230XX_N_REGISTERS  11
-#define I0_0                  0x06
-#define GPIO_0                0x07
+#define MCP230XX_INPUT        0x06 // I0.0
+#define MCP230XX_OUTPUT       0x07 // GPIO 0
 #elif defined(PLC14IOS)
 #define TO_TEST               TEST_MCP_23017
 #define MCP230XX_ADDR         0x20
 #define MCP230XX_CHIP_TYPE    MCP230XX_017
 #define MCP230XX_N_REGISTERS  22
-#define I0_0                  0x0B
-#define R0_0                  0x07
+#define MCP230XX_INPUT        0x0B // I0.0
+// Connect 5V to one port of the relay
+#define MCP230XX_OUTPUT       0x07 // R0.0
 #else
 #error "PLC not supported"
 #endif
@@ -414,6 +415,83 @@ void test_mcp230xx_set_input_output(void)
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
 }
 
+void test_mcp230xx_write_read_gpios(void)
+{
+	mcp230xx_t* mcp = mcp230xx_init(i2c_iface,
+					MCP230XX_ADDR,
+					true,
+					MCP230XX_CHIP_TYPE,
+					false,
+					MCP230XX_ACTIVE_DRIVER_INT,
+					MCP230XX_INT_ACTIVE_LOW);
+	TEST_ASSERT_NOT_NULL(mcp);
+
+	uint8_t read_value;
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, MCP230XX_OUTPUT, 100));
+	TEST_ASSERT_EQUAL(1, mcp230xx_set_input(mcp, MCP230XX_INPUT, 100));
+
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_write_gpio(mcp, MCP230XX_OUTPUT, MCP230XX_LOW, 100));
+	usleep(100000); // 100ms
+	TEST_ASSERT_EQUAL(
+		0, mcp230xx_read_gpio(mcp, MCP230XX_OUTPUT, &read_value, 100));
+	usleep(100000); // 100ms
+
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_write_gpio(mcp, MCP230XX_OUTPUT, MCP230XX_HIGH, 100));
+	usleep(100000); // 100ms
+	TEST_ASSERT_EQUAL(
+		0, mcp230xx_read_gpio(mcp, MCP230XX_OUTPUT, &read_value, 100));
+	TEST_ASSERT_EQUAL(MCP230XX_HIGH, read_value);
+	usleep(100000); // 100ms
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
+}
+
+void test_mcp230xx_write_read_gpios_locked(void)
+{
+	mcp230xx_t* mcp = mcp230xx_init(i2c_iface,
+					MCP230XX_ADDR,
+					true,
+					MCP230XX_CHIP_TYPE,
+					false,
+					MCP230XX_ACTIVE_DRIVER_INT,
+					MCP230XX_INT_ACTIVE_LOW);
+	TEST_ASSERT_NOT_NULL(mcp);
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_protect(mcp));
+	TEST_ASSERT_EQUAL(1, mcp230xx_protect(mcp));
+	TEST_ASSERT_EQUAL(EEXIST, errno);
+	errno = 0;
+
+	uint8_t read_value;
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, MCP230XX_OUTPUT, 100));
+	TEST_ASSERT_EQUAL(1, mcp230xx_set_input(mcp, MCP230XX_INPUT, 100));
+
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_write_gpio(mcp, MCP230XX_OUTPUT, MCP230XX_LOW, 100));
+	usleep(100000); // 100ms
+	TEST_ASSERT_EQUAL(
+		0, mcp230xx_read_gpio(mcp, MCP230XX_OUTPUT, &read_value, 100));
+	usleep(100000); // 100ms
+
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_write_gpio(mcp, MCP230XX_OUTPUT, MCP230XX_HIGH, 100));
+	usleep(100000); // 100ms
+	TEST_ASSERT_EQUAL(
+		0, mcp230xx_read_gpio(mcp, MCP230XX_OUTPUT, &read_value, 100));
+	TEST_ASSERT_EQUAL(MCP230XX_HIGH, read_value);
+	usleep(100000); // 100ms
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
+}
+
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
 void setup()
 {
@@ -443,6 +521,17 @@ int main(void)
 	n = 10;
 	do {
 		RUN_TEST(test_mcp230xx_set_input_output_locked);
+	} while (--n);
+
+	n = 5;
+	do {
+		RUN_TEST(test_mcp230xx_write_read_gpios);
+	} while (--n);
+
+
+	n = 5;
+	do {
+		RUN_TEST(test_mcp230xx_write_read_gpios_locked);
 	} while (--n);
 
 	UNITY_END();

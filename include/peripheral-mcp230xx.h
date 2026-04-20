@@ -28,6 +28,8 @@ extern "C" {
 // clang-format off
 #define MCP23008_MAX_GPIOS     8
 #define MCP23017_MAX_GPIOS     16
+#define MCP230XX_HIGH          1
+#define MCP230XX_LOW           0
 // clang-format on
 
 struct _mcp230xx_t;
@@ -180,6 +182,37 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
 int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
 
 /**
+ * mcp230xx_read_gpio
+ *
+ * Read MCP230XX_HIGH/LOW from a GPIO of MCP230XX "mcp". It shoud be declared as
+ * input before calling this function.
+ *
+ * Parameters:
+ *   mcp (mcp230xx_t)        - The MCP230XX to interact with.
+ *   index (uint8_t)         - The input you want to read from.
+ *   return_value (uint8_t*) - The value in which the reading will be stored.
+ *   timeout_ms (uint32_t)   - The maximum time to wait to read. Only
+ *                             applicable when the MCP230XX is protected.
+ * Returns:
+ *   int - 0 if successful, 1 if it was already set/cleared, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled) : Passed mcp230xx_t is NULL, or address or
+ *                             index are invalid.
+ *     - EIO                 : Communication with the MCP230XX couldn't
+ *                             be established.
+ *     - EBUSY               : Mutex couldn't be taken within the timeout
+ *                             given.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int mcp230xx_read_gpio(mcp230xx_t* mcp,
+		       uint8_t index,
+		       uint8_t* return_value,
+		       uint32_t timeout_ms);
+
+/**
  * mcp230xx_set_output
  *
  * Set a GPIO of the MCP230XX "mcp" as an output.
@@ -204,6 +237,37 @@ int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
  *       - EINVAL: The monotonic clock isn't available.
  */
 int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
+
+/**
+ * mcp230xx_write_gpio
+ *
+ * Set MCP230XX_HIGH/LOW to a GPIO of MCP230XX "mcp". It shoud be declared as
+ * output before calling this function.
+ *
+ * Parameters:
+ *   mcp (mcp230xx_t)        - The MCP230XX to interact with.
+ *   index (uint8_t)         - The output you want to modify.
+ *   to_write (uint8_t)      - The value to write.
+ *   timeout_ms (uint32_t)   - The maximum time to wait to write. Only
+ *                             applicable when the MCP230XX is protected.
+ * Returns:
+ *   int - 0 if successful, 1 if it was already set/cleared, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL (if enabled) : Passed mcp230xx_t is NULL, or address or
+ *                             index are invalid.
+ *     - EIO                 : Communication with the MCP230XX couldn't
+ *                             be established.
+ *     - EBUSY               : Mutex couldn't be taken within the timeout
+ *                             given.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int mcp230xx_write_gpio(mcp230xx_t* mcp,
+			uint8_t index,
+			uint8_t to_write,
+			uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }
