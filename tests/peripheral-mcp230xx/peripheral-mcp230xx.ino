@@ -47,23 +47,28 @@ void tearDown(void)
 	assert(result == 0);
 }
 
-void are_mcp230xx_registers_correct(const uint8_t expected[MCP230XX_N_REGISTERS])
-{
-	uint8_t mcp230xx_registers[MCP230XX_N_REGISTERS];
-	size_t mcp230xx_read_bytes;
+#define ARE_MCP230XX_REGISTERS_CORRECT(expected_array)                  \
+	do {                                                            \
+		uint8_t mcp230xx_registers[MCP230XX_N_REGISTERS];       \
+		size_t mcp230xx_read_bytes;                             \
+                                                                        \
+		TEST_ASSERT_EQUAL(                                      \
+			1,                                              \
+			i2c_write_then_read(i2c_iface,                  \
+					    MCP230XX_ADDR,              \
+					    (const uint8_t[]){ 0 },     \
+					    1,                          \
+					    mcp230xx_registers,         \
+					    sizeof(mcp230xx_registers), \
+					    &mcp230xx_read_bytes));     \
+                                                                        \
+		TEST_ASSERT_EQUAL(mcp230xx_read_bytes,                  \
+				  sizeof(mcp230xx_registers));          \
+		TEST_ASSERT_EQUAL_MEMORY(expected_array,                \
+					 mcp230xx_registers,            \
+					 sizeof(mcp230xx_registers));   \
+	} while (0)
 
-	TEST_ASSERT_EQUAL(1,
-			  i2c_write_then_read(i2c_iface,
-					      MCP230XX_ADDR,
-					      (const uint8_t[]){ 0 },
-					      1,
-					      mcp230xx_registers,
-					      sizeof(mcp230xx_registers),
-					      &mcp230xx_read_bytes));
-	TEST_ASSERT_EQUAL(mcp230xx_read_bytes, sizeof(mcp230xx_registers));
-	TEST_ASSERT_EQUAL_MEMORY(
-		expected, mcp230xx_registers, sizeof(mcp230xx_registers));
-}
 
 void test_mcp230xx_init_deinit(void)
 {
@@ -78,7 +83,7 @@ void test_mcp230xx_init_deinit(void)
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -92,7 +97,7 @@ void test_mcp230xx_init_deinit(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -111,7 +116,7 @@ void test_mcp230xx_init_deinit(void)
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -125,7 +130,7 @@ void test_mcp230xx_init_deinit(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x14,
 		0x14, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -144,7 +149,7 @@ void test_mcp230xx_init_deinit(void)
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -158,7 +163,7 @@ void test_mcp230xx_init_deinit(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x02,
 		0x02, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -176,7 +181,7 @@ void test_mcp230xx_init_deinit(void)
 	TEST_ASSERT_NOT_NULL(mcp);
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -190,7 +195,7 @@ void test_mcp230xx_init_deinit(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x04,
 		0x04, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -201,7 +206,7 @@ void test_mcp230xx_init_deinit(void)
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -215,7 +220,7 @@ void test_mcp230xx_init_deinit(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -241,7 +246,7 @@ void test_mcp230xx_set_input_output_locked(void)
 	errno = 0;
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -255,7 +260,7 @@ void test_mcp230xx_set_input_output_locked(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -269,7 +274,7 @@ void test_mcp230xx_set_input_output_locked(void)
 #endif
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFD,
 		0,
 		0,
@@ -283,7 +288,7 @@ void test_mcp230xx_set_input_output_locked(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFD, 0xFD, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -297,7 +302,7 @@ void test_mcp230xx_set_input_output_locked(void)
 #endif
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -311,7 +316,7 @@ void test_mcp230xx_set_input_output_locked(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -334,7 +339,7 @@ void test_mcp230xx_set_input_output(void)
 	TEST_ASSERT_NOT_NULL(mcp);
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -348,7 +353,7 @@ void test_mcp230xx_set_input_output(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -362,7 +367,7 @@ void test_mcp230xx_set_input_output(void)
 #endif
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFD,
 		0,
 		0,
@@ -376,7 +381,7 @@ void test_mcp230xx_set_input_output(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFD, 0xFD, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
@@ -390,7 +395,7 @@ void test_mcp230xx_set_input_output(void)
 #endif
 
 #if TO_TEST == TEST_MCP_23008
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF,
 		0,
 		0,
@@ -404,7 +409,7 @@ void test_mcp230xx_set_input_output(void)
 		0,
 	}));
 #elif TO_TEST == TEST_MCP_23017
-	are_mcp230xx_registers_correct(((const uint8_t[]){
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
 		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}));
