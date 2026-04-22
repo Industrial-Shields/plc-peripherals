@@ -18,6 +18,7 @@ static i2c_interface_t* i2c_iface;
 #define MCP230XX_N_REGISTERS  11
 #define MCP230XX_INPUT        0x06 // I0.0, used as input
 #define MCP230XX_OUTPUT       0x07 // GPIO 0, used as output
+#define TO_PIN_MASK(idx)      (1 << idx)
 #elif defined(PLC14IOS)
 #define TO_TEST               TEST_MCP_23017
 #define MCP230XX_ADDR         0x20
@@ -28,6 +29,7 @@ static i2c_interface_t* i2c_iface;
 // Connect 5V to one port of the relay
 #define MCP230XX_OUTPUT       0x07 // R0.0, used as output
 #define MCP230XX_OUTPUT_2     0x09 // EXP_PWM
+#define TO_PIN_MASK(idx)      (1 << (idx % MCP23008_MAX_GPIOS))
 #else
 #error "PLC not supported"
 #endif
@@ -273,7 +275,7 @@ void test_mcp230xx_set_output(void)
 
 #if TO_TEST == TEST_MCP_23008
 	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
-		0xFF & ~(1 << MCP230XX_OUTPUT),
+		(uint8_t)~TO_PIN_MASK(MCP230XX_OUTPUT),
 		0,
 		0,
 		0,
@@ -287,8 +289,8 @@ void test_mcp230xx_set_output(void)
 	}));
 #elif TO_TEST == TEST_MCP_23017
 	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
-		0xFF & ~(1 << MCP230XX_OUTPUT),
-		0xFF & ~(1 << (MCP230XX_OUTPUT_2 % MCP23008_MAX_GPIOS)),
+		(uint8_t)~TO_PIN_MASK(MCP230XX_OUTPUT),
+		(uint8_t)~TO_PIN_MASK(MCP230XX_OUTPUT_2),
 		0,
 		0,
 		0,
@@ -388,7 +390,7 @@ void test_mcp230xx_set_output_locked(void)
 
 #if TO_TEST == TEST_MCP_23008
 	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
-		0xFF & ~(1 << MCP230XX_OUTPUT),
+		(uint8_t)~TO_PIN_MASK(MCP230XX_OUTPUT),
 		0,
 		0,
 		0,
@@ -402,8 +404,8 @@ void test_mcp230xx_set_output_locked(void)
 	}));
 #elif TO_TEST == TEST_MCP_23017
 	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
-		0xFF & ~(1 << MCP230XX_OUTPUT),
-		0xFF & ~(1 << (MCP230XX_OUTPUT_2 % MCP23008_MAX_GPIOS)),
+		(uint8_t)~TO_PIN_MASK(MCP230XX_OUTPUT),
+		(uint8_t)~TO_PIN_MASK(MCP230XX_OUTPUT_2),
 		0,
 		0,
 		0,
@@ -504,7 +506,7 @@ void test_mcp230xx_set_input(void)
 
 #if TO_TEST == TEST_MCP_23008
 	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
-		1 << MCP230XX_INPUT,
+		TO_PIN_MASK(MCP230XX_INPUT),
 		0,
 		0,
 		0,
@@ -518,8 +520,8 @@ void test_mcp230xx_set_input(void)
 	}));
 #elif TO_TEST == TEST_MCP_23017
 	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
-		1 << MCP230XX_INPUT,
-		1 << (MCP230XX_INPUT_2 % MCP23008_MAX_GPIOS),
+		TO_PIN_MASK(MCP230XX_INPUT),
+		TO_PIN_MASK(MCP230XX_INPUT_2),
 		0,
 		0,
 		0,
@@ -625,7 +627,7 @@ void test_mcp230xx_set_input_locked(void)
 
 #if TO_TEST == TEST_MCP_23008
 	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
-		1 << MCP230XX_INPUT,
+		TO_PIN_MASK(MCP230XX_INPUT),
 		0,
 		0,
 		0,
@@ -639,8 +641,8 @@ void test_mcp230xx_set_input_locked(void)
 	}));
 #elif TO_TEST == TEST_MCP_23017
 	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
-		1 << MCP230XX_INPUT,
-		1 << (MCP230XX_INPUT_2 % MCP23008_MAX_GPIOS),
+		TO_PIN_MASK(MCP230XX_INPUT),
+		TO_PIN_MASK(MCP230XX_INPUT_2),
 		0,
 		0,
 		0,
