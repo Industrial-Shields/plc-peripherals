@@ -11,11 +11,12 @@ static i2c_interface_t* i2c_iface;
 #define TEST_MCP_23017 1
 
 // clang-format off
-#if defined(ESP32PLC)
+#if defined(ESP32PLC) && defined(ESP32PLC_21)
 #define TO_TEST               TEST_MCP_23008
 #define MCP230XX_ADDR         0x21
 #define MCP230XX_CHIP_TYPE    MCP230XX_008
 #define MCP230XX_N_REGISTERS  11
+#define MCP230XX_EMPTY_GPIO   0x01 // I1.0
 #define MCP230XX_INPUT        0x06 // I0.0, used as input
 #define MCP230XX_OUTPUT       0x07 // GPIO 0, used as output
 #define TO_PIN_MASK(idx)      (1 << idx)
@@ -24,6 +25,8 @@ static i2c_interface_t* i2c_iface;
 #define MCP230XX_ADDR         0x20
 #define MCP230XX_CHIP_TYPE    MCP230XX_017
 #define MCP230XX_N_REGISTERS  22
+#define MCP230XX_EMPTY_GPIO   0x02 // EXP_AN
+#define MCP230XX_EMPTY_GPIO_2 0x08 // EXP_INT
 #define MCP230XX_INPUT        0x05 // I0.6, used as input
 #define MCP230XX_INPUT_2      0x0B // I0.0
 // Connect 5V to one port of the relay
@@ -497,11 +500,23 @@ void test_mcp230xx_set_input(void)
 #error "Invalid MCP type"
 #endif
 
-	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, MCP230XX_INPUT, 100));
-	TEST_ASSERT_EQUAL(1, mcp230xx_set_input(mcp, MCP230XX_INPUT, 100));
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT, MCP230XX_NO_PULLUP, 100));
 #if TO_TEST == TEST_MCP_23017
-	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, MCP230XX_INPUT_2, 100));
-	TEST_ASSERT_EQUAL(1, mcp230xx_set_input(mcp, MCP230XX_INPUT_2, 100));
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT_2, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT_2, MCP230XX_NO_PULLUP, 100));
 #endif
 
 #if TO_TEST == TEST_MCP_23008
@@ -618,11 +633,23 @@ void test_mcp230xx_set_input_locked(void)
 #error "Invalid MCP type"
 #endif
 
-	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, MCP230XX_INPUT, 100));
-	TEST_ASSERT_EQUAL(1, mcp230xx_set_input(mcp, MCP230XX_INPUT, 100));
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT, MCP230XX_NO_PULLUP, 100));
 #if TO_TEST == TEST_MCP_23017
-	TEST_ASSERT_EQUAL(0, mcp230xx_set_input(mcp, MCP230XX_INPUT_2, 100));
-	TEST_ASSERT_EQUAL(1, mcp230xx_set_input(mcp, MCP230XX_INPUT_2, 100));
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT_2, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT_2, MCP230XX_NO_PULLUP, 100));
 #endif
 
 #if TO_TEST == TEST_MCP_23008
@@ -653,6 +680,16 @@ void test_mcp230xx_set_input_locked(void)
 		0,
 		0,
 		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
+
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0xFF,
 		0,
 		0,
 		0,
@@ -664,6 +701,669 @@ void test_mcp230xx_set_input_locked(void)
 		0,
 		0,
 	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+}
+
+void test_mcp230xx_set_input_pullups(void)
+{
+	mcp230xx_t* mcp = mcp230xx_init(i2c_iface,
+					MCP230XX_ADDR,
+					true,
+					MCP230XX_CHIP_TYPE,
+					false,
+					MCP230XX_ACTIVE_DRIVER_INT,
+					MCP230XX_INT_ACTIVE_LOW);
+	TEST_ASSERT_NOT_NULL(mcp);
+
+	// Set all pins as outputs
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x00, 0));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x01, 0));
+#endif
+
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	// From output to input without pullup
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_NO_PULLUP, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_NO_PULLUP, 100));
+#endif
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	// Set all pins as outputs
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x00, 0));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x01, 0));
+#endif
+
+	// From output to input with pullup
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_PULLUP, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_PULLUP, 100));
+#endif
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	// From input with pullup to input without pullup
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_NO_PULLUP, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_NO_PULLUP, 100));
+#endif
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		// The pull-up will remain up to ~10 seconds
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		// The pull-up will remain up to ~10 seconds
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	// From input without pullup to input with pullup
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_PULLUP, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_PULLUP, 100));
+#endif
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		// The pull-up will remain up to ~10 seconds
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		// The pull-ups will remain up to ~10 seconds
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+	/*
+	 * Set all pins as outputs and disable GPPU.
+	 * Needed to really disable the pull-up in the GPIO register, and avoid
+	 * mismatches. The alternative would be to wait ~10 seconds before the
+	 * pull-up completely disables, which makes the test time-consuming.
+	 */
+#if TO_TEST == TEST_MCP_23008
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x06, 0));
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x00, 0));
+#elif TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, i2c_write8_16b(i2c_iface, MCP230XX_ADDR, 0x0C, 0));
+	TEST_ASSERT_EQUAL(0, i2c_write8_16b(i2c_iface, MCP230XX_ADDR, 0x00, 0));
+#else
+#error "Invalid MCP type"
+#endif
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
+
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0xFF,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+}
+
+void test_mcp230xx_set_input_pullups_locked(void)
+{
+	mcp230xx_t* mcp = mcp230xx_init(i2c_iface,
+					MCP230XX_ADDR,
+					true,
+					MCP230XX_CHIP_TYPE,
+					false,
+					MCP230XX_ACTIVE_DRIVER_INT,
+					MCP230XX_INT_ACTIVE_LOW);
+	TEST_ASSERT_NOT_NULL(mcp);
+
+	TEST_ASSERT_EQUAL(0, mcp230xx_protect(mcp));
+	TEST_ASSERT_EQUAL(1, mcp230xx_protect(mcp));
+	TEST_ASSERT_EQUAL(EEXIST, errno);
+	errno = 0;
+
+	// Set all pins as outputs
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x00, 0));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x01, 0));
+#endif
+
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	// From output to input without pullup
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_NO_PULLUP, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_NO_PULLUP, 100));
+#endif
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	// Set all pins as outputs
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x00, 0));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x01, 0));
+#endif
+
+	// From output to input with pullup
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_PULLUP, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_PULLUP, 100));
+#endif
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	// From input with pullup to input without pullup
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_NO_PULLUP, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_NO_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_NO_PULLUP, 100));
+#endif
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		// The pull-up will remain up to ~10 seconds
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		// The pull-ups will remain up to ~10 seconds
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+
+	// From input without pullup to input with pullup
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO, MCP230XX_PULLUP, 100));
+#if TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(
+		0,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_PULLUP, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_EMPTY_GPIO_2, MCP230XX_PULLUP, 100));
+#endif
+#if TO_TEST == TEST_MCP_23008
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+		0,
+		// The pull-up will remain up to ~10 seconds
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		0,
+	}));
+#elif TO_TEST == TEST_MCP_23017
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+		0,
+		0,
+		// The pull-ups will remain up to ~10 seconds
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO),
+		TO_PIN_MASK(MCP230XX_EMPTY_GPIO_2),
+		0,
+		0,
+	}));
+#else
+#error "Invalid MCP type"
+#endif
+	/*
+	 * Set all pins as outputs and disable GPPU.
+	 * Needed to really disable the pull-up in the GPIO register, and avoid
+	 * mismatches. The alternative would be to wait ~10 seconds before the
+	 * pull-up completely disables, which makes the test time-consuming.
+	 */
+#if TO_TEST == TEST_MCP_23008
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x06, 0));
+	TEST_ASSERT_EQUAL(0, i2c_write8_8b(i2c_iface, MCP230XX_ADDR, 0x00, 0));
+#elif TO_TEST == TEST_MCP_23017
+	TEST_ASSERT_EQUAL(0, i2c_write8_16b(i2c_iface, MCP230XX_ADDR, 0x0C, 0));
+	TEST_ASSERT_EQUAL(0, i2c_write8_16b(i2c_iface, MCP230XX_ADDR, 0x00, 0));
 #else
 #error "Invalid MCP type"
 #endif
@@ -708,7 +1408,10 @@ void test_mcp230xx_write_read_gpios(void)
 	uint8_t read_value;
 
 	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, MCP230XX_OUTPUT, 100));
-	TEST_ASSERT_EQUAL(1, mcp230xx_set_input(mcp, MCP230XX_INPUT, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT, MCP230XX_NO_PULLUP, 100));
 
 	TEST_ASSERT_EQUAL(
 		1,
@@ -749,7 +1452,10 @@ void test_mcp230xx_write_read_gpios_locked(void)
 	uint8_t read_value;
 
 	TEST_ASSERT_EQUAL(0, mcp230xx_set_output(mcp, MCP230XX_OUTPUT, 100));
-	TEST_ASSERT_EQUAL(1, mcp230xx_set_input(mcp, MCP230XX_INPUT, 100));
+	TEST_ASSERT_EQUAL(
+		1,
+		mcp230xx_set_input(
+			mcp, MCP230XX_INPUT, MCP230XX_NO_PULLUP, 100));
 
 	TEST_ASSERT_EQUAL(
 		1,
@@ -810,6 +1516,16 @@ int main(void)
 	n = 10;
 	do {
 		RUN_TEST(test_mcp230xx_set_input_locked);
+	} while (--n);
+
+	n = 10;
+	do {
+		RUN_TEST(test_mcp230xx_set_input_pullups);
+	} while (--n);
+
+	n = 10;
+	do {
+		RUN_TEST(test_mcp230xx_set_input_pullups_locked);
 	} while (--n);
 
 	n = 5;

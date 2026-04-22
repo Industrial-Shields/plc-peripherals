@@ -51,6 +51,11 @@ typedef enum {
 	MCP230XX_INT_ACTIVE_LOW = 0,
 } MCP230XX_INT_POLARITY;
 
+typedef enum {
+	MCP230XX_NO_PULLUP = 0,
+	MCP230XX_PULLUP = 1,
+} MCP230XX_INPUT_CONFIG;
+
 /**
  * mcp230xx_init
  *
@@ -161,12 +166,16 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  * Set a GPIO of the MCP230XX "mcp" as an input.
  *
  * Parameters:
- *   mcp (mcp230xx_t)        - The MCP230XX to interact with.
- *   index (uint8_t)         - The input you want to set as input.
- *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
- *                             applicable when the MCP230XX is protected.
+ *   mcp (mcp230xx_t)               - The MCP230XX to interact with.
+ *   index (uint8_t)                - The input you want to set as input.
+ *   config (MCP230XX_INPUT_CONFIG) - Used to enable/disable the pull-up of the
+ *                                    input.
+ *   timeout_ms (uint32_t)          - The maximum time to wait for a reading.
+ *                                    Only applicable when the MCP230XX is
+ *                                    protected.
  * Returns:
- *   int - 0 if successful, 1 if it was already an input, otherwise -1.
+ *   int - 0 if successful, 1 if it was already an input and the pull-up was
+ *         correctly configured, otherwise -1.
  *
  * Errors:
  *   errno set to:
@@ -179,7 +188,10 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
+int mcp230xx_set_input(mcp230xx_t* mcp,
+		       uint8_t index,
+		       MCP230XX_INPUT_CONFIG config,
+		       uint32_t timeout_ms);
 
 /**
  * mcp230xx_read_gpio

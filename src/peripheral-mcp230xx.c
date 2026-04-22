@@ -247,38 +247,81 @@ static int check_arguments(mcp230xx_t* mcp, uint8_t index)
 	return 0;
 }
 
-int mcp230xx_set_input(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms)
+int mcp230xx_set_input(mcp230xx_t* mcp,
+		       uint8_t index,
+		       MCP230XX_INPUT_CONFIG config,
+		       uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	int _check = check_arguments(mcp, index);
 	if (_check != 0) {
 		return _check;
 	}
+
+	const uint8_t normalized_config = config == MCP230XX_NO_PULLUP ?
+						  MCP230XX_NO_PULLUP :
+						  MCP230XX_PULLUP;
+#else
+	const uint8_t normalized_config = config;
 #endif
 
+	const uint8_t normalized_index = index % MCP23008_MAX_GPIOS;
+	const uint8_t pin_mask = 1 << normalized_index;
 	const uint8_t iodir_addr = index < MCP23008_MAX_GPIOS ?
 					   REG_A(IODIR_REG, mcp->type) :
 					   REG_B(IODIR_REG, mcp->type);
-	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
-	uint8_t iodir_reg;
+	const uint8_t gppu_addr = index < MCP23008_MAX_GPIOS ?
+					  REG_A(GPPU_REG, mcp->type) :
+					  REG_B(GPPU_REG, mcp->type);
+	bool change_iodir = false, change_gppu = false;
+	uint8_t iodir_reg, gppu_reg;
 	int result;
 
 	MCP230XX_LOCK(mcp, timeout_ms);
 
-	if (i2c_read8_8b(PASS_MCP(mcp), iodir_addr, &iodir_reg) != 0) {
+	if (i2c_read8_8b(PASS_MCP(mcp), iodir_addr, &iodir_reg) != 0 ||
+	    i2c_read8_8b(PASS_MCP(mcp), gppu_addr, &gppu_reg) != 0) {
 		result = -1;
 		goto set_input_error_cleanup;
 	}
 
-	if (iodir_reg & pin_mask) {
-		// It's already an input
-		result = 1;
-		goto set_input_error_cleanup;
+	if (!(iodir_reg & pin_mask)) {
+		// It's not an input
+		iodir_reg |= pin_mask;
+		change_iodir = true;
 	}
 
-	iodir_reg |= pin_mask;
+	if ((gppu_reg & pin_mask) != (normalized_config << normalized_index)) {
+		if (config == MCP230XX_NO_PULLUP) {
+			gppu_reg &= ~pin_mask;
+		} else {
+			gppu_reg |= pin_mask;
+		}
+		change_gppu = true;
+	}
 
-	result = i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg);
+	if (!change_iodir && !change_gppu) {
+		result = 1;
+	} else {
+		/*
+		 * Update the GPPU before the IODIR register, ensure no
+		 * accidental pull-ups.
+		 */
+		if (change_gppu) {
+			result = i2c_write8_8b(
+				PASS_MCP(mcp), gppu_addr, gppu_reg);
+			if (result != 0) {
+				goto set_input_error_cleanup;
+			}
+		}
+		if (change_iodir) {
+			result = i2c_write8_8b(
+				PASS_MCP(mcp), iodir_addr, iodir_reg);
+			if (result != 0) {
+				goto set_input_error_cleanup;
+			}
+		}
+	}
 
 set_input_error_cleanup:
 	MCP230XX_UNLOCK(mcp);
