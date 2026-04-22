@@ -84,7 +84,8 @@ void test_mcp230xx_init_deinit(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
@@ -117,7 +118,8 @@ void test_mcp230xx_init_deinit(void)
 			    MCP230XX_CHIP_TYPE,
 			    true,
 			    MCP230XX_OPEN_DRAIN_INT,
-			    MCP230XX_INT_POLARITY_NONE);
+			    MCP230XX_INT_POLARITY_NONE,
+			    MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
@@ -150,7 +152,8 @@ void test_mcp230xx_init_deinit(void)
 			    MCP230XX_CHIP_TYPE,
 			    false,
 			    MCP230XX_ACTIVE_DRIVER_INT,
-			    MCP230XX_INT_ACTIVE_HIGH);
+			    MCP230XX_INT_ACTIVE_HIGH,
+			    MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
 
@@ -183,7 +186,8 @@ void test_mcp230xx_init_deinit(void)
 			    MCP230XX_CHIP_TYPE,
 			    false,
 			    MCP230XX_OPEN_DRAIN_INT,
-			    MCP230XX_INT_POLARITY_NONE);
+			    MCP230XX_INT_POLARITY_NONE,
+			    MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 #if TO_TEST == TEST_MCP_23008
@@ -207,6 +211,71 @@ void test_mcp230xx_init_deinit(void)
 	}));
 #else
 #error "Invalid MCP type"
+#endif
+
+#if TO_TEST == TEST_MCP_23017
+	mcp = mcp230xx_init(i2c_iface,
+			    MCP230XX_ADDR,
+			    true,
+			    MCP230XX_CHIP_TYPE,
+			    false,
+			    MCP230XX_ACTIVE_DRIVER_INT,
+			    MCP230XX_INT_ACTIVE_LOW,
+			    MCP230XX_MIRRORED_INT);
+	TEST_ASSERT_NOT_NULL(mcp);
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
+
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x40,
+		0x40, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+
+	mcp = mcp230xx_init(i2c_iface,
+			    MCP230XX_ADDR,
+			    false,
+			    MCP230XX_CHIP_TYPE,
+			    true,
+			    MCP230XX_OPEN_DRAIN_INT,
+			    MCP230XX_INT_POLARITY_NONE,
+			    MCP230XX_MIRRORED_INT);
+	TEST_ASSERT_NOT_NULL(mcp);
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
+
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x54,
+		0x54, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+
+	mcp = mcp230xx_init(i2c_iface,
+			    MCP230XX_ADDR,
+			    false,
+			    MCP230XX_CHIP_TYPE,
+			    false,
+			    MCP230XX_ACTIVE_DRIVER_INT,
+			    MCP230XX_INT_ACTIVE_HIGH,
+			    MCP230XX_MIRRORED_INT);
+	TEST_ASSERT_NOT_NULL(mcp);
+	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, false));
+
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x42,
+		0x42, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
+
+	mcp = mcp230xx_init(i2c_iface,
+			    MCP230XX_ADDR,
+			    false,
+			    MCP230XX_CHIP_TYPE,
+			    false,
+			    MCP230XX_OPEN_DRAIN_INT,
+			    MCP230XX_INT_POLARITY_NONE,
+			    MCP230XX_MIRRORED_INT);
+	TEST_ASSERT_NOT_NULL(mcp);
+
+	ARE_MCP230XX_REGISTERS_CORRECT(((const uint8_t[]){
+		0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0x44,
+		0x44, 0,    0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}));
 #endif
 
 	TEST_ASSERT_EQUAL(0, mcp230xx_deinit(mcp, true));
@@ -243,7 +312,8 @@ void test_mcp230xx_set_output(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 #if TO_TEST == TEST_MCP_23008
@@ -353,7 +423,8 @@ void test_mcp230xx_set_output_locked(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 	TEST_ASSERT_EQUAL(0, mcp230xx_protect(mcp));
@@ -468,7 +539,8 @@ void test_mcp230xx_set_input(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 	// Set all pins as outputs
@@ -596,7 +668,8 @@ void test_mcp230xx_set_input_locked(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 	TEST_ASSERT_EQUAL(0, mcp230xx_protect(mcp));
@@ -719,7 +792,8 @@ void test_mcp230xx_set_input_pullups(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 	// Set all pins as outputs
@@ -1058,7 +1132,8 @@ void test_mcp230xx_set_input_pullups_locked(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 	TEST_ASSERT_EQUAL(0, mcp230xx_protect(mcp));
@@ -1402,7 +1477,8 @@ void test_mcp230xx_write_read_gpios(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 	uint8_t read_value;
@@ -1441,7 +1517,8 @@ void test_mcp230xx_write_read_gpios_locked(void)
 					MCP230XX_CHIP_TYPE,
 					false,
 					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW);
+					MCP230XX_INT_ACTIVE_LOW,
+					MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 
 	TEST_ASSERT_EQUAL(0, mcp230xx_protect(mcp));

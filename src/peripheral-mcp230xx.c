@@ -36,6 +36,8 @@
 #define DEFVAL_REG                                     0x03
 #define INTCON_REG                                     0x04
 #define IOCON_REG                                      0x05
+#define   IOCON_REG_MIRROR                             (1 << 6)
+#define     IOCON_REG_MIRROR_SHIFT                     6
 #define   IOCON_REG_DISSLW                             (1 << 4)
 #define     IOCON_REG_DISSLW_SHIFT                     4
 #define   IOCON_REG_ODR                                (1 << 2)
@@ -120,14 +122,16 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 			  MCP230XX_TYPE type,
 			  bool disable_slew_rate,
 			  MCP230XX_INT_TYPE int_type,
-			  MCP230XX_INT_POLARITY int_pol)
+			  MCP230XX_INT_POLARITY int_pol,
+			  MCP230XX_MIRROR_INT mirror)
 {
 	uint8_t iocon_reg = REG_A(IOCON_REG, type);
 	uint8_t cfg_reg;
 	mcp230xx_t* ret;
 
-	if (int_type == MCP230XX_OPEN_DRAIN_INT &&
-	    int_pol != MCP230XX_INT_POLARITY_NONE) {
+	if ((int_type == MCP230XX_OPEN_DRAIN_INT &&
+	     int_pol != MCP230XX_INT_POLARITY_NONE) ||
+	    (type != MCP230XX_017 && mirror == MCP230XX_MIRRORED_INT)) {
 		errno = EINVAL;
 		return NULL;
 	}
@@ -162,6 +166,10 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 	if (int_pol != MCP230XX_INT_POLARITY_NONE) {
 		cfg_reg |= int_pol << IOCON_REG_INTPOL_SHIFT;
 	}
+
+	// Set mirror byte
+	cfg_reg &= ~IOCON_REG_MIRROR;
+	cfg_reg |= mirror << IOCON_REG_MIRROR_SHIFT;
 
 	if (i2c_write8_8b(i2c, addr, iocon_reg, cfg_reg) != 0) {
 		goto init_error_cleanup;

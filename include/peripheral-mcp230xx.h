@@ -52,6 +52,11 @@ typedef enum {
 } MCP230XX_INT_POLARITY;
 
 typedef enum {
+	MCP230XX_MIRRORED_INT = 1,
+	MCP230XX_NO_MIRRORED_INT = 0,
+} MCP230XX_MIRROR_INT;
+
+typedef enum {
 	MCP230XX_NO_PULLUP = 0,
 	MCP230XX_PULLUP = 1,
 } MCP230XX_INPUT_CONFIG;
@@ -79,6 +84,13 @@ typedef enum {
  *                                     active ouptut. If you want to configure it as
  *                                     an open-drain output, you must set this
  *                                     argument to MCP230XX_INT_POLARITY_NONE.
+ *  mirror (MCP230XX_MIRROR_INT)     - Configure the behaviour of the two interrupt
+ *                                     pins. If mirrored, INTA and INTB pins will
+ *                                     be logically OR'ed together (both will
+ *                                     activate when an interrupt occurs). Only
+ *                                     useful on MCP23017. It must be
+ *                                     MCP230XX_NO_MIRRORED_INT in other chips.
+ *
  *
  * Returns:
  *   mcp230xx_t* - Pointer to the initialized peripheral struct on success.
@@ -97,7 +109,8 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 			  MCP230XX_TYPE type,
 			  bool disable_slew_rate,
 			  MCP230XX_INT_TYPE int_type,
-			  MCP230XX_INT_POLARITY int_pol);
+			  MCP230XX_INT_POLARITY int_pol,
+			  MCP230XX_MIRROR_INT mirror);
 
 /**
  * mcp230xx_deinit
