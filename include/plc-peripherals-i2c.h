@@ -70,6 +70,26 @@ typedef uint16_t plc_i2c_addr_t;
 i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
 
 /**
+ * i2c_get_bus
+ *
+ * It's a platform-specific function.
+ *
+ * Get the I2C bus number of the given interface.
+ *
+ * Parameters:
+ *   i2c (i2c_interface_t*) - I2C interface to get the bus number from.
+ *   bus (uint8_t*)         - Pointer to store the bus number in.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL : Passed i2c_interface is NULL or invalid.
+ */
+int i2c_get_bus(i2c_interface_t* i2c, uint8_t* bus);
+
+/**
  * i2c_deinit
  *
  * It's a platform-specific function.

@@ -66,6 +66,17 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 	return ret;
 }
 
+int i2c_get_bus(i2c_interface_t* i2c, uint8_t* bus)
+{
+	if (!is_i2c_platform_correct(i2c)) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	*bus = i2c->bus_number;
+	return 0;
+}
+
 int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 {
 	if (!is_i2c_platform_correct(interface)) {

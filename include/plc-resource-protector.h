@@ -36,8 +36,9 @@ typedef uint64_t plc_resource_t;
 
 typedef void plc_mutex_t;
 
-#define I2C_RESOURCE(address) \
-	(((plc_resource_t)((uint64_t)PLC_RESOURCE_I2C << 56) | address))
+#define I2C_RESOURCE(bus, address)                             \
+	(((plc_resource_t)((uint64_t)PLC_RESOURCE_I2C << 56) | \
+	  ((plc_resource_t)((uint64_t)(bus)) << 48) | (address)))
 
 /**
  * plc_resource_init

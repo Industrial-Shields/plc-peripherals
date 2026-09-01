@@ -236,7 +236,12 @@ int ads101x_protect(ads101x_t* ads)
 		return -1;
 	}
 
-	plc_resource_t res = I2C_RESOURCE(ads->addr);
+	uint8_t bus;
+	if (i2c_get_bus(ads->i2c, &bus) != 0) {
+		return -1;
+	}
+
+	plc_resource_t res = I2C_RESOURCE(bus, ads->addr);
 	int result = plc_resource_add(res);
 	if (result >= 0) {
 		ads->is_protected = true;

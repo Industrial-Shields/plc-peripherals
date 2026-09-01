@@ -213,7 +213,12 @@ int mcp230xx_protect(mcp230xx_t* mcp)
 		return -1;
 	}
 
-	plc_resource_t res = I2C_RESOURCE(mcp->addr);
+	uint8_t bus;
+	if (i2c_get_bus(mcp->i2c, &bus) != 0) {
+		return -1;
+	}
+
+	plc_resource_t res = I2C_RESOURCE(bus, mcp->addr);
 	int result = plc_resource_add(res);
 	if (result >= 0) {
 		mcp->is_protected = true;

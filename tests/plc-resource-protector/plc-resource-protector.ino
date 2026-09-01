@@ -40,8 +40,8 @@ void test_plc_mutex_simple_cycle(void) {
 }
 
 void test_plc_resource_simple_cycle(void) {
-  static plc_resource_t example = I2C_RESOURCE(0x48);
-  static plc_resource_t non_existant = I2C_RESOURCE(0x49);
+  static plc_resource_t example = I2C_RESOURCE(0, 0x48);
+  static plc_resource_t non_existant = I2C_RESOURCE(0, 0x49);
   TEST_ASSERT_EQUAL(0, plc_resource_init());
   TEST_ASSERT_EQUAL(1, plc_resource_init());
   TEST_ASSERT_EQUAL(0, plc_resource_add(example));
@@ -61,7 +61,7 @@ void test_plc_resource_simple_cycle(void) {
 }
 
 void test_plc_resource_lock_unlock(void) {
-  static plc_resource_t example = I2C_RESOURCE(0x48);
+  static plc_resource_t example = I2C_RESOURCE(0, 0x48);
   TEST_ASSERT_EQUAL(0, plc_resource_init());
   TEST_ASSERT_EQUAL(0, plc_resource_add(example));
 
