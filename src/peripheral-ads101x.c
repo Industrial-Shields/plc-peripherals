@@ -406,16 +406,24 @@ int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms)
 	ADS101X_LOCK(ads, timeout_ms);
 
 	uint16_t cfg_reg;
+	int ret;
+
 	if (i2c_read8_16b(PASS_ADS(ads), CONFIG_REG, &cfg_reg) != 0) {
-		return -1;
+		ret = -1;
+		goto ads101x_set_fs_exit;
 	}
 
 	ADS101X_SET_DR(cfg_reg, dr);
 
 	if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, cfg_reg) != 0) {
-		return -1;
+		ret = -1;
+		goto ads101x_set_fs_exit;
 	}
 
+	ret = 0;
+
+ads101x_set_fs_exit:
 	ADS101X_UNLOCK(ads);
-	return 0;
+
+	return ret;
 }
