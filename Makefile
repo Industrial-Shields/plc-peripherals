@@ -60,12 +60,11 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 $(LIB): $(OBJS) | $(BUILD_DIR)
 	ar rcs $@ $(OBJS)
 
-tests: $(LIB)
-	$(MAKE) -C tests/ tests
+tests:
+	ceedling test:all
 
 format:
-	clang-format -i {include,src}/*
+	clang-format -i {include,src}/* test/*.c
 
 clean:
 	rm -rf $(BUILD_DIR)
-	$(MAKE) -C tests clean
