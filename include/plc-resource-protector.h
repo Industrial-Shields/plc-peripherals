@@ -20,6 +20,13 @@
 #ifndef PLC_RESOURCE_PROTECTOR_H_
 #define PLC_RESOURCE_PROTECTOR_H_
 
+/*
+ * The portable half of the resource protector API: hash-table/lock
+ * bookkeeping built on top of the platform mutex functions declared in
+ * plc-resource-protector-mutex.h.
+ */
+#include <plc-resource-protector-mutex.h>
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -33,8 +40,6 @@ typedef enum {
 } plc_resource_type;
 
 typedef uint64_t plc_resource_t;
-
-typedef void plc_mutex_t;
 
 #define I2C_RESOURCE(bus, address)                             \
 	(((plc_resource_t)((uint64_t)PLC_RESOURCE_I2C << 56) | \
@@ -155,76 +160,6 @@ int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms);
  *     - EALREADY            : Mutex is already free!
  */
 int plc_resource_unlock(plc_resource_t resource);
-
-/**
- * plc_mutex_create
- *
- * Create a single mutex, and return it as argument.
- *
- * Returns:
- *   plc_mutex_t* - Pointer to the initialized interface on success.
- *                  NULL on failure.
- *
- * Errors:
- *   errno set to:
- *     - ENOMEM : Out of memory during allocation.
- */
-plc_mutex_t* plc_mutex_create(void);
-
-/**
- * plc_mutex_destroy
- *
- * Destroy a single mutex.
- *
- * Returns:
- *   int - 0 if successful, -1 otherwise.
- *
- * Errors:
- *   errno set to:
- *     - EINVAL: The passed mutex is invalid.
- *     - EBUSY : Mutex can't be destroyed while in use.
- */
-int plc_mutex_destroy(plc_mutex_t* mutex);
-
-/**
- * plc_mutex_acquire
- *
- * Try to acquire a single mutex.
- *
- * Parameters:
- *   mutex (plc_mutex_t)   - The mutex to acquire to lock.
- *   timeout_ms (uint32_t) - The maximum time to wait for the unlock
- *                           (in ms).
- *
- * Returns:
- *   int - 0 if successful, -1 otherwise.
- *
- * Errors:
- *   errno set to:
- *     - EINVAL (if enabled): The passed mutex is invalid
- *     - EBUSY              : Mutex couldn't be taken within the timeout given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
- */
-int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms);
-
-/**
- * plc_mutex_release
- *
- * Try to release an acquired mutex.
- *
- * Parameters:
- *   mutex (plc_mutex_t)   - The mutex to acquire to lock.
- *
- * Returns:
- *   int - 0 if successful, -1 otherwise (it probably wasn't taken!).
- *
- * Errors:
- *   errno set to:
- *     - EINVAL (if enabled) : The passed mutex is invalid.
- *     - EALREADY            : Mutex is already free!
- */
-int plc_mutex_release(plc_mutex_t* mutex);
 
 #ifdef __cplusplus
 }
