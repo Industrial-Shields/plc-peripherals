@@ -35,8 +35,17 @@ plc_mutex_t* plc_mutex_create(void)
 {
 	error_checker_mutex_t* mutex_struct =
 		(error_checker_mutex_t*)malloc(sizeof(error_checker_mutex_t));
-	ECM(mutex_struct)->m = xSemaphoreCreateMutex();
-	ECM(mutex_struct)->is_locked = false;
+
+	if (mutex_struct != NULL) {
+		ECM(mutex_struct)->m = xSemaphoreCreateMutex();
+		if (ECM(mutex_struct)->m == NULL) {
+			free(mutex_struct);
+			mutex_struct = NULL;
+		} else {
+			ECM(mutex_struct)->is_locked = false;
+		}
+	}
+
 	return (plc_mutex_t*)mutex_struct;
 }
 
