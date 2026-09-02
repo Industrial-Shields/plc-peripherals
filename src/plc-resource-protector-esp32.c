@@ -40,35 +40,35 @@ plc_mutex_t* plc_mutex_create(void)
 	return (plc_mutex_t*)mutex_struct;
 }
 
-int plc_mutex_destroy(plc_mutex_t* mutex_struct)
+int plc_mutex_destroy(plc_mutex_t* mutex)
 {
-	if (mutex_struct == NULL || ECM(mutex_struct)->m == NULL) {
+	if (mutex == NULL || ECM(mutex)->m == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (ECM(mutex_struct)->is_locked) {
+	if (ECM(mutex)->is_locked) {
 		errno = EBUSY;
 		return -1;
 	}
 
-	vSemaphoreDelete(ECM(mutex_struct)->m);
-	free(mutex_struct);
+	vSemaphoreDelete(ECM(mutex)->m);
+	free(mutex);
 	return 0;
 }
 
-int plc_mutex_acquire(plc_mutex_t* mutex_struct, uint32_t timeout)
+int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (mutex_struct == NULL || ECM(mutex_struct)->m == NULL) {
+	if (mutex == NULL || ECM(mutex)->m == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
 #endif
 
-	if (xSemaphoreTake(ECM(mutex_struct)->m, pdMS_TO_TICKS(timeout)) ==
+	if (xSemaphoreTake(ECM(mutex)->m, pdMS_TO_TICKS(timeout_ms)) ==
 	    pdTRUE) {
-		ECM(mutex_struct)->is_locked = true;
+		ECM(mutex)->is_locked = true;
 		return 0;
 	}
 
@@ -77,10 +77,10 @@ int plc_mutex_acquire(plc_mutex_t* mutex_struct, uint32_t timeout)
 }
 
 static portMUX_TYPE release_spinlock = portMUX_INITIALIZER_UNLOCKED;
-int plc_mutex_release(plc_mutex_t* mutex_struct)
+int plc_mutex_release(plc_mutex_t* mutex)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (mutex_struct == NULL || ECM(mutex_struct)->m == NULL) {
+	if (mutex == NULL || ECM(mutex)->m == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -88,8 +88,8 @@ int plc_mutex_release(plc_mutex_t* mutex_struct)
 	int ret;
 
 	portENTER_CRITICAL(&release_spinlock);
-	if (xSemaphoreGive(ECM(mutex_struct)->m) == pdTRUE) {
-		ECM(mutex_struct)->is_locked = false;
+	if (xSemaphoreGive(ECM(mutex)->m) == pdTRUE) {
+		ECM(mutex)->is_locked = false;
 		ret = 0;
 	} else {
 		errno = EALREADY;

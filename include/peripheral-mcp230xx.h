@@ -179,7 +179,7 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  * Set a GPIO of the MCP230XX "mcp" as an input.
  *
  * Parameters:
- *   mcp (mcp230xx_t)               - The MCP230XX to interact with.
+ *   mcp (const mcp230xx_t*)        - The MCP230XX to interact with.
  *   index (uint8_t)                - The input you want to set as input.
  *   config (MCP230XX_INPUT_CONFIG) - Used to enable/disable the pull-up of the
  *                                    input.
@@ -201,7 +201,7 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int mcp230xx_set_input(mcp230xx_t* mcp,
+int mcp230xx_set_input(const mcp230xx_t* mcp,
 		       uint8_t index,
 		       MCP230XX_INPUT_CONFIG config,
 		       uint32_t timeout_ms);
@@ -213,7 +213,7 @@ int mcp230xx_set_input(mcp230xx_t* mcp,
  * input before calling this function.
  *
  * Parameters:
- *   mcp (mcp230xx_t)        - The MCP230XX to interact with.
+ *   mcp (const mcp230xx_t*) - The MCP230XX to interact with.
  *   index (uint8_t)         - The input you want to read from.
  *   return_value (uint8_t*) - The value in which the reading will be stored.
  *   timeout_ms (uint32_t)   - The maximum time to wait to read. Only
@@ -232,7 +232,7 @@ int mcp230xx_set_input(mcp230xx_t* mcp,
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int mcp230xx_read_gpio(mcp230xx_t* mcp,
+int mcp230xx_read_gpio(const mcp230xx_t* mcp,
 		       uint8_t index,
 		       uint8_t* return_value,
 		       uint32_t timeout_ms);
@@ -243,7 +243,7 @@ int mcp230xx_read_gpio(mcp230xx_t* mcp,
  * Set a GPIO of the MCP230XX "mcp" as an output.
  *
  * Parameters:
- *   mcp (mcp230xx_t)        - The MCP230XX to interact with.
+ *   mcp (const mcp230xx_t*) - The MCP230XX to interact with.
  *   index (uint8_t)         - The output you want to set as output.
  *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
  *                             applicable when the MCP230XX is protected.
@@ -261,7 +261,9 @@ int mcp230xx_read_gpio(mcp230xx_t* mcp,
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
+int mcp230xx_set_output(const mcp230xx_t* mcp,
+			uint8_t index,
+			uint32_t timeout_ms);
 
 /**
  * mcp230xx_write_gpio
@@ -270,7 +272,7 @@ int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
  * output before calling this function.
  *
  * Parameters:
- *   mcp (mcp230xx_t)        - The MCP230XX to interact with.
+ *   mcp (const mcp230xx_t*) - The MCP230XX to interact with.
  *   index (uint8_t)         - The output you want to modify.
  *   to_write (uint8_t)      - The value to write.
  *   timeout_ms (uint32_t)   - The maximum time to wait to write. Only
@@ -289,7 +291,7 @@ int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int mcp230xx_write_gpio(mcp230xx_t* mcp,
+int mcp230xx_write_gpio(const mcp230xx_t* mcp,
 			uint8_t index,
 			uint8_t to_write,
 			uint32_t timeout_ms);

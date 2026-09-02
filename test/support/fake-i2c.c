@@ -51,7 +51,7 @@ void fake_i2c_answers(const uint8_t* bytes, size_t len)
 	fake_i2c_transfer_op.retval = 1;
 }
 
-ssize_t fake_i2c_write(i2c_interface_t* i2c,
+ssize_t fake_i2c_write(const i2c_interface_t* i2c,
 		       plc_i2c_addr_t addr,
 		       const uint8_t* to_write,
 		       size_t to_write_len,
@@ -72,7 +72,7 @@ ssize_t fake_i2c_write(i2c_interface_t* i2c,
 	return fake_i2c_write_op.retval;
 }
 
-ssize_t fake_i2c_write_then_read(i2c_interface_t* i2c,
+ssize_t fake_i2c_write_then_read(const i2c_interface_t* i2c,
 				 plc_i2c_addr_t addr,
 				 const uint8_t* to_write,
 				 size_t to_write_len,

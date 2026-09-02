@@ -84,8 +84,8 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
  * Get the I2C bus number of the given interface.
  *
  * Parameters:
- *   i2c (i2c_interface_t*) - I2C interface to get the bus number from.
- *   bus (uint8_t*)         - Pointer to store the bus number in.
+ *   i2c (const i2c_interface_t*) - I2C interface to get the bus number from.
+ *   bus (uint8_t*)               - Pointer to store the bus number in.
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
@@ -94,7 +94,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
  *   errno set to:
  *     - EINVAL : Passed i2c_interface is NULL or invalid.
  */
-int i2c_get_bus(i2c_interface_t* i2c, uint8_t* bus);
+int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
 
 /**
  * i2c_deinit
@@ -128,10 +128,10 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  * Write "to_write_len" bytes from the "to_write" buffer to the I2C device "addr".
  *
  * Parameters:
- *   i2c (i2c_interface_t*)     - I2C interface to write on.
- *   addr (plc_i2c_addr_t)      - I2C address to write to.
- *   to_write (const uint8_t*)  - Array of bytes to write to the passed I2C address.
- *   to_write_len (size_t)      - Length of the array.
+ *   i2c (const i2c_interface_t*)  - I2C interface to write on.
+ *   addr (plc_i2c_addr_t)         - I2C address to write to.
+ *   to_write (const uint8_t*)     - Array of bytes to write to the passed I2C address.
+ *   to_write_len (size_t)         - Length of the array.
  *
  * Returns:
  *   ssize_t - The number of bytes written (it can be 0), or -1 if an error happens.
@@ -144,7 +144,7 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error.
  */
-ssize_t i2c_write(i2c_interface_t* i2c,
+ssize_t i2c_write(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
 		  const uint8_t* to_write,
 		  size_t to_write_len);
@@ -158,11 +158,11 @@ ssize_t i2c_write(i2c_interface_t* i2c,
  * "to_read" buffer.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)     - I2C interface to read from.
- *   addr (plc_i2c_addr_t)      - I2C address to read from.
- *   to_read (const uint8_t*)   - Array of bytes to read from the passed I2C address.
- *   to_read_len (size_t)       - Number of bytes to read. It must be equal or
- *                                greater than the array length.
+ *   i2c (const i2c_interface_t*)  - I2C interface to read from.
+ *   addr (plc_i2c_addr_t)         - I2C address to read from.
+ *   to_read (const uint8_t*)      - Array of bytes to read from the passed I2C address.
+ *   to_read_len (size_t)          - Number of bytes to read. It must be equal or
+ *                                   greater than the array length.
  *
  * Returns:
  *   ssize_t - The number of bytes read (it can be 0), or -1 if an error happens.
@@ -175,7 +175,7 @@ ssize_t i2c_write(i2c_interface_t* i2c,
  *     - ESP32 specific       :
  *       - EIO                : i2cRead function reported some error.
  */
-ssize_t i2c_read(i2c_interface_t* i2c,
+ssize_t i2c_read(const i2c_interface_t* i2c,
 		 plc_i2c_addr_t addr,
 		 uint8_t* to_read,
 		 size_t to_read_len);
@@ -189,14 +189,14 @@ ssize_t i2c_read(i2c_interface_t* i2c,
  * "to_read_bytes" bytes to "to_read" from the same transaction.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)     - I2C interface to read from.
- *   addr (plc_i2c_addr_t)      - I2C address to read from.
- *   to_write (const uint8_t*)  - Array of bytes to write from the passed I2C address.
- *   to_write_len (size_t)      - Number of bytes to write.
- *   to_read (const uint8_t*)   - Array of bytes to read from the passed I2C address.
- *   to_read_len (size_t)       - Number of bytes to read. It must be equal or
- *                                greater than the array length.
- *   read_bytes(size_t*)        - Pointer to save the real number of read bytes.
+ *   i2c (const i2c_interface_t*)  - I2C interface to read from.
+ *   addr (plc_i2c_addr_t)         - I2C address to read from.
+ *   to_write (const uint8_t*)     - Array of bytes to write from the passed I2C address.
+ *   to_write_len (size_t)         - Number of bytes to write.
+ *   to_read (const uint8_t*)      - Array of bytes to read from the passed I2C address.
+ *   to_read_len (size_t)          - Number of bytes to read. It must be equal or
+ *                                   greater than the array length.
+ *   read_bytes(size_t*)           - Pointer to save the real number of read bytes.
  *
  * Returns:
  *   ssize_t - The number of bytes written (it can be 0), or -1 if an error happens.
@@ -210,7 +210,7 @@ ssize_t i2c_read(i2c_interface_t* i2c,
  *       - EIO                : i2cWriteReadNonStop function reported some
  *                              error.
  */
-ssize_t i2c_write_then_read(i2c_interface_t* i2c,
+ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    plc_i2c_addr_t addr,
 			    const uint8_t* to_write,
 			    size_t to_write_len,

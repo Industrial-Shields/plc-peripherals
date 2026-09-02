@@ -85,8 +85,9 @@ struct _mcp230xx_t {
 		}                                                  \
 	} while (0)
 
-static int
-mcp230xx_reset(i2c_interface_t* i2c, plc_i2c_addr_t addr, MCP230XX_TYPE type)
+static int mcp230xx_reset(const i2c_interface_t* i2c,
+			  plc_i2c_addr_t addr,
+			  MCP230XX_TYPE type)
 {
 	// First 0x00 is the register address
 	static const uint8_t reset_mcp23008[] = {
@@ -244,10 +245,10 @@ int mcp230xx_unprotect(mcp230xx_t* mcp)
 }
 
 #if !defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-static __attribute__((unused)) int check_arguments(mcp230xx_t* mcp,
+static __attribute__((unused)) int check_arguments(const mcp230xx_t* mcp,
 						   uint8_t index)
 #else
-static int check_arguments(mcp230xx_t* mcp, uint8_t index)
+static int check_arguments(const mcp230xx_t* mcp, uint8_t index)
 #endif
 {
 	if (mcp == NULL ||
@@ -260,7 +261,7 @@ static int check_arguments(mcp230xx_t* mcp, uint8_t index)
 	return 0;
 }
 
-int mcp230xx_set_input(mcp230xx_t* mcp,
+int mcp230xx_set_input(const mcp230xx_t* mcp,
 		       uint8_t index,
 		       MCP230XX_INPUT_CONFIG config,
 		       uint32_t timeout_ms)
@@ -341,7 +342,7 @@ set_input_error_cleanup:
 	return result;
 }
 
-int mcp230xx_read_gpio(mcp230xx_t* mcp,
+int mcp230xx_read_gpio(const mcp230xx_t* mcp,
 		       uint8_t index,
 		       uint8_t* return_value,
 		       uint32_t timeout_ms)
@@ -369,7 +370,9 @@ int mcp230xx_read_gpio(mcp230xx_t* mcp,
 	return result;
 }
 
-int mcp230xx_set_output(mcp230xx_t* mcp, uint8_t index, uint32_t timeout_ms)
+int mcp230xx_set_output(const mcp230xx_t* mcp,
+			uint8_t index,
+			uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	int _check = check_arguments(mcp, index);
@@ -407,7 +410,7 @@ set_output_error_cleanup:
 	return result;
 }
 
-int mcp230xx_write_gpio(mcp230xx_t* mcp,
+int mcp230xx_write_gpio(const mcp230xx_t* mcp,
 			uint8_t index,
 			uint8_t to_write,
 			uint32_t timeout_ms)

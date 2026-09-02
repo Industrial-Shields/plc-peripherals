@@ -50,10 +50,10 @@ int plc_resource_deinit(void)
 		return 1;
 	}
 
-	lock_hash_table_t* current_lock;
-	lock_hash_table_t* tmp;
-
 	if (locks != NULL) {
+		lock_hash_table_t* current_lock;
+		lock_hash_table_t* tmp;
+
 		HASH_ITER(hh, locks, current_lock, tmp)
 		{
 			if (plc_mutex_destroy(current_lock->mutex) != 0) {
@@ -95,6 +95,14 @@ int plc_resource_add(plc_resource_t resource)
 			ret = -1;
 			goto plc_resource_add_exit;
 		}
+		/*
+		 * uthash aborts the process with exit() on internal OOM; the
+		 * rest of this macro's expansion is only unreachable on that
+		 * path, not on the normal one.
+		 *
+		 * TODO: Adapt uthash to not abort in this case.
+		 */
+		// cppcheck-suppress unreachableCode
 		HASH_ADD_INT(locks, resource, tmp);
 		ret = 0;
 	} else {

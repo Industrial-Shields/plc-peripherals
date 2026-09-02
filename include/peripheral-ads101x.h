@@ -172,7 +172,7 @@ int ads101x_unprotect(ads101x_t* ads);
  * mode.
  *
  * Parameters:
- *   ads (ads101x_t)         - The ADS101X to interact with.
+ *   ads (const ads101x_t*)  - The ADS101X to interact with.
  *   index (ADS101x_INPUT)   - The input to single_read from the ADS101X.
  *   return_value (int16_t*) - The value in which the reading will be stored.
  *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
@@ -189,7 +189,7 @@ int ads101x_unprotect(ads101x_t* ads);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_single_read(ads101x_t* ads,
+int ads101x_single_read(const ads101x_t* ads,
 			ADS101X_INPUT index,
 			int16_t* return_value,
 			uint32_t timeout_ms);
@@ -205,7 +205,7 @@ int ads101x_single_read(ads101x_t* ads,
  * than -8, triple the datasheet offset), and will set errno to ERANGE.
  *
  * Parameters:
- *   ads (ads101x_t)          - The ADS101X to interact with.
+ *   ads (const ads101x_t*)   - The ADS101X to interact with.
  *   index (ADS101x_INPUT)    - The input to single_read from the ADS101X.
  *   return_value (uint16_t*) - The value in which the reading will be stored.
  *   timeout_ms (uint32_t)    - The maximum time to wait for a reading. Only
@@ -223,7 +223,7 @@ int ads101x_single_read(ads101x_t* ads,
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_unsigned_single_read(ads101x_t* ads,
+int ads101x_unsigned_single_read(const ads101x_t* ads,
 				 ADS101X_INPUT index,
 				 uint16_t* return_value,
 				 uint32_t timeout_ms);
@@ -236,7 +236,7 @@ int ads101x_unsigned_single_read(ads101x_t* ads,
  * available. To use it, the ADS101X must be in continuous mode.
  *
  * Parameters:
- *   ads (ads101x_t)         - The ADS101X to interact with.
+ *   ads (const ads101x_t*)  - The ADS101X to interact with.
  *   index (ADS101x_INPUT)   - The input to continuous_read from the ADS101X.
  *   return_value (int16_t*) - The value in which the reading will be stored.
  *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
@@ -253,7 +253,7 @@ int ads101x_unsigned_single_read(ads101x_t* ads,
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_continuous_read(ads101x_t* ads,
+int ads101x_continuous_read(const ads101x_t* ads,
 			    ADS101X_INPUT index,
 			    int16_t* return_value,
 			    uint32_t timeout_ms);
@@ -269,7 +269,7 @@ int ads101x_continuous_read(ads101x_t* ads,
  * than -8, triple the datasheet offset), and will set errno to ERANGE.
  *
  * Parameters:
- *   ads (ads101x_t)          - The ADS101X to interact with.
+ *   ads (const ads101x_t*)   - The ADS101X to interact with.
  *   index (ADS101x_INPUT)    - The input to continuous_read from the ADS101X.
  *   return_value (uint16_t*) - The value in which the reading will be stored.
  *   timeout_ms (uint32_t)    - The maximum time to wait for a reading. Only
@@ -287,7 +287,7 @@ int ads101x_continuous_read(ads101x_t* ads,
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_unsigned_continuous_read(ads101x_t* ads,
+int ads101x_unsigned_continuous_read(const ads101x_t* ads,
 				     ADS101X_INPUT index,
 				     uint16_t* return_value,
 				     uint32_t timeout_ms);
@@ -298,7 +298,7 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
  * Retrieve the sampling frequency set in the ADS101X.
  *
  * Parameters:
- *   ads (ads101x_t)         - The ADS101X to interact with.
+ *   ads (const ads101x_t*)  - The ADS101X to interact with.
  *   dr (ADS101X_DATA_RATE*) - Pointer to where the sampling frequency will be
  *                             saved.
  *
@@ -310,7 +310,7 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
  *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
  *     - EIO                 : Communication with the ADS101X couldn't be established.
  */
-int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr);
+int ads101x_get_fs(const ads101x_t* ads, ADS101X_DATA_RATE* dr);
 
 /**
  * ads101x_set_fs
@@ -318,7 +318,7 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr);
  * Set a new sampling frequency for the ADS101X.
  *
  * Parameters:
- *   ads (ads101x_t)         - The ADS101X to interact with.
+ *   ads (const ads101x_t*)  - The ADS101X to interact with.
  *   dr (ADS101X_DATA_RATE)  - Sampling frequency to set.
  *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
  *                             applicable when the ADS101X is protected.
@@ -334,7 +334,9 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms);
+int ads101x_set_fs(const ads101x_t* ads,
+		   ADS101X_DATA_RATE dr,
+		   uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

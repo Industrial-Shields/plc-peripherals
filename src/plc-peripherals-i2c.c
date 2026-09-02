@@ -22,7 +22,7 @@
 #include <stdbool.h>
 #include <arpa/inet.h>
 
-int i2c_write8_8b(i2c_interface_t* i2c,
+int i2c_write8_8b(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
 		  uint8_t reg,
 		  uint8_t to_write)
@@ -35,7 +35,7 @@ int i2c_write8_8b(i2c_interface_t* i2c,
 	return i2c_write_result == 2 ? 0 : -1;
 }
 
-int i2c_write8_16b(i2c_interface_t* i2c,
+int i2c_write8_16b(const i2c_interface_t* i2c,
 		   plc_i2c_addr_t addr,
 		   uint8_t reg,
 		   uint16_t to_write)
@@ -49,7 +49,7 @@ int i2c_write8_16b(i2c_interface_t* i2c,
 	return i2c_write_result == 3 ? 0 : -1;
 }
 
-int i2c_read8_8b(i2c_interface_t* i2c,
+int i2c_read8_8b(const i2c_interface_t* i2c,
 		 plc_i2c_addr_t addr,
 		 uint8_t reg,
 		 uint8_t* to_read)
@@ -62,7 +62,7 @@ int i2c_read8_8b(i2c_interface_t* i2c,
 	return is_correct ? 0 : -1;
 }
 
-int i2c_read8_16b(i2c_interface_t* i2c,
+int i2c_read8_16b(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
 		  uint8_t reg,
 		  uint16_t* to_read)

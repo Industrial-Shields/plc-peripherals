@@ -265,7 +265,7 @@ int ads101x_unprotect(ads101x_t* ads)
 	return result;
 }
 
-int ads101x_single_read(ads101x_t* ads,
+int ads101x_single_read(const ads101x_t* ads,
 			ADS101X_INPUT index,
 			int16_t* return_value,
 			uint32_t timeout_ms)
@@ -311,7 +311,7 @@ ads101x_single_read_exit:
 	return ret;
 }
 
-int ads101x_unsigned_single_read(ads101x_t* ads,
+int ads101x_unsigned_single_read(const ads101x_t* ads,
 				 ADS101X_INPUT index,
 				 uint16_t* return_value,
 				 uint32_t timeout_ms)
@@ -328,7 +328,7 @@ int ads101x_unsigned_single_read(ads101x_t* ads,
 						  return_value);
 }
 
-int ads101x_continuous_read(ads101x_t* ads,
+int ads101x_continuous_read(const ads101x_t* ads,
 			    ADS101X_INPUT index,
 			    int16_t* return_value,
 			    uint32_t timeout_ms)
@@ -375,7 +375,7 @@ ads101x_continuous_read_exit:
 	return ret;
 }
 
-int ads101x_unsigned_continuous_read(ads101x_t* ads,
+int ads101x_unsigned_continuous_read(const ads101x_t* ads,
 				     ADS101X_INPUT index,
 				     uint16_t* return_value,
 				     uint32_t timeout_ms)
@@ -392,7 +392,7 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
 						  return_value);
 }
 
-int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr)
+int ads101x_get_fs(const ads101x_t* ads, ADS101X_DATA_RATE* dr)
 {
 	ADS101X_DATA_RATE local_dr;
 	uint16_t cfg_reg;
@@ -406,7 +406,9 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr)
 	return 0;
 }
 
-int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms)
+int ads101x_set_fs(const ads101x_t* ads,
+		   ADS101X_DATA_RATE dr,
+		   uint32_t timeout_ms)
 {
 	ADS101X_LOCK(ads, timeout_ms);
 

@@ -101,13 +101,13 @@ void fake_i2c_answers(const uint8_t* bytes, size_t len);
  * Bodies for the CMock stubs of the platform layer. The trailing int is CMock's
  * call counter, part of the callback signature.
  */
-ssize_t fake_i2c_write(i2c_interface_t* i2c,
+ssize_t fake_i2c_write(const i2c_interface_t* i2c,
 		       plc_i2c_addr_t addr,
 		       const uint8_t* to_write,
 		       size_t to_write_len,
 		       int num_calls);
 
-ssize_t fake_i2c_write_then_read(i2c_interface_t* i2c,
+ssize_t fake_i2c_write_then_read(const i2c_interface_t* i2c,
 				 plc_i2c_addr_t addr,
 				 const uint8_t* to_write,
 				 size_t to_write_len,

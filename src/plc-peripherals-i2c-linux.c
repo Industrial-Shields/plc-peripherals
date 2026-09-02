@@ -29,7 +29,7 @@
 #include <stdbool.h>
 #include <errno.h>
 
-static inline bool is_i2c_platform_correct(i2c_interface_t* i2c)
+static inline bool is_i2c_platform_correct(const i2c_interface_t* i2c)
 {
 	return false;
 }
@@ -43,13 +43,15 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 	return NULL;
 }
 
+// cppcheck-suppress constParameterPointer
 int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 {
 	return -1;
 }
 
-int i2c_get_bus(i2c_interface_t* i2c, uint8_t* bus)
+int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 {
+	// cppcheck-suppress knownConditionTrueFalse
 	if (!is_i2c_platform_correct(i2c)) {
 		errno = EINVAL;
 		return -1;
@@ -59,7 +61,7 @@ int i2c_get_bus(i2c_interface_t* i2c, uint8_t* bus)
 	return 0;
 }
 
-ssize_t i2c_write(i2c_interface_t* i2c,
+ssize_t i2c_write(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
 		  const uint8_t* to_write,
 		  size_t to_write_len)
@@ -74,8 +76,9 @@ ssize_t i2c_write(i2c_interface_t* i2c,
 	return 0;
 }
 
-ssize_t i2c_read(i2c_interface_t* i2c,
+ssize_t i2c_read(const i2c_interface_t* i2c,
 		 plc_i2c_addr_t addr,
+		 // cppcheck-suppress constParameterPointer
 		 uint8_t* to_read,
 		 size_t to_read_len)
 {
@@ -90,12 +93,14 @@ ssize_t i2c_read(i2c_interface_t* i2c,
 	return 0;
 }
 
-ssize_t i2c_write_then_read(i2c_interface_t* i2c,
+ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    plc_i2c_addr_t addr,
 			    const uint8_t* to_write,
 			    size_t to_write_len,
+			    // cppcheck-suppress constParameterPointer
 			    uint8_t* to_read,
 			    size_t to_read_len,
+			    // cppcheck-suppress constParameterPointer
 			    size_t* read_bytes)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)

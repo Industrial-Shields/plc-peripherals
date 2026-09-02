@@ -36,10 +36,10 @@ extern "C" {
  * Write a byte to a register of the given I2C address.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)     - I2C interface to write to.
- *   addr (plc_i2c_addr_t)      - I2C address to write to.
- *   reg (uint8_t)              - Register address.
- *   to_write (uint8_t)         - Value to write to the register
+ *   i2c (const i2c_interface_t*)  - I2C interface to write to.
+ *   addr (plc_i2c_addr_t)         - I2C address to write to.
+ *   reg (uint8_t)                 - Register address.
+ *   to_write (uint8_t)            - Value to write to the register
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
@@ -52,7 +52,7 @@ extern "C" {
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error.
  */
-int i2c_write8_8b(i2c_interface_t* i2c,
+int i2c_write8_8b(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
 		  uint8_t reg,
 		  uint8_t to_write);
@@ -63,10 +63,10 @@ int i2c_write8_8b(i2c_interface_t* i2c,
  * Write a byte to a register of the given I2C address.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)     - I2C interface to write to.
- *   addr (plc_i2c_addr_t)      - I2C address to write to.
- *   reg (uint8_t)              - Register address.
- *   to_write (uint16_t)        - Value to write to the register
+ *   i2c (const i2c_interface_t*)  - I2C interface to write to.
+ *   addr (plc_i2c_addr_t)         - I2C address to write to.
+ *   reg (uint8_t)                 - Register address.
+ *   to_write (uint16_t)           - Value to write to the register
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
@@ -79,7 +79,7 @@ int i2c_write8_8b(i2c_interface_t* i2c,
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error.
  */
-int i2c_write8_16b(i2c_interface_t* i2c,
+int i2c_write8_16b(const i2c_interface_t* i2c,
 		   plc_i2c_addr_t addr,
 		   uint8_t reg,
 		   uint16_t to_write);
@@ -90,10 +90,10 @@ int i2c_write8_16b(i2c_interface_t* i2c,
  * Read a one-byte register from the given I2C address.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)     - I2C interface to read to.
- *   addr (plc_i2c_addr_t)      - I2C address to read to.
- *   reg (uint8_t)              - Register address.
- *   to_read (uint8_t*)         - Pointer to save the register value.
+ *   i2c (const i2c_interface_t*)  - I2C interface to read to.
+ *   addr (plc_i2c_addr_t)         - I2C address to read to.
+ *   reg (uint8_t)                 - Register address.
+ *   to_read (uint8_t*)            - Pointer to save the register value.
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
@@ -106,7 +106,7 @@ int i2c_write8_16b(i2c_interface_t* i2c,
  *     - ESP32 specific       :
  *       - EIO                : i2cRead function reported some error.
  */
-int i2c_read8_8b(i2c_interface_t* i2c,
+int i2c_read8_8b(const i2c_interface_t* i2c,
 		 plc_i2c_addr_t addr,
 		 uint8_t reg,
 		 uint8_t* to_read);
@@ -117,10 +117,10 @@ int i2c_read8_8b(i2c_interface_t* i2c,
  * Read a one-byte register from the given I2C address.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)     - I2C interface to read to.
- *   addr (plc_i2c_addr_t)      - I2C address to read to.
- *   reg (uint8_t)              - Register address.
- *   to_read (uint16_t*)        - Pointer to save the register value.
+ *   i2c (const i2c_interface_t*)  - I2C interface to read to.
+ *   addr (plc_i2c_addr_t)         - I2C address to read to.
+ *   reg (uint8_t)                 - Register address.
+ *   to_read (uint16_t*)           - Pointer to save the register value.
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
@@ -133,7 +133,7 @@ int i2c_read8_8b(i2c_interface_t* i2c,
  *     - ESP32 specific       :
  *       - EIO                : i2cRead function reported some error.
  */
-int i2c_read8_16b(i2c_interface_t* i2c,
+int i2c_read8_16b(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
 		  uint8_t reg,
 		  uint16_t* to_read);

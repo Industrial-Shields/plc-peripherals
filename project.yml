@@ -291,10 +291,14 @@
   :enable_checks: []
   :platform: ''
   :standard: ''
+  :check_level: exhaustive
   :inline_suppressions: true
   :suppressions:
     - missingIncludeSystem
     - unusedFunction
+  :options:
+    - --force
+    - --inconclusive
 
 # :module_generator:
 #   :naming: :snake #options: :bumpy, :camel, :caps, or :snake

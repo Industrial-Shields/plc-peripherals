@@ -57,7 +57,7 @@ int plc_mutex_destroy(plc_mutex_t* mutex)
 	return -1;
 }
 
-int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout)
+int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (mutex == NULL) {
@@ -79,8 +79,8 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout)
 		return -1;
 	}
 
-	deadline.tv_sec = start.tv_sec + timeout / 1000;
-	deadline.tv_nsec = start.tv_nsec + (timeout % 1000) * 1000000L;
+	deadline.tv_sec = start.tv_sec + timeout_ms / 1000;
+	deadline.tv_nsec = start.tv_nsec + (timeout_ms % 1000) * 1000000L;
 	if (deadline.tv_nsec >= 1000000000L) {
 		deadline.tv_sec++;
 		deadline.tv_nsec -= 1000000000L;
