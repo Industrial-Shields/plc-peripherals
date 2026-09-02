@@ -34,6 +34,12 @@ _Static_assert(sizeof(plc_resource_t) >= 4,
 	       "plc_resource_t (unsigned int) must be at least 32 bits wide "
 	       "to hold the type/bus/address encoding");
 
+/*
+ * HASH_FIND_INT/HASH_ADD_INT/HASH_ITER/HASH_DEL are uthash macros: each
+ * expands into internal branches that our test hash tables, holding only
+ * one or two entries, never take.
+ */
+
 typedef struct {
 	plc_resource_t resource;
 	plc_mutex_t* mutex;
@@ -64,12 +70,12 @@ int plc_resource_deinit(void)
 		lock_hash_table_t* current_lock;
 		lock_hash_table_t* tmp;
 
-		HASH_ITER(hh, locks, current_lock, tmp)
+		HASH_ITER(hh, locks, current_lock, tmp) // GCOVR_EXCL_BR_LINE
 		{
 			if (plc_mutex_destroy(current_lock->mutex) != 0) {
 				return -1;
 			}
-			HASH_DEL(locks, current_lock);
+			HASH_DEL(locks, current_lock); // GCOVR_EXCL_BR_LINE
 			free(current_lock);
 		}
 		locks = NULL;
@@ -91,12 +97,13 @@ int plc_resource_add(plc_resource_t resource)
 	lock_hash_table_t* tmp = NULL;
 
 	int ret;
-	HASH_FIND_INT(locks, &resource, tmp);
+	HASH_FIND_INT(locks, &resource, tmp); // GCOVR_EXCL_BR_LINE
 	if (tmp == NULL) {
 		tmp = (lock_hash_table_t*)malloc(sizeof(lock_hash_table_t));
-		if (tmp == NULL) {
-			ret = -1;
-			goto plc_resource_add_exit;
+		// Real malloc failure isn't exercised in tests.
+		if (tmp == NULL) { // GCOVR_EXCL_BR_LINE
+			ret = -1; // GCOVR_EXCL_LINE
+			goto plc_resource_add_exit; // GCOVR_EXCL_LINE
 		}
 		tmp->resource = resource;
 		tmp->mutex = plc_mutex_create();
@@ -113,7 +120,7 @@ int plc_resource_add(plc_resource_t resource)
 		 * TODO: Adapt uthash to not abort in this case.
 		 */
 		// cppcheck-suppress unreachableCode
-		HASH_ADD_INT(locks, resource, tmp);
+		HASH_ADD_INT(locks, resource, tmp); // GCOVR_EXCL_BR_LINE
 		ret = 0;
 	} else {
 		errno = EEXIST;
@@ -134,13 +141,13 @@ int plc_resource_remove(plc_resource_t resource)
 	lock_hash_table_t* tmp = NULL;
 
 	int ret;
-	HASH_FIND_INT(locks, &resource, tmp);
+	HASH_FIND_INT(locks, &resource, tmp); // GCOVR_EXCL_BR_LINE
 	if (tmp != NULL) {
 		if (plc_mutex_destroy(tmp->mutex) != 0) {
 			ret = -1;
 			goto plc_resource_remove_exit;
 		}
-		HASH_DEL(locks, tmp);
+		HASH_DEL(locks, tmp); // GCOVR_EXCL_BR_LINE
 		free(tmp);
 		ret = 0;
 	} else {
@@ -160,7 +167,7 @@ int plc_resource_lock(plc_resource_t resource, uint32_t timeout_ms)
 	if (plc_mutex_acquire(hash_mutex, 1) != 0) {
 		return -1;
 	}
-	HASH_FIND_INT(locks, &resource, tmp);
+	HASH_FIND_INT(locks, &resource, tmp); // GCOVR_EXCL_BR_LINE
 	// We should release the hash table whenever possible
 	plc_mutex_release(hash_mutex);
 
@@ -182,7 +189,7 @@ int plc_resource_unlock(plc_resource_t resource)
 	if (plc_mutex_acquire(hash_mutex, HASH_MUTEX_TIMEOUT) != 0) {
 		return -1;
 	}
-	HASH_FIND_INT(locks, &resource, tmp);
+	HASH_FIND_INT(locks, &resource, tmp); // GCOVR_EXCL_BR_LINE
 	// We should release the hash table whenever possible
 	plc_mutex_release(hash_mutex);
 
