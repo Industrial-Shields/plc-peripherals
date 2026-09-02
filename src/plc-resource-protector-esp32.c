@@ -39,6 +39,8 @@ plc_mutex_t* plc_mutex_create(void)
 	if (mutex_struct != NULL) {
 		ECM(mutex_struct)->m = xSemaphoreCreateMutex();
 		if (ECM(mutex_struct)->m == NULL) {
+			// Ensure errno is set
+			errno = ENOMEM;
 			free(mutex_struct);
 			mutex_struct = NULL;
 		} else {
