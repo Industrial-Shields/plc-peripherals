@@ -200,6 +200,32 @@ void test_plc_resource_add_keeps_resources_of_different_types_independent(void)
 	TEST_ASSERT_EQUAL_INT(0, plc_resource_add(RES_GPIO));
 }
 
+/* ----------------------------- I2C_RESOURCE ------------------------------- */
+
+void test_I2C_RESOURCE_packs_type_bus_and_address_into_the_documented_layout(
+	void)
+{
+	// type (bits 31-28) | bus (bits 17-10) | address (bits 9-0)
+	TEST_ASSERT_EQUAL_UINT32(0x10000050u, I2C_RESOURCE(0, 0x50));
+	TEST_ASSERT_EQUAL_UINT32(0x10000450u, I2C_RESOURCE(1, 0x50));
+}
+
+void test_I2C_RESOURCE_masks_a_bus_that_overflows_its_8_bits(void)
+{
+	// 0x100 is the first bus value that doesn't fit in 8 bits; it must wrap
+	// to the same encoding as bus 0 rather than bleed into neighboring bits.
+	TEST_ASSERT_EQUAL_UINT32(
+		I2C_RESOURCE(0, 0x50), I2C_RESOURCE(0x100, 0x50));
+}
+
+void test_I2C_RESOURCE_masks_an_address_that_overflows_its_10_bits(void)
+{
+	// 0x400 is the first address value that doesn't fit in 10 bits; it must
+	// wrap to the same encoding as address 0 rather than bleed into the bus
+	// field.
+	TEST_ASSERT_EQUAL_UINT32(I2C_RESOURCE(0, 0), I2C_RESOURCE(0, 0x400));
+}
+
 /* -------------------------- plc_resource_remove --------------------------- */
 
 void test_plc_resource_remove_succeeds(void)
