@@ -67,7 +67,9 @@ format:
 	clang-format -i include/* src/* test/*.c
 
 coverage:
+	rm -rf $(BUILD_DIR)/test/gcov $(BUILD_DIR)/test/artifacts/gcov
 	ceedling gcov:all
+	@cat build/test/artifacts/gcov/gcovr/coverage.txt
 
 cppcheck:
 	rm -rf $(BUILD_DIR)/test/cppcheck

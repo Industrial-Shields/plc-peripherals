@@ -247,16 +247,19 @@
 # You will need to have gcov and gcovr both installed to make it work.
 # For more information on these options, see docs in plugins/gcov
 :gcov:
-  :summaries: TRUE                # Enable simple coverage summaries to console after tests
+  # The console summary below runs plain `gcov`, which has no concept of our
+  # GCOVR_EXCL_LINE/GCOVR_EXCL_BR_LINE markers and so under-reports coverage.
+  # Disabled in favor of the gcovr Text report below.
+  :summaries: FALSE               # Enable simple coverage summaries to console after tests
   :report_task: FALSE             # Disabled dedicated report generation task (this enables automatic report generation)
   :utilities:
     - gcovr           # Use gcovr to create the specified reports (default).
     #- ReportGenerator # Use ReportGenerator to create the specified reports.
   :reports: # Specify one or more reports to generate.
     # Make an HTML summary report.
-    - HtmlBasic
+    # - HtmlBasic
     # - HtmlDetailed
-    # - Text
+    - Text
     # - Cobertura
     # - SonarQube
     # - JSON
@@ -281,6 +284,7 @@
     :html_high_threshold: 90
     # :html_absolute_paths: TRUE
     # :html_encoding: UTF-8
+    :print_summary: TRUE
 
 :cppcheck:
   :reports:
