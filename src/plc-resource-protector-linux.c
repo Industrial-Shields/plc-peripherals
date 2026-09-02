@@ -50,6 +50,7 @@ int plc_mutex_destroy(plc_mutex_t* mutex)
 
 	int result = pthread_mutex_destroy((pthread_mutex_t*)mutex);
 	if (result == 0) {
+		free(mutex);
 		return 0;
 	}
 
