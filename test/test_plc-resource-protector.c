@@ -37,7 +37,7 @@
  * PLC_RESOURCE_I2C.
  */
 #define GPIO_RESOURCE(pin) \
-	((plc_resource_t)((uint64_t)PLC_RESOURCE_GPIO << 56) | (pin))
+	((plc_resource_t)((unsigned int)PLC_RESOURCE_GPIO << 24) | (pin))
 
 #define RES_A ((plc_resource_t)I2C_RESOURCE(0, 0x50))
 #define RES_B ((plc_resource_t)I2C_RESOURCE(1, 0x50))
@@ -178,21 +178,6 @@ void test_plc_resource_add_fails_when_the_hash_mutex_cant_be_acquired(void)
 
 void test_plc_resource_add_keeps_resources_on_different_buses_independent(void)
 {
-	/*
-	 * Known bug: HASH_ADD_INT/HASH_FIND_INT (uthash) only hash and compare
-	 * sizeof(int) == 4 bytes of the plc_resource_t key. I2C_RESOURCE packs
-	 * the address in the low 16 bits and the bus in bits 48-55, so the bus
-	 * (and the resource type) never actually take part in the lookup: two
-	 * devices with the same address on different buses collide and share
-	 * one lock, contradicting the intent of commit 89b389e ("Include the
-	 * bus number in the resource key").
-	 */
-	TEST_IGNORE_MESSAGE(
-		"plc_resource_add treats same-address resources on different "
-		"buses as the same resource: HASH_ADD_INT/HASH_FIND_INT only "
-		"compare the low 4 bytes of plc_resource_t, so the bus field "
-		"is never checked.");
-
 	plc_mutex_acquire_IgnoreAndReturn(0);
 	plc_mutex_release_IgnoreAndReturn(0);
 
@@ -205,19 +190,6 @@ void test_plc_resource_add_keeps_resources_on_different_buses_independent(void)
 
 void test_plc_resource_add_keeps_resources_of_different_types_independent(void)
 {
-	/*
-	 * Same known bug as above: RES_A (I2C, bus 0, address 0x50) and
-	 * RES_GPIO (GPIO, pin 0x50) only differ in the top byte
-	 * (plc_resource_type), which HASH_ADD_INT/HASH_FIND_INT never look at
-	 * either, so a GPIO resource collides with an I2C resource that
-	 * happens to share the same low bits.
-	 */
-	TEST_IGNORE_MESSAGE(
-		"plc_resource_add treats a GPIO resource and an I2C resource "
-		"with the same low bits as the same resource: "
-		"HASH_ADD_INT/HASH_FIND_INT only compare the low 4 bytes of "
-		"plc_resource_t, so the resource type is never checked.");
-
 	plc_mutex_acquire_IgnoreAndReturn(0);
 	plc_mutex_release_IgnoreAndReturn(0);
 

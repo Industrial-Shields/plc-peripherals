@@ -39,11 +39,24 @@ typedef enum {
 	PLC_RESOURCE_I2C,
 } plc_resource_type;
 
-typedef uint64_t plc_resource_t;
+/*
+ * HASH_FIND_INT/HASH_ADD_INT compare exactly sizeof(int) bytes of the
+ * key, so use unsigned int as the key type.
+ *
+ * Bits 31-28 are always the plc_resource_type. I2C_RESOURCE lays out the
+ * other 28 bits as:
+ *   31       28 27              18 17       10 9              0
+ *  +----------+--------------------+-----------+----------------+
+ *  |   type   |       unused       |    bus    |     address    |
+ *  +----------+--------------------+-----------+----------------+
+ *       4              10                8              10
+ */
+typedef unsigned int plc_resource_t;
 
-#define I2C_RESOURCE(bus, address)                             \
-	(((plc_resource_t)((uint64_t)PLC_RESOURCE_I2C << 56) | \
-	  ((plc_resource_t)((uint64_t)(bus)) << 48) | (address)))
+#define I2C_RESOURCE(bus, address)                                 \
+	(((plc_resource_t)((unsigned int)PLC_RESOURCE_I2C << 28) | \
+	  (((plc_resource_t)((unsigned int)bus) & 0xFFu) << 10) |  \
+	  ((plc_resource_t)((unsigned int)address) & 0x3FFu)))
 
 /**
  * plc_resource_init

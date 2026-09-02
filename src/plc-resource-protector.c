@@ -24,6 +24,16 @@
 
 #include <errno.h>
 
+/*
+ * HASH_FIND_INT/HASH_ADD_INT hash and compare exactly sizeof(int) bytes of
+ * the key, regardless of the key field's own type. plc_resource_t must fit
+ * within that many bytes, or the upper bytes are silently dropped from the
+ * lookup.
+ */
+_Static_assert(sizeof(plc_resource_t) >= 4,
+	       "plc_resource_t (unsigned int) must be at least 32 bits wide "
+	       "to hold the type/bus/address encoding");
+
 typedef struct {
 	plc_resource_t resource;
 	plc_mutex_t* mutex;
