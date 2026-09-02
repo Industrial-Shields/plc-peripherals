@@ -33,9 +33,8 @@ static const char* TAG = "plc-peripherals-i2c";
 struct _i2c_interface_t {
 	uint8_t bus_number;
 };
-static uint32_t MAXIMUM_I2C_TIMEOUT = 25;
-static uint16_t MAXIMUM_I2C_ADDRESS = 1024;
-
+static const uint32_t MAXIMUM_I2C_TIMEOUT = 25;
+static const uint16_t MAXIMUM_I2C_ADDRESS = 1024;
 static inline bool is_i2c_platform_correct(const i2c_interface_t* i2c)
 {
 	return i2c != NULL && i2c->bus_number < SOC_I2C_NUM;
