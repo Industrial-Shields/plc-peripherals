@@ -293,6 +293,10 @@
   :standard: ''
   :check_level: exhaustive
   :inline_suppressions: true
+  # Without this, cppcheck never explores a configuration with the macro
+  # defined, so every argument-check block goes unanalyzed.
+  :defines:
+    - PLC_PERIPHERALS_CHECK_ARGUMENTS
   :suppressions:
     - missingIncludeSystem
     - unusedFunction

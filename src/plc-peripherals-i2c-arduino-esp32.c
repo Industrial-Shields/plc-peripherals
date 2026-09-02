@@ -108,7 +108,7 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		  size_t to_write_len)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (is_i2c_platform_correct(i2c) || is_i2c_address_valid(addr) ||
+	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
 	    to_write == NULL) {
 		errno = EINVAL;
 		return -1;
@@ -140,7 +140,7 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		 size_t to_read_len)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (is_i2c_platform_correct(i2c) || is_i2c_address_valid(addr) ||
+	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
 	    to_read == NULL) {
 		errno = EINVAL;
 		return -1;
@@ -176,7 +176,7 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    size_t* read_bytes)
 {
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (is_i2c_platform_correct(i2c) || is_i2c_address_valid(addr) ||
+	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
 	    to_write == NULL || to_read == NULL) {
 		errno = EINVAL;
 		return -1;
