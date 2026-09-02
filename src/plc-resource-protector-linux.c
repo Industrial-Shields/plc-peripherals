@@ -31,7 +31,7 @@ plc_mutex_t* plc_mutex_create(void)
 {
 	pthread_mutex_t* mutex = malloc(sizeof(pthread_mutex_t));
 
-	if (mutex != NULL) {
+	if (mutex != NULL) { // GCOVR_EXCL_BR_LINE
 		pthread_mutexattr_t attr;
 		pthread_mutexattr_init(&attr);
 		pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
