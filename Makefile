@@ -45,7 +45,7 @@ SRCS := $(filter-out $(SRC_DIR)/expanded-gpio.c, $(wildcard $(SRC_DIR)/*.c))
 OBJS := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
 LIB := $(BUILD_DIR)/$(LIBNAME)
 
-.PHONY: all tests format clean
+.PHONY: all tests coverage cppcheck valgrind check format clean
 
 all: $(LIB)
 
@@ -64,7 +64,28 @@ tests:
 	ceedling test:all
 
 format:
-	clang-format -i {include,src}/* test/*.c
+	clang-format -i include/* src/* test/*.c
+
+coverage:
+	ceedling gcov:all
+
+cppcheck:
+	rm -rf $(BUILD_DIR)/test/cppcheck
+	ceedling cppcheck:all
+	@cat build/test/artifacts/cppcheck/CppcheckReport.txt
+
+valgrind:
+	rm -f build/test/artifacts/valgrind/*.log
+	ceedling valgrind:all; \
+	for f in build/test/artifacts/valgrind/*.log; do \
+		echo "=== $$(basename "$$f") ==="; \
+		cat "$$f"; \
+	done
+
+check: format $(LIB)
+	rm -rf $(BUILD_DIR)/test/cppcheck
+	rm -f build/test/artifacts/valgrind/*.log
+	ceedling test:all cppcheck:all gcov:all valgrind:all
 
 clean:
 	rm -rf $(BUILD_DIR)
