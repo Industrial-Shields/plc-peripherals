@@ -357,7 +357,15 @@ int ads101x_continuous_read(const ads101x_t* ads,
 			ret = -1;
 			goto ads101x_continuous_read_exit;
 		}
-		// Delay until the first conversion
+		/*
+		 * Changing the MUX doesn't take effect until the conversion
+		 * already in flight finishes: that one still belongs to the
+		 * old channel. Only the conversion started after it reflects
+		 * the new channel, so wait two conversion periods, not one -
+		 * one to let the stale in-flight conversion finish, one more
+		 * for a full fresh conversion of the new channel to complete.
+		 */
+		ads101x_delay_until_conversion(ADS101X_GET_DR(new_cfg_reg));
 		ads101x_delay_until_conversion(ADS101X_GET_DR(new_cfg_reg));
 	}
 
