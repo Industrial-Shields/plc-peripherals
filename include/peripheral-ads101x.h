@@ -168,8 +168,20 @@ int ads101x_unprotect(ads101x_t* ads);
  * ads101x_single_read
  *
  * Retrieve the reading from an ADS101X channel. This function will block until
- * a valid reading is available. To use it, the ADS101X must be in single
- * mode.
+ * a valid reading is available. To use it, the ADS101X must be in single mode
+ * (ads101x_init must have been called with set_continuous_mode=false).
+ *
+ * Per the ADS1015 datasheet (SBAS473F, section 7.4.2.1 and the OS bit's entry
+ * in Table 8-4), the OS bit "can only be written when in power-down state and
+ * has no effect when a conversion is ongoing". Single mode returns the device
+ * to power-down between conversions, so this trigger normally works as
+ * intended. But in continuous mode the device is, by definition, always either
+ * converting or immediately starting its next conversion, so the OS bit this
+ * function writes is silently ignored.  Calling this function while the device
+ * is actually in continuous mode does NOT trigger a new conversion of the
+ * requested channel: it just reads back whatever value the free-running
+ * continuous conversion happens to hold at that instant, which may belong to a
+ * different channel or be stale relative to the one requested here.
  *
  * Parameters:
  *   ads (const ads101x_t*)  - The ADS101X to interact with.
@@ -199,7 +211,9 @@ int ads101x_single_read(const ads101x_t* ads,
  *
  * Retrieve the reading from an ADS101X channel. This function will block until
  * a valid reading is available. To use it, the ADS101X must be in single
- * mode.
+ * mode (ads101x_init must have been called with set_continuous_mode=false).
+ * See ads101x_single_read's doc comment above for exactly why this
+ * precondition matters.
  *
  * This function will return an error if the reading is 3 bits negative (less
  * than -8, triple the datasheet offset), and will set errno to ERANGE.
@@ -233,7 +247,18 @@ int ads101x_unsigned_single_read(const ads101x_t* ads,
  *
  * Retrieve the reading from an ADS101X channel. If the asked channel is not the
  * one being mesured, this function will block until a valid reading is
- * available. To use it, the ADS101X must be in continuous mode.
+ * available. To use it, the ADS101X must be in continuous mode (ads101x_init
+ * must have been called with set_continuous_mode=true).
+ *
+ * This function never touches the CONFIG register's OS bit -- it relies
+ * entirely on continuous mode's free-running conversions, only writing new MUX
+ * bits when the requested channel changes. If the device is actually in single
+ * mode instead (idle, powered down between conversions), this function has no
+ * way to trigger a fresh conversion of the requested channel (although
+ * depending on the OS bit's state at the moment of the write, it may
+ * coincidentally trigger one anyway). Don't mix ads101x_continuous_read with a
+ * device initialized via set_continuous_mode=false; use ads101x_single_read for
+ * that device instead.
  *
  * Parameters:
  *   ads (const ads101x_t*)  - The ADS101X to interact with.
@@ -263,7 +288,10 @@ int ads101x_continuous_read(const ads101x_t* ads,
  *
  * Retrieve the reading from an ADS101X channel. If the asked channel is not the
  * one being mesured, this function will block until a valid reading is
- * available. To use it, the ADS101X must be in continuous mode.
+ * available. To use it, the ADS101X must be in continuous mode
+ * (ads101x_init must have been called with set_continuous_mode=true). See
+ * ads101x_continuous_read's doc comment above for exactly why this
+ * precondition matters.
  *
  * This function will return an error if the reading is 3 bits negative (less
  * than -8, triple the datasheet offset), and will set errno to ERANGE.
