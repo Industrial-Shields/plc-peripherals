@@ -321,20 +321,17 @@ int mcp230xx_set_input(const mcp230xx_t* mcp,
 		 * Update the GPPU before the IODIR register, ensure no
 		 * accidental pull-ups.
 		 */
-		if (change_gppu) {
-			result = i2c_write8_8b(
-				PASS_MCP(mcp), gppu_addr, gppu_reg);
-			if (result != 0) {
-				goto set_input_error_cleanup;
-			}
+		if (change_gppu &&
+		    i2c_write8_8b(PASS_MCP(mcp), gppu_addr, gppu_reg) != 0) {
+			result = -1;
+			goto set_input_error_cleanup;
 		}
-		if (change_iodir) {
-			result = i2c_write8_8b(
-				PASS_MCP(mcp), iodir_addr, iodir_reg);
-			if (result != 0) {
-				goto set_input_error_cleanup;
-			}
+		if (change_iodir &&
+		    i2c_write8_8b(PASS_MCP(mcp), iodir_addr, iodir_reg) != 0) {
+			result = -1;
+			goto set_input_error_cleanup;
 		}
+		result = 0;
 	}
 
 set_input_error_cleanup:
