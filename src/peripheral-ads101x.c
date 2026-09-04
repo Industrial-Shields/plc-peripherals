@@ -423,11 +423,41 @@ int ads101x_get_fs(const ads101x_t* ads, ADS101X_DATA_RATE* dr, uint32_t timeout
 
 int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms)
 {
+	int ret;
+
 	ADS101X_LOCK(ads, timeout_ms);
 
 	ADS101X_SET_DR(ads->expected_cfg_reg, dr);
 
+	if (ADS101X_IS_CONTINUOUS_MODE(ads) &&
+	    ads->expected_cfg_reg != ads->old_cfg_reg) {
+		if (i2c_write8_16b(PASS_ADS(ads),
+				   CONFIG_REG,
+				   ads->expected_cfg_reg) != 0) {
+			ret = -1;
+			goto ads101x_set_fs_exit;
+		}
+
+		/*
+		 * Per the datasheet (SBAS473F 7.4.2.2), the conversion already
+		 * in flight completes with the PREVIOUS settings; only the one
+		 * after it uses the new ones. Nothing but this function writes
+		 * CONFIG_REG, so that in-flight conversion is necessarily
+		 * still running at old_cfg_reg's rate: wait it out, then wait
+		 * one full conversion at the new rate.
+		 */
+		ads101x_delay_until_conversion(
+			ADS101X_GET_DR(ads->old_cfg_reg));
+		ads101x_delay_until_conversion(
+			ADS101X_GET_DR(ads->expected_cfg_reg));
+
+		ads->old_cfg_reg = ads->expected_cfg_reg;
+	}
+
+	ret = 0;
+
+ads101x_set_fs_exit:
 	ADS101X_UNLOCK(ads);
 
-	return 0;
+	return ret;
 }

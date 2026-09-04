@@ -825,15 +825,15 @@ void test_ads101x_continuous_read_writes_on_a_channel_change(void)
 	free(ads);
 }
 
-void test_ads101x_continuous_read_writes_when_only_the_rate_changed(void)
+void test_ads101x_continuous_read_reads_directly_after_set_fs_already_settled_the_rate(
+	void)
 {
-	// Same channel as the one already selected, but ads101x_set_fs
-	// changed the cached rate without touching hardware: expected_cfg_reg
-	// now disagrees with old_cfg_reg on the DR bits alone, and that must
-	// still trigger a CONFIG_REG write (and the two-period wait).
+	/*
+	 * ads101x_set_fs now writes CONFIG_REG and waits out the switch
+	 * itself in continuous mode, syncing
+	 * old_cfg_reg before returning.
+	 */
 	ads101x_t* ads = create_ads(true);
-
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
 
 	// DR bits (7-5) replaced: 0xA0 (FAST_DR) -> 0x60 (920SPS).
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
@@ -842,68 +842,13 @@ void test_ads101x_continuous_read_writes_when_only_the_rate_changed(void)
 				       (INIT_RESTART_CFG_CONTINUOUS & ~0xE0) |
 					       0x60,
 				       0);
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
-
-	free(ads);
-}
-
-void test_ads101x_continuous_read_waits_for_both_the_old_and_new_conversion_rate(
-	void)
-{
-	/*
-	 * Regression test for "wait two conversion periods after a channel
-	 * switch": the in-flight conversion (started before the switch)
-	 * finishes at the OLD rate, so that period must be waited out in
-	 * full before the NEW rate's own conversion period is also waited
-	 * out -- not just one or the other, and not the new rate twice.
-	 *
-	 * The ads is created at SLOW_DR (~8984us/period) and switched to
-	 * FAST_DR (~479us/period) right before a channel change, so the
-	 * three wrong implementations this guards against land far outside
-	 * the correct window:
-	 *   - correct (old once + new once):        ~9463us
-	 *   - only the new rate, once (the original pre-fix bug): ~479us
-	 *   - the new rate, twice:                    ~958us
-	 *   - the old rate, twice (not otherwise ruled out here): ~17968us
-	 * The bounds below only need to separate "correct" from those; they
-	 * leave generous slack for scheduling jitter, the same way
-	 * test_plc-resource-protector-platform.c's elapsed_ms assertions do.
-	 */
-	expect_ads101x_reset_writes();
-	// Same derivation as INIT_RESTART_CFG_CONTINUOUS, but with SLOW_DR's
-	// DR bits (0b000) instead of FAST_DR's.
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0203, 0);
-	ads101x_t* ads = ads101x_init(
-		TEST_I2C, TEST_ADDR, true, true, ADS101X_FSR_4_096V, SLOW_DR);
-	TEST_ASSERT_NOT_NULL(ads);
-
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, FAST_DR, 1000));
-
-	// DR bits replaced (SLOW_DR's 0x00 -> FAST_DR's 0xA0); MUX set to P1_N3.
-	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-				       TEST_ADDR,
-				       CONFIG_REG,
-				       (INIT_RESTART_CFG_CONTINUOUS & ~0xE0) |
-					       0xA0 | 0x1000,
-				       0);
-	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
-
-	struct timespec start, end;
-	clock_gettime(CLOCK_MONOTONIC, &start);
-
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
-
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	long ms = elapsed_ms(start, end);
-	TEST_ASSERT_GREATER_OR_EQUAL_INT(8, ms);
-	TEST_ASSERT_LESS_THAN_INT(14, ms);
 
 	free(ads);
 }
@@ -1066,9 +1011,11 @@ void test_ads101x_set_fs_patches_only_the_dr_bits(void)
 
 	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
 
-	// Observe the effect through single_read's CONFIG_REG write: only the
-	// DR bits (0xA0 -> 0x60) should differ from INIT_RESTART_CFG_SINGLE;
-	// OS/MUX/PGA/MODE/COMP must survive untouched.
+	/*
+	 * Observe the effect through single_read's CONFIG_REG write: only the
+	 * DR bits (0xA0 -> 0x60) should differ from INIT_RESTART_CFG_SINGLE;
+	 * OS/MUX/PGA/MODE/COMP must survive untouched.
+	 */
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
 				       CONFIG_REG,
@@ -1102,6 +1049,91 @@ void test_ads101x_set_fs_fails_immediately_when_the_lock_times_out(void)
 	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 50, -1);
 
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(ads, ADS101X_920SPS, 50));
+
+	free(ads);
+}
+
+void test_ads101x_set_fs_writes_and_waits_when_the_rate_actually_changes_in_continuous_mode(
+	void)
+{
+	ads101x_t* ads = create_ads(true); // continuous, starts at FAST_DR
+
+	// DR bits (7-5) replaced: 0xA0 (FAST_DR) -> 0x60 (920SPS).
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       (INIT_RESTART_CFG_CONTINUOUS & ~0xE0) |
+					       0x60,
+				       0);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+
+	free(ads);
+}
+
+void test_ads101x_set_fs_fails_when_writing_the_config_reg_fails_in_continuous_mode(
+	void)
+{
+	ads101x_t* ads = create_ads(true); // continuous, starts at FAST_DR
+
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       (INIT_RESTART_CFG_CONTINUOUS & ~0xE0) |
+					       0x60,
+				       -1);
+
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+
+	free(ads);
+}
+
+void test_ads101x_set_fs_skips_the_write_when_the_rate_is_unchanged(void)
+{
+	ads101x_t* ads = create_ads(true); // continuous, starts at FAST_DR
+
+	// No i2c_write8_16b expectation queued: any write here is a bug.
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, FAST_DR, 1000));
+
+	free(ads);
+}
+
+void test_ads101x_set_fs_only_writes_in_single_mode_when_read_next(void)
+{
+	/*
+	 * Single mode never writes from set_fs itself.
+	 */
+	ads101x_t* ads = create_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+
+	free(ads);
+}
+
+void test_ads101x_set_fs_waits_for_both_the_old_and_new_conversion_rate(void)
+{
+	// Ensure we wait up to two cycles when changing sampling frequency
+	expect_ads101x_reset_writes();
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0203, 0);
+	ads101x_t* ads = ads101x_init(
+		TEST_I2C, TEST_ADDR, true, true, ADS101X_FSR_4_096V, SLOW_DR);
+	TEST_ASSERT_NOT_NULL(ads);
+
+	// DR bits replaced: SLOW_DR's 0x00 -> FAST_DR's 0xA0.
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, (0x0203 & ~0xE0) | 0xA0, 0);
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, FAST_DR, 1000));
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	long ms = elapsed_ms(start, end);
+	TEST_ASSERT_GREATER_OR_EQUAL_INT(8, ms);
+	TEST_ASSERT_LESS_THAN_INT(14, ms);
 
 	free(ads);
 }
