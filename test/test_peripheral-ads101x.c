@@ -24,16 +24,10 @@
  *
  * usleep() between a config write and the following conversion read is not
  * mocked; it's a real (short) sleep. Every test that exercises it picks a
- * fast data rate (ADS101X_2400SPS or faster) to keep the suite quick.
- *
- * The NULL/enabled_continuous_mode argument checks in ads101x_single_read and
- * ads101x_continuous_read are gated behind PLC_PERIPHERALS_CHECK_ARGUMENTS,
- * which defaults off and isn't enabled here, matching every other suite in
- * this project.
- *
- * ads101x_init's malloc failure isn't tested, matching the project's existing
- * convention of not testing bare allocation failure (see the resource
- * protector's own malloc/uthash exclusions).
+ * fast data rate (ADS101X_2400SPS or faster) to keep the suite quick, except
+ * the one test that deliberately measures elapsed wall-clock time to confirm
+ * ads101x_continuous_read waits out both the old and the new conversion
+ * period on a combined channel/rate change.
  */
 
 #include "unity.h"
@@ -45,87 +39,106 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define TEST_I2C ((i2c_interface_t*)0x1)
 #define TEST_ADDR ((plc_i2c_addr_t)0x48)
 #define TEST_BUS ((uint8_t)3)
 #define TEST_RESOURCE I2C_RESOURCE(TEST_BUS, TEST_ADDR)
 
-// Register addresses (private to peripheral-ads101x.c; mirrored here).
 #define CONVERSION_REG 0x00
 #define CONFIG_REG 0x01
+#define CONFIG_REG_OS 0x8000
+#define CONFIG_REG_MUX 0x7000
+#define CONFIG_REG_MUX_SHIFT 12
+#define CONFIG_REG_PGA 0xE00
+#define CONFIG_REG_PGA_SHIFT 9
+#define CONFIG_REG_MODE 0x100
+#define CONFIG_REG_DR 0xE0
+#define CONFIG_REG_DR_SHIFT 5
+#define CONFIG_REG_COMP 0x1F // COMP_MODE|COMP_POL|COMP_LAT|COMP_QUE
+#define CONFIG_REG_RESET_VALUE 0x8583
 #define LOW_THRESHOLD_REG 0x02
 #define HIGH_THRESHOLD_REG 0x03
 #define LOW_THRESHOLD_REG_RESET_VALUE 0x8000
 #define HIGH_THRESHOLD_REG_RESET_VALUE 0x7FFF
 
-// A data rate fast enough (~479us) that the real usleep() in
-// ads101x_delay_until_conversion doesn't slow the suite down.
+/*
+ * A data rate fast enough (~479us) that the real usleep() in
+ * ads101x_delay_until_conversion doesn't slow the suite down.
+ */
 #define FAST_DR ADS101X_2400SPS
+/*
+ * The slowest available data rate (~8984us), used only by the one test that
+ * deliberately measures elapsed time.
+ */
+#define SLOW_DR ADS101X_128SPS
 
 /*
  * CONFIG_REG value ads101x_init(restart=true) writes for
  * fsr=ADS101X_FSR_4_096V (0b001), dr=FAST_DR (0b101):
  *   OS=1 (0x8000) | MUX=000 (unchanged from reset) | PGA=001<<9 (0x200) |
- *   MODE (0x100 if single, 0 if continuous) | DR=101<<5 (0xA0) |
- *   COMP bits=000_11 (unchanged from CONFIG_REG_RESET_VALUE's 0x3)
+ *   MODE=1 (0x100, single-shot) | DR=101<<5 (0xA0) | COMP bits=000_11
+ *   (unchanged from CONFIG_REG_RESET_VALUE's 0x3)
  */
-#define INIT_RESTART_FSR ADS101X_FSR_4_096V
 #define INIT_RESTART_CFG_SINGLE 0x83A3 // 0x8000 | 0x200 | 0x100 | 0xA0 | 3
-#define INIT_RESTART_CFG_CONTINUOUS 0x83A3 - 0x100 // MODE bit cleared
-
-static void expect_ads101x_reset_writes(void)
-{
-	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-					TEST_ADDR,
-					HIGH_THRESHOLD_REG,
-					HIGH_THRESHOLD_REG_RESET_VALUE,
-					0);
-	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-					TEST_ADDR,
-					LOW_THRESHOLD_REG,
-					LOW_THRESHOLD_REG_RESET_VALUE,
-					0);
-}
 
 /*
- * CMock's ReturnThruPtr only stores the pointer we give it; the memcpy into
- * the caller's out-param happens later, when the mocked call actually runs.
- * Every test sets up all its expectations before calling the function under
- * test, so a single shared static would get overwritten by a later call in
- * the same test before any of them fire. Round-robin through a small pool
- * instead, so each pending expectation keeps its own value alive.
+ * Continuous mode additionally clears OS (0x8000) on top of MODE (0x100),
+ * unlike single mode's cfg above: 0x83A3 & ~0x100 & ~0x8000.
  */
-#define READ_VALUE_POOL_SIZE 4
-static uint16_t read_value_pool[READ_VALUE_POOL_SIZE];
-static int read_value_pool_index;
+#define INIT_RESTART_CFG_CONTINUOUS 0x02A3
+
+static uint16_t read_value;
 
 static void expect_i2c_read8_16b(uint8_t reg, uint16_t value, int retval)
 {
 	i2c_read8_16b_ExpectAndReturn(TEST_I2C, TEST_ADDR, reg, NULL, retval);
 	i2c_read8_16b_IgnoreArg_to_read();
 	if (retval == 0) {
-		TEST_ASSERT_LESS_THAN_INT(READ_VALUE_POOL_SIZE, read_value_pool_index);
-		read_value_pool[read_value_pool_index] = value;
-		i2c_read8_16b_ReturnThruPtr_to_read(
-			&read_value_pool[read_value_pool_index]);
-		read_value_pool_index++;
+		read_value = value;
+		i2c_read8_16b_ReturnThruPtr_to_read(&read_value);
 	}
+}
+
+static long elapsed_ms(struct timespec start, struct timespec end)
+{
+	return (end.tv_sec - start.tv_sec) * 1000L +
+	       (end.tv_nsec - start.tv_nsec) / 1000000L;
+}
+
+static void expect_ads101x_reset_writes(void)
+{
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       HIGH_THRESHOLD_REG,
+				       HIGH_THRESHOLD_REG_RESET_VALUE,
+				       0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       LOW_THRESHOLD_REG,
+				       LOW_THRESHOLD_REG_RESET_VALUE,
+				       0);
 }
 
 // Creates and initializes an ads101x_t via restart=true, fsr=4.096V, dr=fast.
 static ads101x_t* create_ads(bool continuous)
 {
 	expect_ads101x_reset_writes();
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C,
-		TEST_ADDR,
-		CONFIG_REG,
-		continuous ? INIT_RESTART_CFG_CONTINUOUS : INIT_RESTART_CFG_SINGLE,
-		0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       continuous ?
+					       INIT_RESTART_CFG_CONTINUOUS :
+					       INIT_RESTART_CFG_SINGLE,
+				       0);
 
-	ads101x_t* ads = ads101x_init(
-		TEST_I2C, TEST_ADDR, true, continuous, INIT_RESTART_FSR, FAST_DR);
+	ads101x_t* ads = ads101x_init(TEST_I2C,
+				      TEST_ADDR,
+				      true,
+				      continuous,
+				      ADS101X_FSR_4_096V,
+				      FAST_DR);
 	TEST_ASSERT_NOT_NULL(ads);
 	return ads;
 }
@@ -148,7 +161,6 @@ static ads101x_t* create_protected_ads(bool continuous)
 
 void setUp(void)
 {
-	read_value_pool_index = 0;
 }
 
 void tearDown(void)
@@ -164,7 +176,7 @@ void test_ads101x_init_with_restart_packs_config_reg_in_single_mode(void)
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 
 	ads101x_t* ads = ads101x_init(
-		TEST_I2C, TEST_ADDR, true, false, INIT_RESTART_FSR, FAST_DR);
+		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
 	free(ads);
@@ -174,13 +186,13 @@ void test_ads101x_init_with_restart_packs_config_reg_in_continuous_mode(void)
 {
 	expect_ads101x_reset_writes();
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-					TEST_ADDR,
-					CONFIG_REG,
-					INIT_RESTART_CFG_CONTINUOUS,
-					0);
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS,
+				       0);
 
 	ads101x_t* ads = ads101x_init(
-		TEST_I2C, TEST_ADDR, true, true, INIT_RESTART_FSR, FAST_DR);
+		TEST_I2C, TEST_ADDR, true, true, ADS101X_FSR_4_096V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
 	free(ads);
@@ -190,60 +202,155 @@ void test_ads101x_init_without_restart_reads_then_patches_config_reg(void)
 {
 	// Device already has some COMP bits set; they must survive untouched.
 	expect_i2c_read8_16b(CONFIG_REG, 0x0003, 0);
-	// MODE(0x100) | PGA(3<<9=0x600) | DR(FAST_DR=5<<5=0xA0) | preserved COMP(0x3)
+	// OS(0x8000) | MODE(0x100) | PGA(3<<9=0x600) | DR(FAST_DR=5<<5=0xA0) |
+	// preserved COMP(0x3)
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x07A3, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x87A3, 0);
 
-	ads101x_t* ads = ads101x_init(TEST_I2C,
-				      TEST_ADDR,
-				      false,
-				      false,
-				      ADS101X_FSR_1_024V,
-				      FAST_DR);
+	ads101x_t* ads = ads101x_init(
+		TEST_I2C, TEST_ADDR, false, false, ADS101X_FSR_1_024V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
 	free(ads);
 }
 
+void test_ads101x_init_without_restart_in_continuous_mode_clears_os_and_mode_bits(
+	void)
+{
+	// Device was left configured for single mode (OS=1, MODE=1); an init
+	// with set_continuous_mode=true must clear both, regardless of
+	// whatever was on the wire before.
+	expect_i2c_read8_16b(CONFIG_REG, 0x8103, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0003, 0);
+
+	ads101x_t* ads = ads101x_init(TEST_I2C,
+				      TEST_ADDR,
+				      false,
+				      true,
+				      ADS101X_FSR_6_144V,
+				      ADS101X_128SPS);
+
+	TEST_ASSERT_NOT_NULL(ads);
+	free(ads);
+}
+
+void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination(
+	void)
+{
+	/*
+	 * Exhaustively covers every CONFIG_REG value ads101x_init can
+	 * produce, across both entry paths (restart=true/false).
+	 *
+	 * When restart=false we don't vary set_continuous_mode/fsr/dr. Doing
+	 * so would only add cost without coverage, since ads101x_init's OS/MODE/
+	 * PGA/DR overwrite is proven for every value of those already by the
+	 * restart=true sweep above.
+	 */
+
+	// restart = true
+	for (int continuous = 0; continuous <= 1; continuous++) {
+		for (uint16_t fsr = 0; fsr <= 0b111; fsr++) {
+			for (uint16_t dr = 0; dr <= 0b111; dr++) {
+				expect_ads101x_reset_writes();
+
+				uint16_t cfg = CONFIG_REG_RESET_VALUE;
+				if (continuous) {
+					cfg &= (uint16_t)~(CONFIG_REG_MODE |
+							   CONFIG_REG_OS);
+				} else {
+					cfg |= CONFIG_REG_MODE | CONFIG_REG_OS;
+				}
+				cfg = (uint16_t)((cfg & ~CONFIG_REG_PGA) |
+						 (fsr << CONFIG_REG_PGA_SHIFT));
+				cfg = (uint16_t)((cfg & ~CONFIG_REG_DR) |
+						 (dr << CONFIG_REG_DR_SHIFT));
+
+				i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+							       TEST_ADDR,
+							       CONFIG_REG,
+							       cfg,
+							       0);
+
+				ads101x_t* ads = ads101x_init(
+					TEST_I2C,
+					TEST_ADDR,
+					true,
+					continuous,
+					(ADS101X_GAIN_AMPLIFIER)fsr,
+					(ADS101X_DATA_RATE)dr);
+				TEST_ASSERT_NOT_NULL(ads);
+				free(ads);
+			}
+		}
+	}
+
+	// restart = false
+	for (uint16_t mux = 0; mux <= 0b111; mux++) {
+		for (uint16_t comp = 0; comp <= CONFIG_REG_COMP; comp++) {
+			uint16_t initial = (uint16_t)((mux << CONFIG_REG_MUX_SHIFT) |
+						       comp | CONFIG_REG_OS |
+						       CONFIG_REG_PGA |
+						       CONFIG_REG_MODE | CONFIG_REG_DR);
+			expect_i2c_read8_16b(CONFIG_REG, initial, 0);
+
+			uint16_t cfg = (uint16_t)((mux << CONFIG_REG_MUX_SHIFT) | comp |
+						  CONFIG_REG_OS | CONFIG_REG_MODE);
+			cfg = (uint16_t)((cfg & ~CONFIG_REG_PGA) |
+					 (ADS101X_FSR_4_096V << CONFIG_REG_PGA_SHIFT));
+			cfg = (uint16_t)((cfg & ~CONFIG_REG_DR) |
+					 (FAST_DR << CONFIG_REG_DR_SHIFT));
+
+			i2c_write8_16b_ExpectAndReturn(
+				TEST_I2C, TEST_ADDR, CONFIG_REG, cfg, 0);
+
+			ads101x_t* ads = ads101x_init(TEST_I2C,
+						      TEST_ADDR,
+						      false,
+						      false,
+						      ADS101X_FSR_4_096V,
+						      FAST_DR);
+			TEST_ASSERT_NOT_NULL(ads);
+			free(ads);
+		}
+	}
+}
+
 void test_ads101x_init_fails_when_the_high_threshold_reset_fails(void)
 {
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-					TEST_ADDR,
-					HIGH_THRESHOLD_REG,
-					HIGH_THRESHOLD_REG_RESET_VALUE,
-					-1);
+				       TEST_ADDR,
+				       HIGH_THRESHOLD_REG,
+				       HIGH_THRESHOLD_REG_RESET_VALUE,
+				       -1);
 
 	TEST_ASSERT_NULL(ads101x_init(
-		TEST_I2C, TEST_ADDR, true, false, INIT_RESTART_FSR, FAST_DR));
+		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
 void test_ads101x_init_fails_when_the_low_threshold_reset_fails(void)
 {
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-					TEST_ADDR,
-					HIGH_THRESHOLD_REG,
-					HIGH_THRESHOLD_REG_RESET_VALUE,
-					0);
+				       TEST_ADDR,
+				       HIGH_THRESHOLD_REG,
+				       HIGH_THRESHOLD_REG_RESET_VALUE,
+				       0);
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-					TEST_ADDR,
-					LOW_THRESHOLD_REG,
-					LOW_THRESHOLD_REG_RESET_VALUE,
-					-1);
+				       TEST_ADDR,
+				       LOW_THRESHOLD_REG,
+				       LOW_THRESHOLD_REG_RESET_VALUE,
+				       -1);
 
 	TEST_ASSERT_NULL(ads101x_init(
-		TEST_I2C, TEST_ADDR, true, false, INIT_RESTART_FSR, FAST_DR));
+		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
 void test_ads101x_init_fails_when_reading_the_config_reg_fails(void)
 {
 	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
 
-	TEST_ASSERT_NULL(ads101x_init(TEST_I2C,
-				      TEST_ADDR,
-				      false,
-				      false,
-				      INIT_RESTART_FSR,
-				      FAST_DR));
+	TEST_ASSERT_NULL(ads101x_init(
+		TEST_I2C, TEST_ADDR, false, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
 void test_ads101x_init_fails_when_writing_the_config_reg_fails(void)
@@ -253,7 +360,7 @@ void test_ads101x_init_fails_when_writing_the_config_reg_fails(void)
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, -1);
 
 	TEST_ASSERT_NULL(ads101x_init(
-		TEST_I2C, TEST_ADDR, true, false, INIT_RESTART_FSR, FAST_DR));
+		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
 /* --------------------------- ads101x_deinit ------------------------------- */
@@ -264,44 +371,122 @@ void test_ads101x_deinit_without_shutdown_just_frees(void)
 	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
 }
 
-void test_ads101x_deinit_with_shutdown_sets_the_mode_bit_and_writes_it_back(
-	void)
+void test_ads101x_deinit_with_shutdown_sets_the_mode_bit_and_writes_it_back(void)
 {
 	ads101x_t* ads = create_ads(true); // starts in continuous (MODE=0)
 
-	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_CONTINUOUS, 0);
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-					TEST_ADDR,
-					CONFIG_REG,
-					INIT_RESTART_CFG_CONTINUOUS | 0x100,
-					0);
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS | 0x100,
+				       0);
 
 	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, true));
 }
 
-void test_ads101x_deinit_fails_when_reading_the_config_reg_fails(void)
+void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combination(
+	void)
 {
-	ads101x_t* ads = create_ads(false);
+	/*
+	 * ads101x_deinit(shutdown=true) only ORs MODE into expected_cfg_reg
+	 * and writes it back, untouched otherwise.
+	 *
+	 * Single mode: Sweeps every (MUX, PGA, DR, COMP) to prove every other
+	 * bit survives.
+	 *
+	 * Continuous mode: PGA/DR are fixed since that's already proven above;
+	 * only MUX/COMP vary.
+	 */
 
-	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
+	// single mode
+	for (uint16_t mux = 0; mux <= 0b111; mux++) {
+		for (uint16_t pga = 0; pga <= 0b111; pga++) {
+			for (uint16_t dr = 0; dr <= 0b111; dr++) {
+				for (uint16_t comp = 0; comp <= CONFIG_REG_COMP;
+				     comp++) {
+					uint16_t cfg =
+						(uint16_t)(CONFIG_REG_OS |
+							   CONFIG_REG_MODE |
+							   (mux
+							    << CONFIG_REG_MUX_SHIFT) |
+							   (pga
+							    << CONFIG_REG_PGA_SHIFT) |
+							   (dr
+							    << CONFIG_REG_DR_SHIFT) |
+							   comp);
+					expect_i2c_read8_16b(
+						CONFIG_REG, cfg, 0);
 
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(ads, true));
-	free(ads); // deinit bailed out before freeing it
+					i2c_write8_16b_ExpectAndReturn(
+						TEST_I2C,
+						TEST_ADDR,
+						CONFIG_REG,
+						cfg,
+						0);
+
+					ads101x_t* ads = ads101x_init(
+						TEST_I2C,
+						TEST_ADDR,
+						false,
+						false,
+						(ADS101X_GAIN_AMPLIFIER)pga,
+						(ADS101X_DATA_RATE)dr);
+					TEST_ASSERT_NOT_NULL(ads);
+
+					i2c_write8_16b_ExpectAndReturn(
+						TEST_I2C,
+						TEST_ADDR,
+						CONFIG_REG,
+						cfg,
+						0);
+					TEST_ASSERT_EQUAL_INT(
+						0, ads101x_deinit(ads, true));
+				}
+			}
+		}
+	}
+
+	// continuous mode
+	for (uint16_t mux = 0; mux <= 0b111; mux++) {
+		for (uint16_t comp = 0; comp <= CONFIG_REG_COMP; comp++) {
+			uint16_t cfg =
+				(uint16_t)((mux << CONFIG_REG_MUX_SHIFT) |
+					   (ADS101X_FSR_4_096V
+					    << CONFIG_REG_PGA_SHIFT) |
+					   (FAST_DR << CONFIG_REG_DR_SHIFT) |
+					   comp);
+			expect_i2c_read8_16b(CONFIG_REG, cfg, 0);
+
+			i2c_write8_16b_ExpectAndReturn(
+				TEST_I2C, TEST_ADDR, CONFIG_REG, cfg, 0);
+
+			ads101x_t* ads = ads101x_init(TEST_I2C,
+						      TEST_ADDR,
+						      false,
+						      true,
+						      ADS101X_FSR_4_096V,
+						      FAST_DR);
+			TEST_ASSERT_NOT_NULL(ads);
+
+			i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+						       TEST_ADDR,
+						       CONFIG_REG,
+						       cfg | CONFIG_REG_MODE,
+						       0);
+			TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, true));
+		}
+	}
 }
 
 void test_ads101x_deinit_fails_when_writing_the_config_reg_fails(void)
 {
-	ads101x_t* ads = create_ads(false);
+	ads101x_t* ads = create_ads(false); // MODE already set; OR is a no-op
 
-	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
-	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
-					TEST_ADDR,
-					CONFIG_REG,
-					INIT_RESTART_CFG_SINGLE,
-					-1);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, -1);
 
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(ads, true));
-	free(ads);
+	free(ads); // deinit bailed out before freeing it
 }
 
 void test_ads101x_deinit_also_unprotects_when_protected(void)
@@ -311,6 +496,17 @@ void test_ads101x_deinit_also_unprotects_when_protected(void)
 	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
 
 	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
+}
+
+void test_ads101x_deinit_fails_when_the_unprotect_fails(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, -1);
+
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(ads, false));
+
+	free(ads); // deinit bailed out before freeing it
 }
 
 /* --------------------------- ads101x_protect ------------------------------ */
@@ -397,17 +593,27 @@ void test_ads101x_unprotect_fails_when_the_resource_cant_be_removed(void)
 	free(ads);
 }
 
+void test_ads101x_unprotect_returns_1_if_already_unprotected(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 1);
+
+	TEST_ASSERT_EQUAL_INT(1, ads101x_unprotect(ads));
+
+	free(ads);
+}
+
 /* ------------------------- ads101x_single_read ----------------------------- */
 
 void test_ads101x_single_read_returns_a_positive_reading(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0); // channel P0_N1, fast DR
-	// CHANGE_CHANNEL(P0_N1=0) keeps MUX=0; OS bit gets set to trigger a
-	// conversion.
+	// CHANGE_CHANNEL(P0_N1=0) keeps MUX=0; every call writes CONFIG_REG
+	// again (no CONFIG_REG read anymore -- the value is cached).
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x00A0 | 0x8000, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	int16_t value;
@@ -418,14 +624,32 @@ void test_ads101x_single_read_returns_a_positive_reading(void)
 	free(ads);
 }
 
+void test_ads101x_single_read_selects_the_requested_channel(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	// MUX bits (14-12) cleared then set to P1_N3's index (1): bit12 set.
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_SINGLE | 0x1000,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_single_read(ads, ADS101X_P1_N3, &value, 1000));
+
+	free(ads);
+}
+
 void test_ads101x_single_read_when_protected_locks_and_unlocks(void)
 {
 	ads101x_t* ads = create_protected_ads(false);
 
 	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0); // fast DR already set
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x00A0 | 0x8000, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
 
@@ -449,26 +673,12 @@ void test_ads101x_single_read_fails_immediately_when_the_lock_times_out(void)
 	free(ads);
 }
 
-void test_ads101x_single_read_fails_when_reading_the_config_reg_fails(void)
-{
-	ads101x_t* ads = create_ads(false);
-
-	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
-
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
-
-	free(ads);
-}
-
 void test_ads101x_single_read_fails_when_writing_the_config_reg_fails(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x0000, 0);
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x8000, -1);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, -1);
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
@@ -477,19 +687,36 @@ void test_ads101x_single_read_fails_when_writing_the_config_reg_fails(void)
 	free(ads);
 }
 
-void test_ads101x_single_read_fails_when_reading_the_conversion_reg_fails(
-	void)
+void test_ads101x_single_read_fails_when_reading_the_conversion_reg_fails(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x00A0 | 0x8000, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0, -1);
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+
+	free(ads);
+}
+
+void test_ads101x_single_read_handles_the_maximally_negative_reading(void)
+{
+	// Regression test for avoiding an implementation-defined right shift
+	// on a negative int16_t: 0x8000 must map to -2048, the most negative
+	// value the 12-bit conversion result can represent.
+	ads101x_t* ads = create_ads(false);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x8000, 0);
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT16(-2048, value);
 
 	free(ads);
 }
@@ -500,32 +727,31 @@ void test_ads101x_unsigned_single_read_passes_through_a_positive_reading(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x00A0 | 0x8000, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0); // -> +255
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(255, value);
 
 	free(ads);
 }
 
-void test_ads101x_unsigned_single_read_clamps_a_small_negative_reading_to_0(
-	void)
+void test_ads101x_unsigned_single_read_clamps_a_small_negative_reading_to_0(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x00A0 | 0x8000, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0xFFF0, 0); // -> -1
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(0, value);
 
 	free(ads);
@@ -535,15 +761,15 @@ void test_ads101x_unsigned_single_read_fails_with_erange_below_minus_8(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x00A0 | 0x8000, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0xFF00, 0); // -> -16
 
 	uint16_t value;
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		-1,
+		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
 
 	free(ads);
@@ -553,11 +779,13 @@ void test_ads101x_unsigned_single_read_propagates_a_single_read_failure(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, -1);
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		-1,
+		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
 
 	free(ads);
 }
@@ -566,10 +794,9 @@ void test_ads101x_unsigned_single_read_propagates_a_single_read_failure(void)
 
 void test_ads101x_continuous_read_skips_the_write_on_the_same_channel(void)
 {
-	ads101x_t* ads = create_ads(true);
+	ads101x_t* ads = create_ads(true); // starts on MUX=P0_N1 (0)
 
-	// old_cfg's MUX already selects P0_N1 (0): no config write needed.
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
+	// No CONFIG_REG write and no delay: the channel didn't change.
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	int16_t value;
@@ -580,13 +807,15 @@ void test_ads101x_continuous_read_skips_the_write_on_the_same_channel(void)
 	free(ads);
 }
 
-void test_ads101x_continuous_read_writes_and_delays_on_a_channel_change(void)
+void test_ads101x_continuous_read_writes_on_a_channel_change(void)
 {
 	ads101x_t* ads = create_ads(true);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0); // MUX=P0_N1, DR=fast
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x00A0 | 0x1000, 0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS | 0x1000,
+				       0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	int16_t value;
@@ -596,12 +825,94 @@ void test_ads101x_continuous_read_writes_and_delays_on_a_channel_change(void)
 	free(ads);
 }
 
+void test_ads101x_continuous_read_writes_when_only_the_rate_changed(void)
+{
+	// Same channel as the one already selected, but ads101x_set_fs
+	// changed the cached rate without touching hardware: expected_cfg_reg
+	// now disagrees with old_cfg_reg on the DR bits alone, and that must
+	// still trigger a CONFIG_REG write (and the two-period wait).
+	ads101x_t* ads = create_ads(true);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+
+	// DR bits (7-5) replaced: 0xA0 (FAST_DR) -> 0x60 (920SPS).
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       (INIT_RESTART_CFG_CONTINUOUS & ~0xE0) |
+					       0x60,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+
+	free(ads);
+}
+
+void test_ads101x_continuous_read_waits_for_both_the_old_and_new_conversion_rate(
+	void)
+{
+	/*
+	 * Regression test for "wait two conversion periods after a channel
+	 * switch": the in-flight conversion (started before the switch)
+	 * finishes at the OLD rate, so that period must be waited out in
+	 * full before the NEW rate's own conversion period is also waited
+	 * out -- not just one or the other, and not the new rate twice.
+	 *
+	 * The ads is created at SLOW_DR (~8984us/period) and switched to
+	 * FAST_DR (~479us/period) right before a channel change, so the
+	 * three wrong implementations this guards against land far outside
+	 * the correct window:
+	 *   - correct (old once + new once):        ~9463us
+	 *   - only the new rate, once (the original pre-fix bug): ~479us
+	 *   - the new rate, twice:                    ~958us
+	 *   - the old rate, twice (not otherwise ruled out here): ~17968us
+	 * The bounds below only need to separate "correct" from those; they
+	 * leave generous slack for scheduling jitter, the same way
+	 * test_plc-resource-protector-platform.c's elapsed_ms assertions do.
+	 */
+	expect_ads101x_reset_writes();
+	// Same derivation as INIT_RESTART_CFG_CONTINUOUS, but with SLOW_DR's
+	// DR bits (0b000) instead of FAST_DR's.
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0203, 0);
+	ads101x_t* ads = ads101x_init(
+		TEST_I2C, TEST_ADDR, true, true, ADS101X_FSR_4_096V, SLOW_DR);
+	TEST_ASSERT_NOT_NULL(ads);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, FAST_DR, 1000));
+
+	// DR bits replaced (SLOW_DR's 0x00 -> FAST_DR's 0xA0); MUX set to P1_N3.
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       (INIT_RESTART_CFG_CONTINUOUS & ~0xE0) |
+					       0xA0 | 0x1000,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	long ms = elapsed_ms(start, end);
+	TEST_ASSERT_GREATER_OR_EQUAL_INT(8, ms);
+	TEST_ASSERT_LESS_THAN_INT(14, ms);
+
+	free(ads);
+}
+
 void test_ads101x_continuous_read_when_protected_locks_and_unlocks(void)
 {
 	ads101x_t* ads = create_protected_ads(true);
 
 	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
 
@@ -612,28 +923,15 @@ void test_ads101x_continuous_read_when_protected_locks_and_unlocks(void)
 	free(ads);
 }
 
-void test_ads101x_continuous_read_fails_when_reading_the_config_reg_fails(
-	void)
+void test_ads101x_continuous_read_fails_when_writing_the_config_reg_fails(void)
 {
 	ads101x_t* ads = create_ads(true);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
-
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
-
-	free(ads);
-}
-
-void test_ads101x_continuous_read_fails_when_writing_the_config_reg_fails(
-	void)
-{
-	ads101x_t* ads = create_ads(true);
-
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x00A0 | 0x1000, -1);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS | 0x1000,
+				       -1);
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
@@ -647,7 +945,6 @@ void test_ads101x_continuous_read_fails_when_reading_the_conversion_reg_fails(
 {
 	ads101x_t* ads = create_ads(true);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0, -1);
 
 	int16_t value;
@@ -664,32 +961,44 @@ void test_ads101x_unsigned_continuous_read_passes_through_a_positive_reading(
 {
 	ads101x_t* ads = create_ads(true);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(0,
-			       ads101x_unsigned_continuous_read(
-				       ads, ADS101X_P0_N1, &value, 1000));
+			      ads101x_unsigned_continuous_read(
+				      ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(255, value);
 
 	free(ads);
 }
 
-void test_ads101x_unsigned_continuous_read_fails_with_erange_below_minus_8(
-	void)
+void test_ads101x_unsigned_continuous_read_fails_with_erange_below_minus_8(void)
 {
 	ads101x_t* ads = create_ads(true);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0xFF00, 0); // -> -16
 
 	uint16_t value;
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1,
-			       ads101x_unsigned_continuous_read(
-				       ads, ADS101X_P0_N1, &value, 1000));
+			      ads101x_unsigned_continuous_read(
+				      ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
+
+	free(ads);
+}
+
+void test_ads101x_unsigned_continuous_read_propagates_a_continuous_read_failure(
+	void)
+{
+	ads101x_t* ads = create_ads(true);
+
+	expect_i2c_read8_16b(CONVERSION_REG, 0, -1);
+
+	uint16_t value;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ads101x_unsigned_continuous_read(
+				      ads, ADS101X_P0_N1, &value, 1000));
 
 	free(ads);
 }
@@ -700,11 +1009,9 @@ void test_ads101x_get_fs_returns_the_current_data_rate(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x00A0, 0); // DR bits = 101 = 2400SPS
-
 	ADS101X_DATA_RATE dr;
-	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr));
-	TEST_ASSERT_EQUAL_INT(ADS101X_2400SPS, dr);
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
+	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
 
 	free(ads);
 }
@@ -712,24 +1019,41 @@ void test_ads101x_get_fs_returns_the_current_data_rate(void)
 void test_ads101x_get_fs_maps_the_0b111_encoding_to_3300sps(void)
 {
 	ads101x_t* ads = create_ads(false);
-
-	expect_i2c_read8_16b(CONFIG_REG, 0x00E0, 0); // DR bits = 111
+	// Nothing in the public API can request DR=0b111 (it's a duplicate
+	// 3300SPS encoding, not one of the named enumerators), but the field
+	// is only 3 bits wide and set_fs doesn't validate its input.
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_set_fs(ads, (ADS101X_DATA_RATE)0b111, 1000));
 
 	ADS101X_DATA_RATE dr;
-	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
 	TEST_ASSERT_EQUAL_INT(ADS101X_3300SPS, dr);
 
 	free(ads);
 }
 
-void test_ads101x_get_fs_fails_when_reading_the_config_reg_fails(void)
+void test_ads101x_get_fs_when_protected_locks_and_unlocks(void)
 {
-	ads101x_t* ads = create_ads(false);
+	ads101x_t* ads = create_protected_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
+	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
+	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
 
 	ADS101X_DATA_RATE dr;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_fs(ads, &dr));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
+	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
+
+	free(ads);
+}
+
+void test_ads101x_get_fs_fails_immediately_when_the_lock_times_out(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 50, -1);
+
+	ADS101X_DATA_RATE dr;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_fs(ads, &dr, 50));
 
 	free(ads);
 }
@@ -740,12 +1064,21 @@ void test_ads101x_set_fs_patches_only_the_dr_bits(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	expect_i2c_read8_16b(CONFIG_REG, 0x0003, 0); // COMP bits set, DR=0
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0063, 0); // DR=011<<5 | 0x3
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
 
+	// Observe the effect through single_read's CONFIG_REG write: only the
+	// DR bits (0xA0 -> 0x60) should differ from INIT_RESTART_CFG_SINGLE;
+	// OS/MUX/PGA/MODE/COMP must survive untouched.
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x60,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+
+	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
 
 	free(ads);
 }
@@ -755,13 +1088,9 @@ void test_ads101x_set_fs_when_protected_locks_and_unlocks(void)
 	ads101x_t* ads = create_protected_ads(false);
 
 	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	expect_i2c_read8_16b(CONFIG_REG, 0x0003, 0);
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0063, 0);
 	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
 
-	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
 
 	free(ads);
 }
@@ -777,26 +1106,48 @@ void test_ads101x_set_fs_fails_immediately_when_the_lock_times_out(void)
 	free(ads);
 }
 
-void test_ads101x_set_fs_fails_when_reading_the_config_reg_fails(void)
+/* ------------------ ads101x_get_conversion_time_us's table ------------------ */
+
+void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_table(
+	void)
 {
+	/*
+	 * ads101x_get_conversion_time_us is a private lookup table with one
+	 * case per ADS101X_DATA_RATE plus a default for the 0b111 duplicate
+	 * of 3300SPS; only ADS101X_128SPS, ADS101X_920SPS and ADS101X_2400SPS
+	 * get exercised by the rest of this suite. Cycle single_read through
+	 * the remaining rates so every branch actually runs at least once;
+	 * the real usleep() delays this incurs are all under 5ms.
+	 */
 	ads101x_t* ads = create_ads(false);
+	static const struct {
+		ADS101X_DATA_RATE dr;
+		uint16_t expected_cfg;
+	} cases[] = {
+		{ ADS101X_250SPS, (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x20 },
+		{ ADS101X_490SPS, (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x40 },
+		{ ADS101X_1600SPS, (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x80 },
+		{ ADS101X_3300SPS, (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0 },
+		{ (ADS101X_DATA_RATE)0b111,
+		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xE0 },
+	};
 
-	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		TEST_ASSERT_EQUAL_INT(0,
+				      ads101x_set_fs(ads, cases[i].dr, 1000));
+		i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+					       TEST_ADDR,
+					       CONFIG_REG,
+					       cases[i].expected_cfg,
+					       0);
+		expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
-
-	free(ads);
-}
-
-void test_ads101x_set_fs_fails_when_writing_the_config_reg_fails(void)
-{
-	ads101x_t* ads = create_ads(false);
-
-	expect_i2c_read8_16b(CONFIG_REG, 0x0003, 0);
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0063, -1);
-
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+		int16_t value;
+		TEST_ASSERT_EQUAL_INT(
+			0,
+			ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		TEST_ASSERT_EQUAL_INT16(0x0FF, value);
+	}
 
 	free(ads);
 }

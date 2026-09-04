@@ -122,7 +122,13 @@
 #  - Specifiying symbols used during test preprocessing
 :defines:
   :test:
-    - TEST # Simple list option to add symbol 'TEST' to compilation of all files in all test executables
+    :*:
+      - TEST # Add symbol 'TEST' to compilation of all files in all test executables
+    :test_peripheral-ads101x:
+      # The init/deinit fuzz tests run tens of thousands of CMock
+      # expectation setups within single test functions, and it OOMs
+      # it's fixed stack size.
+      - CMOCK_MEM_DYNAMIC
   :release: []
 
   # Enable to inject name of a test as a unique compilation symbol into its respective executable build. 
