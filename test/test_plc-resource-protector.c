@@ -214,8 +214,8 @@ void test_I2C_RESOURCE_masks_a_bus_that_overflows_its_8_bits(void)
 {
 	// 0x100 is the first bus value that doesn't fit in 8 bits; it must wrap
 	// to the same encoding as bus 0 rather than bleed into neighboring bits.
-	TEST_ASSERT_EQUAL_UINT32(
-		I2C_RESOURCE(0, 0x50), I2C_RESOURCE(0x100, 0x50));
+	TEST_ASSERT_EQUAL_UINT32(I2C_RESOURCE(0, 0x50),
+				 I2C_RESOURCE(0x100, 0x50));
 }
 
 void test_I2C_RESOURCE_masks_an_address_that_overflows_its_10_bits(void)

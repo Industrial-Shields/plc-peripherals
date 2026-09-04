@@ -118,8 +118,7 @@ void test_plc_mutex_acquire_succeeds_immediately_when_free(void)
 	TEST_ASSERT_LESS_THAN_INT(50, elapsed_ms(start, end));
 }
 
-void test_plc_mutex_acquire_times_out_when_already_held_by_the_same_thread(
-	void)
+void test_plc_mutex_acquire_times_out_when_already_held_by_the_same_thread(void)
 {
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(mutex, 0));
 
@@ -165,13 +164,14 @@ static void wait_until_acquired(volatile int* acquired)
 		waited_ms++;
 	}
 	TEST_ASSERT_TRUE_MESSAGE(*acquired,
-				  "worker thread never acquired the mutex");
+				 "worker thread never acquired the mutex");
 }
 
 void test_plc_mutex_acquire_times_out_when_held_by_another_thread(void)
 {
-	hold_lock_args_t args = { .mutex = mutex, .hold_ms = 300,
-				   .acquired = 0 };
+	hold_lock_args_t args = { .mutex = mutex,
+				  .hold_ms = 300,
+				  .acquired = 0 };
 	pthread_t thread;
 	TEST_ASSERT_EQUAL_INT(
 		0, pthread_create(&thread, NULL, hold_lock_thread, &args));

@@ -288,16 +288,20 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 	// restart = false
 	for (uint16_t mux = 0; mux <= 0b111; mux++) {
 		for (uint16_t comp = 0; comp <= CONFIG_REG_COMP; comp++) {
-			uint16_t initial = (uint16_t)((mux << CONFIG_REG_MUX_SHIFT) |
-						       comp | CONFIG_REG_OS |
-						       CONFIG_REG_PGA |
-						       CONFIG_REG_MODE | CONFIG_REG_DR);
+			uint16_t initial =
+				(uint16_t)((mux << CONFIG_REG_MUX_SHIFT) |
+					   comp | CONFIG_REG_OS |
+					   CONFIG_REG_PGA | CONFIG_REG_MODE |
+					   CONFIG_REG_DR);
 			expect_i2c_read8_16b(CONFIG_REG, initial, 0);
 
-			uint16_t cfg = (uint16_t)((mux << CONFIG_REG_MUX_SHIFT) | comp |
-						  CONFIG_REG_OS | CONFIG_REG_MODE);
+			uint16_t cfg =
+				(uint16_t)((mux << CONFIG_REG_MUX_SHIFT) |
+					   comp | CONFIG_REG_OS |
+					   CONFIG_REG_MODE);
 			cfg = (uint16_t)((cfg & ~CONFIG_REG_PGA) |
-					 (ADS101X_FSR_4_096V << CONFIG_REG_PGA_SHIFT));
+					 (ADS101X_FSR_4_096V
+					  << CONFIG_REG_PGA_SHIFT));
 			cfg = (uint16_t)((cfg & ~CONFIG_REG_DR) |
 					 (FAST_DR << CONFIG_REG_DR_SHIFT));
 
