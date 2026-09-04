@@ -98,6 +98,15 @@ static inline uint32_t ads101x_get_conversion_time_us(ADS101X_DATA_RATE dr)
 	return (1100000 + 50000) / dr_decimal;
 }
 
+static inline int16_t ads101x_conversion_reg_to_value(uint16_t read_value)
+{
+	uint16_t shifted = read_value >> 4;
+	if (read_value & 0x8000) {
+		shifted |= 0xF000;
+	}
+	return (int16_t)shifted;
+}
+
 static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 					      uint16_t* return_value)
 {
@@ -300,7 +309,7 @@ int ads101x_single_read(ads101x_t* ads,
 		goto ads101x_single_read_exit;
 	}
 
-	*return_value = ((int16_t)read_value) >> 4;
+	*return_value = ads101x_conversion_reg_to_value(read_value);
 	ret = 0;
 
 ads101x_single_read_exit:
@@ -373,7 +382,7 @@ int ads101x_continuous_read(ads101x_t* ads,
 		goto ads101x_continuous_read_exit;
 	}
 
-	*return_value = ((int16_t)read_value) >> 4;
+	*return_value = ads101x_conversion_reg_to_value(read_value);
 	ret = 0;
 
 ads101x_continuous_read_exit:
