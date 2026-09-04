@@ -399,12 +399,16 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
 						  return_value);
 }
 
-int ads101x_get_fs(const ads101x_t* ads, ADS101X_DATA_RATE* dr)
+int ads101x_get_fs(const ads101x_t* ads, ADS101X_DATA_RATE* dr, uint32_t timeout_ms)
 {
-	ADS101X_DATA_RATE local_dr = ADS101X_GET_DR(ads->expected_cfg_reg);
+	ADS101X_LOCK(ads, timeout_ms);
 
+	ADS101X_DATA_RATE local_dr = ADS101X_GET_DR(ads->expected_cfg_reg);
 	// Ensure we return a valid enum (0b111 is equivalent to 3300 SPS)
 	*dr = local_dr == 0b111 ? ADS101X_3300SPS : local_dr;
+
+	ADS101X_UNLOCK(ads);
+
 	return 0;
 }
 
