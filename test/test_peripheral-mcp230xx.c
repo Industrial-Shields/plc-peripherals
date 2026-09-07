@@ -177,6 +177,18 @@ static mcp230xx_t* create_protected_mcp(MCP230XX_TYPE type)
 	return mcp;
 }
 
+static void destroy_mcp(mcp230xx_t* mcp)
+{
+	TEST_ASSERT_EQUAL_INT(0, mcp230xx_deinit(mcp, false));
+}
+
+static void destroy_protected_mcp(mcp230xx_t* mcp)
+{
+	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
+
+	TEST_ASSERT_EQUAL_INT(0, mcp230xx_deinit(mcp, false));
+}
+
 void setUp(void)
 {
 	fake_i2c_reset();
@@ -208,7 +220,7 @@ void test_mcp230xx_init_with_restart_resets_an_mcp23008_then_writes_iocon(void)
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
 	assert_last_write_was_a_reset_block(MCP230XX_008);
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_init_with_restart_resets_an_mcp23017_then_writes_iocon(void)
@@ -229,7 +241,7 @@ void test_mcp230xx_init_with_restart_resets_an_mcp23017_then_writes_iocon(void)
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
 	assert_last_write_was_a_reset_block(MCP230XX_017);
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_init_without_restart_reads_then_patches_iocon(void)
@@ -250,7 +262,7 @@ void test_mcp230xx_init_without_restart_reads_then_patches_iocon(void)
 
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_init_packs_every_configurable_iocon_bit(void)
@@ -271,7 +283,7 @@ void test_mcp230xx_init_packs_every_configurable_iocon_bit(void)
 					MCP230XX_MIRRORED_INT);
 
 	TEST_ASSERT_NOT_NULL(mcp);
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_init_fails_with_einval_for_open_drain_with_a_polarity(void)
@@ -504,7 +516,7 @@ void test_mcp230xx_init_fuzzes_every_configuration_combination(void)
 									mirror);
 							TEST_ASSERT_NOT_NULL(
 								mcp);
-							free(mcp);
+							destroy_mcp(mcp);
 						}
 					}
 				}
@@ -535,7 +547,7 @@ void test_mcp230xx_init_fuzzes_every_configuration_combination(void)
 						MCP230XX_INT_ACTIVE_LOW,
 						MCP230XX_NO_MIRRORED_INT);
 		TEST_ASSERT_NOT_NULL(mcp);
-		free(mcp);
+		destroy_mcp(mcp);
 	}
 }
 
@@ -614,7 +626,7 @@ void test_mcp230xx_protect_adds_the_resource_for_its_bus_and_address(void)
 
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_protect(mcp));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_protect_fails_when_the_bus_cant_be_read(void)
@@ -626,7 +638,7 @@ void test_mcp230xx_protect_fails_when_the_bus_cant_be_read(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(mcp));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_protect_fails_when_the_resource_cant_be_added(void)
@@ -642,7 +654,7 @@ void test_mcp230xx_protect_fails_when_the_resource_cant_be_added(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(mcp));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_protect_returns_1_if_already_protected(void)
@@ -658,7 +670,7 @@ void test_mcp230xx_protect_returns_1_if_already_protected(void)
 
 	TEST_ASSERT_EQUAL_INT(1, mcp230xx_protect(mcp));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 /* ------------------------- mcp230xx_unprotect ------------------------------ */
@@ -678,7 +690,7 @@ void test_mcp230xx_unprotect_removes_the_resource(void)
 
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_unprotect(mcp));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_unprotect_returns_1_if_already_unprotected(void)
@@ -689,7 +701,7 @@ void test_mcp230xx_unprotect_returns_1_if_already_unprotected(void)
 
 	TEST_ASSERT_EQUAL_INT(1, mcp230xx_unprotect(mcp));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_unprotect_fails_when_the_resource_cant_be_removed(void)
@@ -700,7 +712,7 @@ void test_mcp230xx_unprotect_fails_when_the_resource_cant_be_removed(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_unprotect(mcp));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 /* ------------------------- mcp230xx_set_input ------------------------------ */
@@ -718,7 +730,7 @@ void test_mcp230xx_set_input_writes_gppu_before_iodir(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_set_input(mcp, 3, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_leaves_the_other_pins_alone(void)
@@ -735,7 +747,7 @@ void test_mcp230xx_set_input_leaves_the_other_pins_alone(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_set_input(mcp, 1, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_disables_the_pullup_when_asked(void)
@@ -750,7 +762,7 @@ void test_mcp230xx_set_input_disables_the_pullup_when_asked(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_set_input(mcp, 2, MCP230XX_NO_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_only_writes_gppu_when_it_is_already_an_input(void)
@@ -769,7 +781,7 @@ void test_mcp230xx_set_input_only_writes_gppu_when_it_is_already_an_input(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_set_input(mcp, 5, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_drops_a_stale_pullup_from_an_output(void)
@@ -789,7 +801,7 @@ void test_mcp230xx_set_input_drops_a_stale_pullup_from_an_output(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_set_input(mcp, 6, MCP230XX_NO_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_only_writes_iodir_when_the_pullup_already_matches(
@@ -805,7 +817,7 @@ void test_mcp230xx_set_input_only_writes_iodir_when_the_pullup_already_matches(
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_set_input(mcp, 0, MCP230XX_NO_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_returns_1_when_already_configured(void)
@@ -819,7 +831,7 @@ void test_mcp230xx_set_input_returns_1_when_already_configured(void)
 	TEST_ASSERT_EQUAL_INT(
 		1, mcp230xx_set_input(mcp, 7, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_uses_the_b_side_registers_for_high_indices(void)
@@ -836,7 +848,7 @@ void test_mcp230xx_set_input_uses_the_b_side_registers_for_high_indices(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_set_input(mcp, 11, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_when_protected_locks_and_unlocks(void)
@@ -851,7 +863,7 @@ void test_mcp230xx_set_input_when_protected_locks_and_unlocks(void)
 	TEST_ASSERT_EQUAL_INT(
 		1, mcp230xx_set_input(mcp, 0, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_fails_immediately_when_the_lock_times_out(void)
@@ -863,7 +875,7 @@ void test_mcp230xx_set_input_fails_immediately_when_the_lock_times_out(void)
 	TEST_ASSERT_EQUAL_INT(-1,
 			      mcp230xx_set_input(mcp, 0, MCP230XX_PULLUP, 50));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_fails_when_reading_the_iodir_reg_fails(void)
@@ -875,7 +887,7 @@ void test_mcp230xx_set_input_fails_when_reading_the_iodir_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1, mcp230xx_set_input(mcp, 0, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_fails_when_reading_the_gppu_reg_fails(void)
@@ -888,7 +900,7 @@ void test_mcp230xx_set_input_fails_when_reading_the_gppu_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1, mcp230xx_set_input(mcp, 0, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_fails_when_writing_the_gppu_reg_fails(void)
@@ -902,7 +914,7 @@ void test_mcp230xx_set_input_fails_when_writing_the_gppu_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1, mcp230xx_set_input(mcp, 0, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_input_fails_when_writing_the_iodir_reg_fails(void)
@@ -917,7 +929,7 @@ void test_mcp230xx_set_input_fails_when_writing_the_iodir_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1, mcp230xx_set_input(mcp, 0, MCP230XX_PULLUP, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 /* ------------------------- mcp230xx_read_gpio ------------------------------ */
@@ -932,7 +944,7 @@ void test_mcp230xx_read_gpio_returns_high_when_the_pin_bit_is_set(void)
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_read_gpio(mcp, 4, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT8(MCP230XX_HIGH, value);
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_read_gpio_returns_low_when_the_pin_bit_is_clear(void)
@@ -945,7 +957,7 @@ void test_mcp230xx_read_gpio_returns_low_when_the_pin_bit_is_clear(void)
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_read_gpio(mcp, 4, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT8(MCP230XX_LOW, value);
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_read_gpio_uses_the_b_side_register_for_high_indices(void)
@@ -959,7 +971,7 @@ void test_mcp230xx_read_gpio_uses_the_b_side_register_for_high_indices(void)
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_read_gpio(mcp, 12, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT8(MCP230XX_HIGH, value);
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_read_gpio_when_protected_locks_and_unlocks(void)
@@ -974,7 +986,7 @@ void test_mcp230xx_read_gpio_when_protected_locks_and_unlocks(void)
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_read_gpio(mcp, 0, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT8(MCP230XX_HIGH, value);
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_read_gpio_fails_immediately_when_the_lock_times_out(void)
@@ -986,7 +998,7 @@ void test_mcp230xx_read_gpio_fails_immediately_when_the_lock_times_out(void)
 	uint8_t value;
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_read_gpio(mcp, 0, &value, 50));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_read_gpio_fails_when_reading_the_gpio_reg_fails(void)
@@ -998,7 +1010,7 @@ void test_mcp230xx_read_gpio_fails_when_reading_the_gpio_reg_fails(void)
 	uint8_t value;
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_read_gpio(mcp, 0, &value, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 /* ------------------------- mcp230xx_set_output ----------------------------- */
@@ -1012,7 +1024,7 @@ void test_mcp230xx_set_output_clears_the_iodir_bit(void)
 
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_set_output(mcp, 5, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_output_returns_1_when_already_an_output(void)
@@ -1023,7 +1035,7 @@ void test_mcp230xx_set_output_returns_1_when_already_an_output(void)
 
 	TEST_ASSERT_EQUAL_INT(1, mcp230xx_set_output(mcp, 5, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_output_uses_the_b_side_register_for_high_indices(void)
@@ -1037,7 +1049,7 @@ void test_mcp230xx_set_output_uses_the_b_side_register_for_high_indices(void)
 
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_set_output(mcp, 9, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_output_when_protected_locks_and_unlocks(void)
@@ -1050,7 +1062,7 @@ void test_mcp230xx_set_output_when_protected_locks_and_unlocks(void)
 
 	TEST_ASSERT_EQUAL_INT(1, mcp230xx_set_output(mcp, 0, 1000));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_set_output_fails_immediately_when_the_lock_times_out(void)
@@ -1061,7 +1073,7 @@ void test_mcp230xx_set_output_fails_immediately_when_the_lock_times_out(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_set_output(mcp, 0, 50));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_set_output_fails_when_reading_the_iodir_reg_fails(void)
@@ -1072,7 +1084,7 @@ void test_mcp230xx_set_output_fails_when_reading_the_iodir_reg_fails(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_set_output(mcp, 0, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_set_output_fails_when_writing_the_iodir_reg_fails(void)
@@ -1084,7 +1096,7 @@ void test_mcp230xx_set_output_fails_when_writing_the_iodir_reg_fails(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_set_output(mcp, 0, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 /* ------------------------- mcp230xx_write_gpio ----------------------------- */
@@ -1099,7 +1111,7 @@ void test_mcp230xx_write_gpio_sets_the_olat_bit(void)
 	TEST_ASSERT_EQUAL_INT(0,
 			      mcp230xx_write_gpio(mcp, 2, MCP230XX_HIGH, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_write_gpio_clears_the_olat_bit(void)
@@ -1112,7 +1124,7 @@ void test_mcp230xx_write_gpio_clears_the_olat_bit(void)
 	TEST_ASSERT_EQUAL_INT(0,
 			      mcp230xx_write_gpio(mcp, 2, MCP230XX_LOW, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_write_gpio_returns_1_when_already_at_that_level(void)
@@ -1124,7 +1136,7 @@ void test_mcp230xx_write_gpio_returns_1_when_already_at_that_level(void)
 	TEST_ASSERT_EQUAL_INT(1,
 			      mcp230xx_write_gpio(mcp, 2, MCP230XX_HIGH, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_write_gpio_treats_any_nonzero_as_high(void)
@@ -1136,7 +1148,7 @@ void test_mcp230xx_write_gpio_treats_any_nonzero_as_high(void)
 
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_write_gpio(mcp, 0, 42, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_write_gpio_uses_the_b_side_register_for_high_indices(void)
@@ -1150,7 +1162,7 @@ void test_mcp230xx_write_gpio_uses_the_b_side_register_for_high_indices(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_write_gpio(mcp, 15, MCP230XX_HIGH, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_write_gpio_when_protected_locks_and_unlocks(void)
@@ -1164,7 +1176,7 @@ void test_mcp230xx_write_gpio_when_protected_locks_and_unlocks(void)
 	TEST_ASSERT_EQUAL_INT(1,
 			      mcp230xx_write_gpio(mcp, 0, MCP230XX_HIGH, 1000));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_write_gpio_fails_immediately_when_the_lock_times_out(void)
@@ -1176,7 +1188,7 @@ void test_mcp230xx_write_gpio_fails_immediately_when_the_lock_times_out(void)
 	TEST_ASSERT_EQUAL_INT(-1,
 			      mcp230xx_write_gpio(mcp, 0, MCP230XX_HIGH, 50));
 
-	free(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_write_gpio_fails_when_reading_the_olat_reg_fails(void)
@@ -1188,7 +1200,7 @@ void test_mcp230xx_write_gpio_fails_when_reading_the_olat_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(-1,
 			      mcp230xx_write_gpio(mcp, 0, MCP230XX_HIGH, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_write_gpio_fails_when_writing_the_olat_reg_fails(void)
@@ -1201,7 +1213,7 @@ void test_mcp230xx_write_gpio_fails_when_writing_the_olat_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(-1,
 			      mcp230xx_write_gpio(mcp, 0, MCP230XX_HIGH, 1000));
 
-	free(mcp);
+	destroy_mcp(mcp);
 }
 
 /* --------------------- GPIO index to register mapping ---------------------- */
@@ -1292,7 +1304,7 @@ void test_mcp230xx_fuzzes_every_gpio_index_to_its_register_and_bit(void)
 				mcp230xx_write_gpio(
 					mcp, index, MCP230XX_HIGH, 1000));
 
-			free(mcp);
+			destroy_mcp(mcp);
 		}
 	}
 }

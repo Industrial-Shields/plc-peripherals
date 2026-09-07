@@ -159,6 +159,18 @@ static ads101x_t* create_protected_ads(bool continuous)
 	return ads;
 }
 
+static void destroy_ads(ads101x_t* ads)
+{
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
+}
+
+static void destroy_protected_ads(ads101x_t* ads)
+{
+	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
+}
+
 void setUp(void)
 {
 }
@@ -179,7 +191,7 @@ void test_ads101x_init_with_restart_packs_config_reg_in_single_mode(void)
 		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_init_with_restart_packs_config_reg_in_continuous_mode(void)
@@ -195,7 +207,7 @@ void test_ads101x_init_with_restart_packs_config_reg_in_continuous_mode(void)
 		TEST_I2C, TEST_ADDR, true, true, ADS101X_FSR_4_096V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_init_without_restart_reads_then_patches_config_reg(void)
@@ -211,7 +223,7 @@ void test_ads101x_init_without_restart_reads_then_patches_config_reg(void)
 		TEST_I2C, TEST_ADDR, false, false, ADS101X_FSR_1_024V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_init_without_restart_in_continuous_mode_clears_os_and_mode_bits(
@@ -232,7 +244,7 @@ void test_ads101x_init_without_restart_in_continuous_mode_clears_os_and_mode_bit
 				      ADS101X_128SPS);
 
 	TEST_ASSERT_NOT_NULL(ads);
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination(
@@ -280,7 +292,7 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 					(ADS101X_GAIN_AMPLIFIER)fsr,
 					(ADS101X_DATA_RATE)dr);
 				TEST_ASSERT_NOT_NULL(ads);
-				free(ads);
+				destroy_ads(ads);
 			}
 		}
 	}
@@ -315,7 +327,7 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 						      ADS101X_FSR_4_096V,
 						      FAST_DR);
 			TEST_ASSERT_NOT_NULL(ads);
-			free(ads);
+			destroy_ads(ads);
 		}
 	}
 }
@@ -535,7 +547,7 @@ void test_ads101x_protect_adds_the_resource_for_its_bus_and_address(void)
 
 	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(ads));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_protect_fails_when_the_bus_cant_be_read(void)
@@ -547,7 +559,7 @@ void test_ads101x_protect_fails_when_the_bus_cant_be_read(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(ads));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_protect_returns_1_if_already_protected(void)
@@ -563,7 +575,7 @@ void test_ads101x_protect_returns_1_if_already_protected(void)
 
 	TEST_ASSERT_EQUAL_INT(1, ads101x_protect(ads));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 /* -------------------------- ads101x_unprotect ------------------------------ */
@@ -583,7 +595,7 @@ void test_ads101x_unprotect_removes_the_resource(void)
 
 	TEST_ASSERT_EQUAL_INT(0, ads101x_unprotect(ads));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_unprotect_fails_when_the_resource_cant_be_removed(void)
@@ -594,7 +606,7 @@ void test_ads101x_unprotect_fails_when_the_resource_cant_be_removed(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(ads));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_unprotect_returns_1_if_already_unprotected(void)
@@ -605,7 +617,7 @@ void test_ads101x_unprotect_returns_1_if_already_unprotected(void)
 
 	TEST_ASSERT_EQUAL_INT(1, ads101x_unprotect(ads));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 /* ------------------------- ads101x_single_read ----------------------------- */
@@ -625,7 +637,7 @@ void test_ads101x_single_read_returns_a_positive_reading(void)
 		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT16(0x0FF, value);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_single_read_selects_the_requested_channel(void)
@@ -644,7 +656,7 @@ void test_ads101x_single_read_selects_the_requested_channel(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_single_read(ads, ADS101X_P1_N3, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_single_read_when_protected_locks_and_unlocks(void)
@@ -661,7 +673,7 @@ void test_ads101x_single_read_when_protected_locks_and_unlocks(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_single_read_fails_immediately_when_the_lock_times_out(void)
@@ -674,7 +686,7 @@ void test_ads101x_single_read_fails_immediately_when_the_lock_times_out(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 50));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_single_read_fails_when_writing_the_config_reg_fails(void)
@@ -688,7 +700,7 @@ void test_ads101x_single_read_fails_when_writing_the_config_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_single_read_fails_when_reading_the_conversion_reg_fails(void)
@@ -703,7 +715,7 @@ void test_ads101x_single_read_fails_when_reading_the_conversion_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_single_read_handles_the_maximally_negative_reading(void)
@@ -722,7 +734,7 @@ void test_ads101x_single_read_handles_the_maximally_negative_reading(void)
 		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT16(-2048, value);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 /* --------------------- ads101x_unsigned_single_read ------------------------ */
@@ -741,7 +753,7 @@ void test_ads101x_unsigned_single_read_passes_through_a_positive_reading(void)
 		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(255, value);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_unsigned_single_read_clamps_a_small_negative_reading_to_0(void)
@@ -758,7 +770,7 @@ void test_ads101x_unsigned_single_read_clamps_a_small_negative_reading_to_0(void
 		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(0, value);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_unsigned_single_read_fails_with_erange_below_minus_8(void)
@@ -776,7 +788,7 @@ void test_ads101x_unsigned_single_read_fails_with_erange_below_minus_8(void)
 		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_unsigned_single_read_propagates_a_single_read_failure(void)
@@ -791,7 +803,7 @@ void test_ads101x_unsigned_single_read_propagates_a_single_read_failure(void)
 		-1,
 		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 /* ----------------------- ads101x_continuous_read ---------------------------- */
@@ -808,7 +820,7 @@ void test_ads101x_continuous_read_skips_the_write_on_the_same_channel(void)
 		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT16(0x0FF, value);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_continuous_read_writes_on_a_channel_change(void)
@@ -826,7 +838,7 @@ void test_ads101x_continuous_read_writes_on_a_channel_change(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_continuous_read_reads_directly_after_set_fs_already_settled_the_rate(
@@ -854,7 +866,7 @@ void test_ads101x_continuous_read_reads_directly_after_set_fs_already_settled_th
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_continuous_read_when_protected_locks_and_unlocks(void)
@@ -869,7 +881,7 @@ void test_ads101x_continuous_read_when_protected_locks_and_unlocks(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_continuous_read_fails_when_writing_the_config_reg_fails(void)
@@ -886,7 +898,7 @@ void test_ads101x_continuous_read_fails_when_writing_the_config_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_continuous_read_fails_when_reading_the_conversion_reg_fails(
@@ -900,7 +912,7 @@ void test_ads101x_continuous_read_fails_when_reading_the_conversion_reg_fails(
 	TEST_ASSERT_EQUAL_INT(
 		-1, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 /* -------------------- ads101x_unsigned_continuous_read ---------------------- */
@@ -918,7 +930,7 @@ void test_ads101x_unsigned_continuous_read_passes_through_a_positive_reading(
 				      ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(255, value);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_unsigned_continuous_read_fails_with_erange_below_minus_8(void)
@@ -934,7 +946,7 @@ void test_ads101x_unsigned_continuous_read_fails_with_erange_below_minus_8(void)
 				      ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_unsigned_continuous_read_propagates_a_continuous_read_failure(
@@ -949,7 +961,7 @@ void test_ads101x_unsigned_continuous_read_propagates_a_continuous_read_failure(
 			      ads101x_unsigned_continuous_read(
 				      ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 /* --------------------------- ads101x_get_fs -------------------------------- */
@@ -962,7 +974,7 @@ void test_ads101x_get_fs_returns_the_current_data_rate(void)
 	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
 	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_get_fs_maps_the_0b111_encoding_to_3300sps(void)
@@ -978,7 +990,7 @@ void test_ads101x_get_fs_maps_the_0b111_encoding_to_3300sps(void)
 	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
 	TEST_ASSERT_EQUAL_INT(ADS101X_3300SPS, dr);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_get_fs_when_protected_locks_and_unlocks(void)
@@ -992,7 +1004,7 @@ void test_ads101x_get_fs_when_protected_locks_and_unlocks(void)
 	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
 	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_get_fs_fails_immediately_when_the_lock_times_out(void)
@@ -1004,7 +1016,7 @@ void test_ads101x_get_fs_fails_immediately_when_the_lock_times_out(void)
 	ADS101X_DATA_RATE dr;
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_fs(ads, &dr, 50));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 /* --------------------------- ads101x_set_fs -------------------------------- */
@@ -1031,7 +1043,7 @@ void test_ads101x_set_fs_patches_only_the_dr_bits(void)
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_set_fs_when_protected_locks_and_unlocks(void)
@@ -1043,7 +1055,7 @@ void test_ads101x_set_fs_when_protected_locks_and_unlocks(void)
 
 	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_set_fs_fails_immediately_when_the_lock_times_out(void)
@@ -1054,7 +1066,7 @@ void test_ads101x_set_fs_fails_immediately_when_the_lock_times_out(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(ads, ADS101X_920SPS, 50));
 
-	free(ads);
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_set_fs_writes_and_waits_when_the_rate_actually_changes_in_continuous_mode(
@@ -1072,7 +1084,7 @@ void test_ads101x_set_fs_writes_and_waits_when_the_rate_actually_changes_in_cont
 
 	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_set_fs_fails_when_writing_the_config_reg_fails_in_continuous_mode(
@@ -1089,7 +1101,7 @@ void test_ads101x_set_fs_fails_when_writing_the_config_reg_fails_in_continuous_m
 
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_set_fs_skips_the_write_when_the_rate_is_unchanged(void)
@@ -1099,7 +1111,7 @@ void test_ads101x_set_fs_skips_the_write_when_the_rate_is_unchanged(void)
 	// No i2c_write8_16b expectation queued: any write here is a bug.
 	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, FAST_DR, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_set_fs_only_writes_in_single_mode_when_read_next(void)
@@ -1111,7 +1123,7 @@ void test_ads101x_set_fs_only_writes_in_single_mode_when_read_next(void)
 
 	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 void test_ads101x_set_fs_waits_for_both_the_old_and_new_conversion_rate(void)
@@ -1139,7 +1151,7 @@ void test_ads101x_set_fs_waits_for_both_the_old_and_new_conversion_rate(void)
 	TEST_ASSERT_GREATER_OR_EQUAL_INT(8, ms);
 	TEST_ASSERT_LESS_THAN_INT(14, ms);
 
-	free(ads);
+	destroy_ads(ads);
 }
 
 /* ------------------ ads101x_get_conversion_time_us's table ------------------ */
@@ -1185,5 +1197,5 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 		TEST_ASSERT_EQUAL_INT16(0x0FF, value);
 	}
 
-	free(ads);
+	destroy_ads(ads);
 }
