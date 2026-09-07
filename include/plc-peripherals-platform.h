@@ -30,7 +30,7 @@
 #endif
 
 #if defined(__linux__)
-#define PLC_ENVIRONMENT LINUX
+#define PLC_ENVIRONMENT PLC_LINUX
 
 #elif defined(ESP_ARDUINO_VERSION)
 #define PLC_ENVIRONMENT PLC_ARDUINO_ESP32
