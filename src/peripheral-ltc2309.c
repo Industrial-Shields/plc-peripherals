@@ -29,14 +29,10 @@
 // clang-format off
 // #define SHUTDOWN  0b10001100
 
-#define CHANNEL_0 0b10001000
-#define CHANNEL_1 0b11001000
-#define CHANNEL_2 0b10011000
-#define CHANNEL_3 0b11011000
-#define CHANNEL_4 0b10101000
-#define CHANNEL_5 0b11101000
-#define CHANNEL_6 0b10111000
-#define CHANNEL_7 0b11111000
+#define COMMAND_BYTE_SD                                                     0x80
+#define COMMAND_BYTE_CHANNEL                                                0x70
+#define   COMMAND_BYTE_CHANNEL_SHIFT                                           4
+#define COMMAND_BYTE_UNI                                                    0x08
 // clang-format on
 
 struct _ltc2309_t {
@@ -68,7 +64,7 @@ ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
 	ret->bip = bip;
 
 	uint16_t read_test;
-	if (ltc2309_read_unsigned(ret, 0, &read_test) != 0) {
+	if (ltc2309_read_unsigned(ret, LTC2309_CH0, &read_test) != 0) {
 		free(ret);
 		return NULL;
 	}
@@ -107,34 +103,29 @@ static inline int16_t ltc2309_conversion_reg_to_value(uint16_t read_value)
 }
 
 static int
-ltc2309_read(ltc2309_t* ltc, uint8_t index, uint16_t* conversion, bool diff)
+ltc2309_read(ltc2309_t* ltc, uint8_t mux_field, uint16_t* conversion, bool diff)
 {
 	if (ltc == NULL || conversion == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
-	if (index > 7) {
+	if (mux_field > 0b111) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	uint8_t mask = 0xFF;
+	uint8_t cmd = COMMAND_BYTE_SD | COMMAND_BYTE_UNI;
+	cmd |= (mux_field << COMMAND_BYTE_CHANNEL_SHIFT) & COMMAND_BYTE_CHANNEL;
 
 	if (diff) {
-		mask &= 0x7F; // 0b01111111 -> S/D Bit to 0
+		cmd &= ~COMMAND_BYTE_SD;
 	}
 	if (ltc->bip) {
-		mask &= 0xF7; // 0b11110111 -> UNI Bit to 0
+		cmd &= ~COMMAND_BYTE_UNI;
 	}
 
-	static const uint8_t channels[8] = { CHANNEL_0, CHANNEL_1, CHANNEL_2,
-					     CHANNEL_3, CHANNEL_4, CHANNEL_5,
-					     CHANNEL_6, CHANNEL_7 };
-
-	uint8_t mux = channels[index] & mask;
-
 	uint8_t buffer[2];
-	buffer[0] = mux;
+	buffer[0] = cmd;
 
 	if (i2c_write(PASS_LTC(ltc), buffer, 1) != 1) {
 		errno = EIO;
@@ -160,7 +151,8 @@ ltc2309_read(ltc2309_t* ltc, uint8_t index, uint16_t* conversion, bool diff)
 	return 0;
 }
 
-int ltc2309_read_signed(ltc2309_t* ltc, uint8_t index, int16_t* read_value)
+int
+ltc2309_read_signed(ltc2309_t* ltc, LTC2309_DIFF_INPUT index, int16_t* read_value)
 {
 	if (read_value == NULL) {
 		errno = EFAULT;
@@ -169,7 +161,7 @@ int ltc2309_read_signed(ltc2309_t* ltc, uint8_t index, int16_t* read_value)
 
 	uint16_t conversion;
 
-	if (ltc2309_read(ltc, index, &conversion, true) != 0) {
+	if (ltc2309_read(ltc, (uint8_t)index, &conversion, true) != 0) {
 		return -1;
 	}
 
@@ -177,7 +169,8 @@ int ltc2309_read_signed(ltc2309_t* ltc, uint8_t index, int16_t* read_value)
 	return 0;
 }
 
-int ltc2309_read_unsigned(ltc2309_t* ltc, uint8_t index, uint16_t* read_value)
+int
+ltc2309_read_unsigned(ltc2309_t* ltc, LTC2309_INPUT index, uint16_t* read_value)
 {
 	if (read_value == NULL) {
 		errno = EFAULT;
@@ -186,7 +179,7 @@ int ltc2309_read_unsigned(ltc2309_t* ltc, uint8_t index, uint16_t* read_value)
 
 	uint16_t conversion;
 
-	if (ltc2309_read(ltc, index, &conversion, false) != 0) {
+	if (ltc2309_read(ltc, (uint8_t)index, &conversion, false) != 0) {
 		return -1;
 	}
 

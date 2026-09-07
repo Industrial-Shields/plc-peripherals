@@ -63,13 +63,13 @@ static const uint8_t LTC2309_ADDR = 0x08; // AD0 = AD1 = GND
 static const bool LTC2309_BIPOLAR = false; // unipolar range
 
 #define NUM_CHANNELS 3
-static const uint8_t CHANNELS[NUM_CHANNELS] = {
+static const LTC2309_INPUT CHANNELS[NUM_CHANNELS] = {
 	/* I0.12 in RPi PLC V6 */
-	2, // CH2, wired to 5V
+	LTC2309_CH2, // wired to 5V
 	/* I0.10 in RPi PLC V6 */
-	4, // CH4, wired to 3.3V
+	LTC2309_CH4, // wired to 3.3V
 	/* I0.8 in RPi PLC V6 */
-	0, // CH0, wired to GND
+	LTC2309_CH0, // wired to GND
 };
 static const char* CHANNEL_NAMES[NUM_CHANNELS] = {
 	"CH2 (~5V ref)  ",

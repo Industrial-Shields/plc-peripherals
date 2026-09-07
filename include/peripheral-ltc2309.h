@@ -32,6 +32,38 @@ extern "C" {
 struct _ltc2309_t;
 typedef struct _ltc2309_t ltc2309_t;
 
+typedef enum {
+	// clang-format off
+	LTC2309_CH0 = 0b000,
+	LTC2309_CH1 = 0b100,
+	LTC2309_CH2 = 0b001,
+	LTC2309_CH3 = 0b101,
+	LTC2309_CH4 = 0b010,
+	LTC2309_CH5 = 0b110,
+	LTC2309_CH6 = 0b011,
+	LTC2309_CH7 = 0b111,
+	// clang-format on
+} LTC2309_INPUT;
+
+/*
+ * Differential pairs, per the LTC2309 datasheet's Table 1 (Channel
+ * Configuration): the ODD/SIGN bit picks which of the two channels in a pair
+ * is positive, and S1/S0 pick the pair. LTC2309_P<x>_N<y> means "channel x is
+ * the positive input, channel y is the negative input".
+ */
+typedef enum {
+	// clang-format off
+	LTC2309_P0_N1 = 0b000,
+	LTC2309_P2_N3 = 0b001,
+	LTC2309_P4_N5 = 0b010,
+	LTC2309_P6_N7 = 0b011,
+	LTC2309_P1_N0 = 0b100,
+	LTC2309_P3_N2 = 0b101,
+	LTC2309_P5_N4 = 0b110,
+	LTC2309_P7_N6 = 0b111,
+	// clang-format on
+} LTC2309_DIFF_INPUT;
+
 /**
  * ltc2309_init
  *
@@ -47,7 +79,7 @@ typedef struct _ltc2309_t ltc2309_t;
  *                            0 to +FS. If true, the ADC operates in bipolar mode
  *                            (UNI bit cleared): the COM pin should be connected
  *                            midway between GND and REFCOMP and the valid input
- *                            range is -FS to +FS.
+ *                            range is -FS/2 to +FS/2.
  *
  * Returns:
  *   ltc2309_t* - Pointer to the initialized peripheral struct on success.
@@ -87,24 +119,16 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
 /**
  * ltc2309_read_signed
  *
- * Perform a differential conversion for the input index and store the result
+ * Perform a differential conversion for the input pair and store the result
  * as a signed 12-bit value sign-extended to int16_t.
  *
- * Differential mode selects the input pair based on the index:
- *   - Index 0: CH0 - CH1
- *   - Index 1: CH1 - CH0 (reversed polarity)
- *   - Index 2: CH2 - CH3
- *   - Index 3: CH3 - CH2 (reversed polarity)
- *   - Index 4: CH4 - CH5
- *   - Index 5: CH5 - CH4 (reversed polarity)
- *   - Index 6: CH6 - CH7
- *   - Index 7: CH7 - CH6 (reversed polarity)
- *
  * Parameters:
- *   ltc (ltc2309_t*)      - The LTC2309 to interact with.
- *   index (uint8_t)       - Input/channel index (0-7), interpreted as a
- *                           differential input pair.
- *   read_value (int16_t*) - The value in which the reading will be stored.
+ *   ltc (ltc2309_t*)            - The LTC2309 to interact with.
+ *   index (LTC2309_DIFF_INPUT)  - Differential input pair to read. See
+ *                                 LTC2309_DIFF_INPUT: LTC2309_P<x>_N<y> reads
+ *                                 channel x as positive and y as negative.
+ *   read_value (int16_t*)       - The value in which the reading will be
+ *                                 stored.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -116,7 +140,9 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
  *     - EIO    : Communication with the LTC2309 couldn't be established.
  *     - ERANGE : The conversion result is invalid.
  */
-int ltc2309_read_signed(ltc2309_t* ltc, uint8_t index, int16_t* read_value);
+int ltc2309_read_signed(ltc2309_t* ltc,
+			LTC2309_DIFF_INPUT index,
+			int16_t* read_value);
 
 #define ltc2309_read_differential(...) ltc2309_read_signed(__VA_ARGS__)
 
@@ -126,17 +152,15 @@ int ltc2309_read_signed(ltc2309_t* ltc, uint8_t index, int16_t* read_value);
  * Perform a single-ended conversion for the input index and store the 12-bit
  * conversion result as a uint16_t.
  *
- * Single-ended mode references the selected input against the COM pin. Index
- * 0-7 select CH0 through CH7 respectively. The conversion is always returned
- * as a raw unsigned 12-bit value; the UNI bit set at init determines the input
- * voltage range (0 to +FS for unipolar, -FS to +FS for bipolar), not the sign
- * of the output.
+ * Single-ended mode references the selected input against the COM pin. The
+ * conversion is always returned as a raw unsigned 12-bit value; the UNI bit
+ * set at init determines the input voltage range (0 to +FS for unipolar,
+ * -FS/2 to +FS/2 for bipolar), not the sign of the output.
  *
  * Parameters:
- *   ltc (ltc2309_t*)       - The LTC2309 to interact with.
- *   index (uint8_t)        - Input/channel index (0-7), interpreted as a
- *                            single-ended input.
- *   read_value (uint16_t*) - The value in which the reading will be stored.
+ *   ltc (ltc2309_t*)        - The LTC2309 to interact with.
+ *   index (LTC2309_INPUT)   - Input/channel to read single-ended.
+ *   read_value (uint16_t*)  - The value in which the reading will be stored.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -148,7 +172,9 @@ int ltc2309_read_signed(ltc2309_t* ltc, uint8_t index, int16_t* read_value);
  *     - EIO    : Communication with the LTC2309 couldn't be established.
  *     - ERANGE : The conversion result is invalid.
  */
-int ltc2309_read_unsigned(ltc2309_t* ltc, uint8_t index, uint16_t* read_value);
+int ltc2309_read_unsigned(ltc2309_t* ltc,
+			  LTC2309_INPUT index,
+			  uint16_t* read_value);
 
 #define ltc2309_read_single(...) ltc2309_read_unsigned(__VA_ARGS__)
 
