@@ -737,6 +737,33 @@ void test_ads101x_single_read_handles_the_maximally_negative_reading(void)
 	destroy_ads(ads);
 }
 
+void test_ads101x_single_read_fails_with_einval_when_device_is_continuous_mode(
+	void)
+{
+	ads101x_t* ads = create_ads(true);
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_single_read_does_not_lock_when_device_is_continuous_mode(void)
+{
+	ads101x_t* ads = create_protected_ads(true);
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_protected_ads(ads);
+}
+
 /* --------------------- ads101x_unsigned_single_read ------------------------ */
 
 void test_ads101x_unsigned_single_read_passes_through_a_positive_reading(void)
@@ -913,6 +940,33 @@ void test_ads101x_continuous_read_fails_when_reading_the_conversion_reg_fails(
 		-1, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
+}
+
+void test_ads101x_continuous_read_fails_with_einval_when_device_is_single_mode(
+	void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_continuous_read_does_not_lock_when_device_is_single_mode(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_protected_ads(ads);
 }
 
 /* -------------------- ads101x_unsigned_continuous_read ---------------------- */
