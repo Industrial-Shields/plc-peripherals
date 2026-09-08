@@ -717,6 +717,28 @@ void test_mcp230xx_unprotect_fails_when_the_resource_cant_be_removed(void)
 
 /* ------------------------- mcp230xx_set_input ------------------------------ */
 
+void test_mcp230xx_set_input_fails_with_einval_for_null_mcp(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_set_input(NULL, 0, MCP230XX_PULLUP, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_mcp230xx_set_input_fails_with_einval_for_out_of_range_index(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_input(
+			mcp, MCP23008_MAX_GPIOS, MCP230XX_PULLUP, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_mcp(mcp);
+}
+
 void test_mcp230xx_set_input_writes_gppu_before_iodir(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
@@ -934,6 +956,27 @@ void test_mcp230xx_set_input_fails_when_writing_the_iodir_reg_fails(void)
 
 /* ------------------------- mcp230xx_read_gpio ------------------------------ */
 
+void test_mcp230xx_read_gpio_fails_with_einval_for_null_mcp(void)
+{
+	errno = 0;
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_read_gpio(NULL, 0, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_mcp230xx_read_gpio_fails_with_einval_for_out_of_range_index(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	errno = 0;
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_read_gpio(mcp, MCP23008_MAX_GPIOS, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_mcp(mcp);
+}
+
 void test_mcp230xx_read_gpio_returns_high_when_the_pin_bit_is_set(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
@@ -1014,6 +1057,25 @@ void test_mcp230xx_read_gpio_fails_when_reading_the_gpio_reg_fails(void)
 }
 
 /* ------------------------- mcp230xx_set_output ----------------------------- */
+
+void test_mcp230xx_set_output_fails_with_einval_for_null_mcp(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_set_output(NULL, 0, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_mcp230xx_set_output_fails_with_einval_for_out_of_range_index(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_set_output(mcp, MCP23008_MAX_GPIOS, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_mcp(mcp);
+}
 
 void test_mcp230xx_set_output_clears_the_iodir_bit(void)
 {
@@ -1100,6 +1162,28 @@ void test_mcp230xx_set_output_fails_when_writing_the_iodir_reg_fails(void)
 }
 
 /* ------------------------- mcp230xx_write_gpio ----------------------------- */
+
+void test_mcp230xx_write_gpio_fails_with_einval_for_null_mcp(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_write_gpio(NULL, 0, MCP230XX_HIGH, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_mcp230xx_write_gpio_fails_with_einval_for_out_of_range_index(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_write_gpio(
+			mcp, MCP23008_MAX_GPIOS, MCP230XX_HIGH, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_mcp(mcp);
+}
 
 void test_mcp230xx_write_gpio_sets_the_olat_bit(void)
 {
