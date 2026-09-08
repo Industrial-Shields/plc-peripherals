@@ -107,6 +107,12 @@ static long elapsed_ms(struct timespec start, struct timespec end)
 	       (end.tv_nsec - start.tv_nsec) / 1000000L;
 }
 
+static long elapsed_us(struct timespec start, struct timespec end)
+{
+	return (end.tv_sec - start.tv_sec) * 1000000L +
+	       (end.tv_nsec - start.tv_nsec) / 1000L;
+}
+
 static void expect_ads101x_reset_writes(void)
 {
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
@@ -659,6 +665,35 @@ void test_ads101x_single_read_selects_the_requested_channel(void)
 	destroy_ads(ads);
 }
 
+void test_ads101x_single_read_switches_correctly_between_two_nonzero_channels(
+	void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_SINGLE | 0x1000,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_single_read(ads, ADS101X_P1_N3, &value, 1000));
+
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_SINGLE | 0x2000,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_single_read(ads, ADS101X_P2_N3, &value, 1000));
+
+	destroy_ads(ads);
+}
+
 void test_ads101x_single_read_when_protected_locks_and_unlocks(void)
 {
 	ads101x_t* ads = create_protected_ads(false);
@@ -800,6 +835,43 @@ void test_ads101x_unsigned_single_read_clamps_a_small_negative_reading_to_0(void
 	destroy_ads(ads);
 }
 
+// Regression test for the -8 threshold itself...
+void test_ads101x_unsigned_single_read_clamps_exactly_minus_8_to_0(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0xFF80, 0);
+
+	uint16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_UINT16(0, value);
+
+	destroy_ads(ads);
+}
+
+// ... and the other side of the same boundary.
+void test_ads101x_unsigned_single_read_fails_with_erange_at_minus_9(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0xFF70, 0); // -> -9
+
+	uint16_t value;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
+
+	destroy_ads(ads);
+}
+
 void test_ads101x_unsigned_single_read_fails_with_erange_below_minus_8(void)
 {
 	ads101x_t* ads = create_ads(false);
@@ -864,6 +936,41 @@ void test_ads101x_continuous_read_writes_on_a_channel_change(void)
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_continuous_read_writes_again_after_returning_to_a_previous_channel(
+	void)
+{
+	/*
+	 * If continuous_read  never updated old_cfg_reg after writing, it would
+	 * stay stuck at whatever it was at init, so switching to a new channel
+	 * and then switching BACK to the original one would wrongly look like
+	 * no change, and no write would be issued
+	 */
+	ads101x_t* ads = create_ads(true);
+
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS | 0x1000,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
+
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -1215,23 +1322,32 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 {
 	/*
 	 * ads101x_get_conversion_time_us is a private lookup table with one
-	 * case per ADS101X_DATA_RATE plus a default for the 0b111 duplicate
-	 * of 3300SPS; only ADS101X_128SPS, ADS101X_920SPS and ADS101X_2400SPS
-	 * get exercised by the rest of this suite. Cycle single_read through
-	 * the remaining rates so every branch actually runs at least once;
-	 * the real usleep() delays this incurs are all under 5ms.
+	 * case per ADS101X_DATA_RATE plus a default for the 0b111 duplicate of
+	 * 3300SPS.  expected_us mirrors ads101x_get_conversion_time_us's own
+	 * formula; the bound is [expected_us, 2 * expected_us) to tolerate
+	 * scheduling jitter while still catching a grossly wrong table entry.
 	 */
 	ads101x_t* ads = create_ads(false);
 	static const struct {
 		ADS101X_DATA_RATE dr;
 		uint16_t expected_cfg;
+		long expected_us;
 	} cases[] = {
-		{ ADS101X_250SPS, (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x20 },
-		{ ADS101X_490SPS, (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x40 },
-		{ ADS101X_1600SPS, (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x80 },
-		{ ADS101X_3300SPS, (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0 },
+		{ ADS101X_250SPS,
+		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x20,
+		  (1100000 + 50000) / 250 },
+		{ ADS101X_490SPS,
+		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x40,
+		  (1100000 + 50000) / 490 },
+		{ ADS101X_1600SPS,
+		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x80,
+		  (1100000 + 50000) / 1600 },
+		{ ADS101X_3300SPS,
+		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0,
+		  (1100000 + 50000) / 3300 },
 		{ (ADS101X_DATA_RATE)0b111,
-		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xE0 },
+		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xE0,
+		  (1100000 + 50000) / 3300 },
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -1244,11 +1360,20 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 					       0);
 		expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
+		struct timespec start, end;
+		clock_gettime(CLOCK_MONOTONIC, &start);
+
 		int16_t value;
 		TEST_ASSERT_EQUAL_INT(
 			0,
 			ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		long us = elapsed_us(start, end);
+
 		TEST_ASSERT_EQUAL_INT16(0x0FF, value);
+		TEST_ASSERT_GREATER_OR_EQUAL_INT(cases[i].expected_us, us);
+		TEST_ASSERT_LESS_THAN_INT(2 * cases[i].expected_us, us);
 	}
 
 	destroy_ads(ads);
