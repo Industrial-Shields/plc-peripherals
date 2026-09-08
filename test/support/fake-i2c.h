@@ -27,6 +27,7 @@
  *	fake_i2c_reset();
  *	fake_i2c_expected_addr = EXPECTED_ADDR;
  *	i2c_write_Stub(fake_i2c_write);
+ *	i2c_read_Stub(fake_i2c_read);
  *	i2c_write_then_read_Stub(fake_i2c_write_then_read);
  *
  * fake_i2c_reset() must come first in every test, or state leaks between them.
@@ -68,8 +69,19 @@ typedef struct {
 	ssize_t retval;
 } fake_i2c_transfer_t;
 
+typedef struct {
+	uint32_t calls;
+	size_t requested_len;
+
+	// Canned answer, set by fake_i2c_read_answers()
+	uint8_t response[FAKE_I2C_MAX_WIRE_BYTES];
+	size_t response_len;
+	ssize_t retval;
+} fake_i2c_read_t;
+
 extern fake_i2c_write_t fake_i2c_write_op;
 extern fake_i2c_transfer_t fake_i2c_transfer_op;
+extern fake_i2c_read_t fake_i2c_read_op;
 
 /*
  * The device the test is talking to. Every call the fake receives must be
@@ -97,6 +109,15 @@ void fake_i2c_reset(void);
  */
 void fake_i2c_answers(const uint8_t* bytes, size_t len);
 
+/**
+ * fake_i2c_read_answers
+ *
+ * Arm the fake with the bytes a standalone fake_i2c_read hands back next, as
+ * an honest device would: it reports exactly as many bytes as it produced.
+ * Override fake_i2c_read_op.retval afterwards to fake a misbehaving device.
+ */
+void fake_i2c_read_answers(const uint8_t* bytes, size_t len);
+
 /*
  * Bodies for the CMock stubs of the platform layer. The trailing int is CMock's
  * call counter, part of the callback signature.
@@ -106,6 +127,12 @@ ssize_t fake_i2c_write(const i2c_interface_t* i2c,
 		       const uint8_t* to_write,
 		       size_t to_write_len,
 		       int num_calls);
+
+ssize_t fake_i2c_read(const i2c_interface_t* i2c,
+		      plc_i2c_addr_t addr,
+		      uint8_t* to_read,
+		      size_t to_read_len,
+		      int num_calls);
 
 ssize_t fake_i2c_write_then_read(const i2c_interface_t* i2c,
 				 plc_i2c_addr_t addr,

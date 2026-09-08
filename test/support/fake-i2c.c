@@ -23,6 +23,7 @@
 
 fake_i2c_write_t fake_i2c_write_op;
 fake_i2c_transfer_t fake_i2c_transfer_op;
+fake_i2c_read_t fake_i2c_read_op;
 plc_i2c_addr_t fake_i2c_expected_addr;
 
 static void check_addressed_device(plc_i2c_addr_t addr)
@@ -37,6 +38,7 @@ void fake_i2c_reset(void)
 {
 	memset(&fake_i2c_write_op, 0, sizeof(fake_i2c_write_op));
 	memset(&fake_i2c_transfer_op, 0, sizeof(fake_i2c_transfer_op));
+	memset(&fake_i2c_read_op, 0, sizeof(fake_i2c_read_op));
 	fake_i2c_expected_addr = 0;
 }
 
@@ -49,6 +51,16 @@ void fake_i2c_answers(const uint8_t* bytes, size_t len)
 	fake_i2c_transfer_op.response_len = len;
 	fake_i2c_transfer_op.reported_read_len = len;
 	fake_i2c_transfer_op.retval = 1;
+}
+
+void fake_i2c_read_answers(const uint8_t* bytes, size_t len)
+{
+	TEST_ASSERT_TRUE_MESSAGE(len <= FAKE_I2C_MAX_WIRE_BYTES,
+				 "canned answer longer than the fake's buffer");
+
+	memcpy(fake_i2c_read_op.response, bytes, len);
+	fake_i2c_read_op.response_len = len;
+	fake_i2c_read_op.retval = (ssize_t)len;
 }
 
 ssize_t fake_i2c_write(const i2c_interface_t* i2c,
@@ -70,6 +82,29 @@ ssize_t fake_i2c_write(const i2c_interface_t* i2c,
 	memcpy(fake_i2c_write_op.bytes, to_write, to_write_len);
 
 	return fake_i2c_write_op.retval;
+}
+
+ssize_t fake_i2c_read(const i2c_interface_t* i2c,
+		      plc_i2c_addr_t addr,
+		      uint8_t* to_read,
+		      size_t to_read_len,
+		      int num_calls)
+{
+	(void)num_calls;
+
+	TEST_ASSERT_NOT_NULL_MESSAGE(i2c, "no test uses a NULL interface");
+	TEST_ASSERT_NOT_NULL(to_read);
+	check_addressed_device(addr);
+
+	fake_i2c_read_op.calls++;
+	fake_i2c_read_op.requested_len = to_read_len;
+
+	size_t to_copy = fake_i2c_read_op.response_len < to_read_len ?
+				 fake_i2c_read_op.response_len :
+				 to_read_len;
+	memcpy(to_read, fake_i2c_read_op.response, to_copy);
+
+	return fake_i2c_read_op.retval;
 }
 
 ssize_t fake_i2c_write_then_read(const i2c_interface_t* i2c,

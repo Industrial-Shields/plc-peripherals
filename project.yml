@@ -124,6 +124,7 @@
   :test:
     :*:
       - TEST # Add symbol 'TEST' to compilation of all files in all test executables
+      - PLC_PERIPHERALS_CHECK_ARGUMENTS # Compile in the gated argument checks
     :test_peripheral-ads101x:
       # The init/deinit fuzz tests run tens of thousands of CMock
       # expectation setups within single test functions, and it OOMs
