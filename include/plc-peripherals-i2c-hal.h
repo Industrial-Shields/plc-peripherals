@@ -73,6 +73,14 @@ typedef uint16_t plc_i2c_addr_t;
  *     - ENOMEM        : Out of memory during allocation.
  *     - ESP32 specific:
  *       - EIO         : i2cInit function reported some error.
+ *     - Linux specific:
+ *       - ENOTSUP      : SDA/SCL were given. Linux addresses buses through
+ *                        /dev/i2c-<bus> only.
+ *       - ENOENT       : /dev/i2c-<bus> does not exist.
+ *       - EACCES       : No permission to open /dev/i2c-<bus>.
+ *       - ENFILE/EMFILE: Out of file descriptors, system-wide or per-process.
+ *       - (others)     : Any other errno that open(2) can report for O_RDWR on
+ *                        a character device.
  */
 i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
 
@@ -143,6 +151,14 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  * 				array...
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error.
+ *     - Linux specific       : errno is whatever ioctl(I2C_RDWR) reports on
+ *                              the underlying adapter driver (e.g. EIO,
+ *                              ENXIO, ETIMEDOUT, EREMOTEIO). In particular,
+ *                              EINTR is possible and is not retried
+ *                              internally; the caller must retry if desired.
+ *                              EAGAIN means the transfer completed zero
+ *                              messages; EBADE means the adapter driver
+ *                              returned an unexpected message count.
  */
 ssize_t i2c_write(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
@@ -174,6 +190,14 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  * 				array...
  *     - ESP32 specific       :
  *       - EIO                : i2cRead function reported some error.
+ *     - Linux specific       : errno is whatever ioctl(I2C_RDWR) reports on
+ *                              the underlying adapter driver (e.g. EIO,
+ *                              ENXIO, ETIMEDOUT, EREMOTEIO). In particular,
+ *                              EINTR is possible and is not retried
+ *                              internally; the caller must retry if desired.
+ *                              EAGAIN means the transfer completed zero
+ *                              messages; EBADE means the adapter driver
+ *                              returned an unexpected message count.
  */
 ssize_t i2c_read(const i2c_interface_t* i2c,
 		 plc_i2c_addr_t addr,
@@ -209,6 +233,14 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *     - ESP32 specific       :
  *       - EIO                : i2cWriteReadNonStop function reported some
  *                              error.
+ *     - Linux specific       : errno is whatever ioctl(I2C_RDWR) reports on
+ *                              the underlying adapter driver (e.g. EIO,
+ *                              ENXIO, ETIMEDOUT, EREMOTEIO). In particular,
+ *                              EINTR is possible and is not retried
+ *                              internally; the caller must retry if desired.
+ *                              EAGAIN means the transfer completed zero
+ *                              messages; EBADE means the adapter driver
+ *                              returned an unexpected message count.
  */
 ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    plc_i2c_addr_t addr,
