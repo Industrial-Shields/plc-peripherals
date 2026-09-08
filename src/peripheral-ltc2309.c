@@ -27,29 +27,28 @@
 #define PASS_LTC(ltc) ltc->i2c, ltc->addr
 
 // clang-format off
-// #define SHUTDOWN  0b10001100
+static const uint8_t INITIAL_STATE   = 0b00000000;
+static const uint8_t SHUTDOWN        = 0b00000100;
 
 #define COMMAND_BYTE_SD                                                     0x80
+#define COMMAND_BYTE_SGL                                                    0x80
+#define COMMAND_BYTE_DIFF                                                   0x00
 #define COMMAND_BYTE_CHANNEL                                                0x70
 #define   COMMAND_BYTE_CHANNEL_SHIFT                                           4
 #define COMMAND_BYTE_UNI                                                    0x08
+#define COMMAND_BYTE_BIP                                                    0x00
 // clang-format on
 
 struct _ltc2309_t {
 	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
-	bool bip;
+	uint8_t cmd;
 };
 
 ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
 {
 	if (i2c == NULL) {
 		errno = EFAULT;
-		return NULL;
-	}
-
-	if (addr >= 128) {
-		errno = EINVAL;
 		return NULL;
 	}
 
@@ -61,13 +60,24 @@ ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
 
 	ret->i2c = i2c;
 	ret->addr = addr;
-	ret->bip = bip;
+	ret->cmd = INITIAL_STATE | (bip ? COMMAND_BYTE_BIP : COMMAND_BYTE_UNI);
 
-	uint16_t read_test;
-	if (ltc2309_read_unsigned(ret, LTC2309_CH0, &read_test) != 0) {
+	if (i2c_write(i2c, addr, &INITIAL_STATE, sizeof(INITIAL_STATE)) != 1) {
 		free(ret);
 		return NULL;
 	}
+
+	/*
+	 * According to the datasheet: When the LTC2309 is properly addressed,
+	 * the ADC is released from sleep mode and requires 200ms (tREFWAKE) to
+	 * wake up and charge the respective 2.2μF and 10μF bypass capacitors on
+	 * the VREF and REFCOMP pins. A new conversion should not be initiated
+	 * before this time.
+	 *
+	 * Assume the chip could be sleeping.
+	 */
+	usleep(200 * 1000);
+
 	return ret;
 }
 
@@ -77,13 +87,9 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown)
 		errno = EFAULT;
 		return -1;
 	}
-	if (ltc->addr >= 128) {
-		errno = EINVAL;
-		return -1;
-	}
 
-	if (shutdown) {
-		errno = ENOTSUP;
+	if (shutdown &&
+	    i2c_write(PASS_LTC(ltc), &SHUTDOWN, sizeof(SHUTDOWN)) != 1) {
 		return -1;
 	}
 
@@ -105,54 +111,43 @@ static inline int16_t ltc2309_conversion_reg_to_value(uint16_t read_value)
 static int
 ltc2309_read(ltc2309_t* ltc, uint8_t mux_field, uint16_t* conversion, bool diff)
 {
-	if (ltc == NULL || conversion == NULL) {
-		errno = EFAULT;
-		return -1;
-	}
 	if (mux_field > 0b111) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	uint8_t cmd = COMMAND_BYTE_SD | COMMAND_BYTE_UNI;
-	cmd |= (mux_field << COMMAND_BYTE_CHANNEL_SHIFT) & COMMAND_BYTE_CHANNEL;
+	uint8_t diff_value = diff ? COMMAND_BYTE_DIFF : COMMAND_BYTE_SGL;
+	uint8_t new_mux = mux_field << COMMAND_BYTE_CHANNEL_SHIFT;
+	uint8_t new_cmd = ltc->cmd;
 
-	if (diff) {
-		cmd &= ~COMMAND_BYTE_SD;
-	}
-	if (ltc->bip) {
-		cmd &= ~COMMAND_BYTE_UNI;
+	new_cmd &= (~COMMAND_BYTE_CHANNEL) & (~COMMAND_BYTE_SD);
+	new_cmd |= new_mux | diff_value;
+	if (new_cmd != ltc->cmd) {
+		if (i2c_write(PASS_LTC(ltc), &new_cmd, 1) != 1) {
+			return -1;
+		}
+		ltc->cmd = new_cmd;
+		usleep(5); // It must wait 1.8 us minimum before reading
 	}
 
 	uint8_t buffer[2];
-	buffer[0] = cmd;
-
-	if (i2c_write(PASS_LTC(ltc), buffer, 1) != 1) {
-		errno = EIO;
-		return -1;
-	}
-
-	usleep(5); // It must wait 1.8 us minimum before reading
-
 	if (i2c_read(PASS_LTC(ltc), buffer, 2) != 2) {
-		errno = EIO;
 		return -1;
 	}
 
-	uint16_t raw_value = ((buffer[0] << 8) | (buffer[1]));
-
-	if ((raw_value & 0x000F) != 0) {
-		// Last 4 bits were not 0, invalid raw_value
+	*conversion = ((uint16_t)buffer[0] << 8) | buffer[1];
+	if ((*conversion & 0x000F) != 0) {
+		// Last 4 bits were not 0, invalid conversion
 		errno = ERANGE;
 		return -1;
 	}
 
-	*conversion = raw_value;
 	return 0;
 }
 
-int
-ltc2309_read_signed(ltc2309_t* ltc, LTC2309_DIFF_INPUT index, int16_t* read_value)
+int ltc2309_read_signed(ltc2309_t* ltc,
+			LTC2309_DIFF_INPUT index,
+			int16_t* read_value)
 {
 	if (read_value == NULL) {
 		errno = EFAULT;
@@ -160,7 +155,6 @@ ltc2309_read_signed(ltc2309_t* ltc, LTC2309_DIFF_INPUT index, int16_t* read_valu
 	}
 
 	uint16_t conversion;
-
 	if (ltc2309_read(ltc, (uint8_t)index, &conversion, true) != 0) {
 		return -1;
 	}
@@ -169,20 +163,19 @@ ltc2309_read_signed(ltc2309_t* ltc, LTC2309_DIFF_INPUT index, int16_t* read_valu
 	return 0;
 }
 
-int
-ltc2309_read_unsigned(ltc2309_t* ltc, LTC2309_INPUT index, uint16_t* read_value)
+int ltc2309_read_unsigned(ltc2309_t* ltc,
+			  LTC2309_INPUT index,
+			  uint16_t* read_value)
 {
 	if (read_value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
-	uint16_t conversion;
-
-	if (ltc2309_read(ltc, (uint8_t)index, &conversion, false) != 0) {
+	if (ltc2309_read(ltc, (uint8_t)index, read_value, false) != 0) {
 		return -1;
 	}
 
-	*read_value = conversion >> 4;
+	*read_value >>= 4;
 	return 0;
 }

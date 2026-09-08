@@ -67,19 +67,16 @@ typedef enum {
 /**
  * ltc2309_init
  *
- * Initialize an LTC2309 ADC with address "addr". This function performs a read
- * on channel 0 to check its existence and correct behavior.
+ * Initialize an LTC2309 ADC with address "addr". This function ensures that the
+ * ADC's is in it's initial state, then sleeps the required tREFWAKE time to
+ * allow the reference buffer to wake up.
  *
  * Parameters:
  *   i2c (i2c_interface_t*) - The I2C interface to access the peripheral.
  *   addr (plc_i2c_addr_t)  - The I2C address of the peripheral.
- *   bip (bool)             - Selects the input range. If false, the ADC operates
- *                            in unipolar mode (UNI bit set): the COM pin should
- *                            be connected to GND and the valid input range is
- *                            0 to +FS. If true, the ADC operates in bipolar mode
- *                            (UNI bit cleared): the COM pin should be connected
- *                            midway between GND and REFCOMP and the valid input
- *                            range is -FS/2 to +FS/2.
+ *   bip (bool)             - Selects the input range. If false, the ADC will
+ *                            operate in unipolar mode. If true, it will
+ *                            operate in bipolar mode.
  *
  * Returns:
  *   ltc2309_t* - Pointer to the initialized peripheral struct on success.
@@ -88,10 +85,8 @@ typedef enum {
  * Errors:
  *   errno set to:
  *     - EFAULT : Passed i2c_interface is NULL.
- *     - EINVAL : Passed address is invalid.
  *     - ENOMEM : Out of memory during allocation.
  *     - EIO    : Communication with the LTC2309 couldn't be established.
- *     - ERANGE : The conversion result from the read check is invalid.
  */
 ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip);
 
@@ -99,7 +94,7 @@ ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip);
  * ltc2309_deinit
  *
  * De-initialize an LTC2309 ADC. If shutdown is true, the LTC2309 is placed in
- * shutdown mode before returning.
+ * sleep mode before returning.
  *
  * Parameters:
  *   ltc (ltc2309_t*) - The LTC2309 to interact with.
@@ -111,7 +106,6 @@ ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip);
  * Errors:
  *   errno set to:
  *     - EFAULT : Passed ltc2309_t or its I2C interface is NULL.
- *     - EINVAL : The address is invalid.
  *     - EIO    : Communication with the LTC2309 couldn't be established.
  */
 int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
@@ -120,7 +114,8 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
  * ltc2309_read_signed
  *
  * Perform a differential conversion for the input pair and store the result
- * as a signed 12-bit value sign-extended to int16_t.
+ * as a signed 12-bit value sign-extended to int16_t. To use it, the LTC2309
+ * must have been initialized with bip=true (ltc2309_init).
  *
  * Parameters:
  *   ltc (ltc2309_t*)            - The LTC2309 to interact with.
@@ -150,12 +145,8 @@ int ltc2309_read_signed(ltc2309_t* ltc,
  * ltc2309_read_unsigned
  *
  * Perform a single-ended conversion for the input index and store the 12-bit
- * conversion result as a uint16_t.
- *
- * Single-ended mode references the selected input against the COM pin. The
- * conversion is always returned as a raw unsigned 12-bit value; the UNI bit
- * set at init determines the input voltage range (0 to +FS for unipolar,
- * -FS/2 to +FS/2 for bipolar), not the sign of the output.
+ * conversion result as a uint16_t. To use it, the LTC2309 must have been
+ * initialized with bip=false (ltc2309_init).
  *
  * Parameters:
  *   ltc (ltc2309_t*)        - The LTC2309 to interact with.
