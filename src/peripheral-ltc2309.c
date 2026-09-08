@@ -18,6 +18,7 @@
  */
 
 #include <plc-peripherals-i2c.h>
+#include <plc-resource-protector.h>
 #include <peripheral-ltc2309.h>
 
 #include <malloc.h>
@@ -45,7 +46,26 @@ struct _ltc2309_t {
 	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
 	uint8_t cmd;
+	plc_resource_t cached_resource;
+	bool is_protected;
 };
+
+#define LTC2309_LOCK(ltc, timeout_ms)                                 \
+	do {                                                          \
+		if ((ltc)->is_protected) {                            \
+			if (plc_resource_lock((ltc)->cached_resource, \
+					      (timeout_ms)) != 0) {   \
+				return -1;                            \
+			}                                             \
+		}                                                     \
+	} while (0)
+
+#define LTC2309_UNLOCK(ltc)                                        \
+	do {                                                       \
+		if (ltc->is_protected) {                           \
+			plc_resource_unlock(ltc->cached_resource); \
+		}                                                  \
+	} while (0)
 
 ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
 {
@@ -63,6 +83,7 @@ ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
 	ret->i2c = i2c;
 	ret->addr = addr;
 	ret->cmd = INITIAL_STATE | (bip ? COMMAND_BYTE_BIP : COMMAND_BYTE_UNI);
+	ret->is_protected = false;
 
 	if (i2c_write(i2c, addr, &INITIAL_STATE, sizeof(INITIAL_STATE)) != 1) {
 		free(ret);
@@ -95,10 +116,53 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown)
 		return -1;
 	}
 
+	if (ltc->is_protected) {
+		int ret = ltc2309_unprotect(ltc);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
 	free(ltc);
 
 	errno = 0;
 	return 0;
+}
+
+int ltc2309_protect(ltc2309_t* ltc)
+{
+	if (ltc == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	uint8_t bus;
+	if (i2c_get_bus(ltc->i2c, &bus) != 0) {
+		return -1;
+	}
+
+	plc_resource_t res = I2C_RESOURCE(bus, ltc->addr);
+	int result = plc_resource_add(res);
+	if (result >= 0) {
+		ltc->is_protected = true;
+		ltc->cached_resource = res;
+	}
+	return result;
+}
+
+int ltc2309_unprotect(ltc2309_t* ltc)
+{
+	if (ltc == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	int result = plc_resource_remove(ltc->cached_resource);
+	if (result >= 0) {
+		ltc->is_protected = false;
+	}
+
+	return result;
 }
 
 static inline int16_t ltc2309_conversion_reg_to_value(uint16_t read_value)
@@ -149,12 +213,18 @@ ltc2309_read(ltc2309_t* ltc, uint8_t mux_field, uint16_t* conversion, bool diff)
 
 int ltc2309_read_signed(ltc2309_t* ltc,
 			LTC2309_DIFF_INPUT index,
-			int16_t* read_value)
+			int16_t* read_value,
+			uint32_t timeout_ms)
 {
 	if (read_value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
+
+	uint16_t conversion;
+	int ret;
+
+	LTC2309_LOCK(ltc, timeout_ms);
 
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (!LTC2309_IS_BIPOLAR(ltc)) {
@@ -164,27 +234,38 @@ int ltc2309_read_signed(ltc2309_t* ltc,
 		 * range.
 		 */
 		errno = EINVAL;
-		return -1;
+		ret = -1;
+		goto ltc2309_read_signed_exit;
 	}
 #endif
 
-	uint16_t conversion;
 	if (ltc2309_read(ltc, (uint8_t)index, &conversion, true) != 0) {
-		return -1;
+		ret = -1;
+		goto ltc2309_read_signed_exit;
 	}
 
 	*read_value = ltc2309_conversion_reg_to_value(conversion);
-	return 0;
+	ret = 0;
+
+ltc2309_read_signed_exit:
+	LTC2309_UNLOCK(ltc);
+
+	return ret;
 }
 
 int ltc2309_read_unsigned(ltc2309_t* ltc,
 			  LTC2309_INPUT index,
-			  uint16_t* read_value)
+			  uint16_t* read_value,
+			  uint32_t timeout_ms)
 {
 	if (read_value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
+
+	int ret;
+
+	LTC2309_LOCK(ltc, timeout_ms);
 
 #if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (LTC2309_IS_BIPOLAR(ltc)) {
@@ -194,14 +275,21 @@ int ltc2309_read_unsigned(ltc2309_t* ltc,
 		 * unipolar range.
 		 */
 		errno = EINVAL;
-		return -1;
+		ret = -1;
+		goto ltc2309_read_unsigned_exit;
 	}
 #endif
 
 	if (ltc2309_read(ltc, (uint8_t)index, read_value, false) != 0) {
-		return -1;
+		ret = -1;
+		goto ltc2309_read_unsigned_exit;
 	}
 
 	*read_value >>= 4;
-	return 0;
+	ret = 0;
+
+ltc2309_read_unsigned_exit:
+	LTC2309_UNLOCK(ltc);
+
+	return ret;
 }

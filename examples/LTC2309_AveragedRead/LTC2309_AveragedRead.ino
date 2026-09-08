@@ -40,6 +40,10 @@
  * not used here since this example only focuses on reading:
  *   ltc2309_read_signed / ltc2309_read_differential
  *     - Differential conversions, returned as a sign-extended int16_t.
+ *   ltc2309_protect / ltc2309_unprotect
+ *     - Guard the device with the resource protector's mutex, so concurrent
+ *       tasks/threads sharing this LTC2309 (or its I2C bus) don't race each
+ *       other.
  *   ltc2309_deinit
  *     - Tear down an ltc2309_t, optionally placing the chip in shutdown first.
  *
@@ -113,7 +117,8 @@ int main()
 		// unsigned variant is the natural fit here.
 		uint8_t sampled_channel = current_channel;
 		uint16_t raw;
-		if (ltc2309_read_unsigned(ltc, CHANNELS[sampled_channel], &raw) == 0) {
+		if (ltc2309_read_unsigned(
+			    ltc, CHANNELS[sampled_channel], &raw, 0) == 0) {
 			sample_sum[sampled_channel] += raw;
 			sample_count[sampled_channel]++;
 		} else {

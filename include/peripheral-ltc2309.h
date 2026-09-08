@@ -111,6 +111,47 @@ ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip);
 int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
 
 /**
+ * ltc2309_protect
+ *
+ * Protect the LTC2309 with a mutex.
+ *
+ * Parameters:
+ *   ltc (ltc2309_t*)        - The LTC2309 to protect.
+ * Returns:
+ *   int - 0 if successful, 1 if already protected, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - ENOMEM : Out of memory during allocation.
+ *     - EINVAL : Passed ltc2309_t is NULL, or address is invalid.
+ *     - EEXIST : The resource was already added.
+ *     - EBUSY  : Hash mutex couldn't be taken.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int ltc2309_protect(ltc2309_t* ltc);
+
+/**
+ * ltc2309_unprotect
+ *
+ * Remove the mutex associated with the LTC2309.
+ *
+ * Parameters:
+ *   ltc (ltc2309_t*)        - The LTC2309 to unprotect.
+ * Returns:
+ *   int - 0 if successful, 1 if already unprotected, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL : Passed ltc2309_t is NULL, or address is invalid.
+ *     - ENODEV : The resource is not present.
+ *     - EBUSY  : Hash mutex couldn't be taken.
+ *     - Linux specific:
+ *       - EINVAL: The monotonic clock isn't available.
+ */
+int ltc2309_unprotect(ltc2309_t* ltc);
+
+/**
  * ltc2309_read_signed
  *
  * Perform a differential conversion for the input pair and store the result
@@ -124,6 +165,9 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
  *                                 channel x as positive and y as negative.
  *   read_value (int16_t*)       - The value in which the reading will be
  *                                 stored.
+ *   timeout_ms (uint32_t)       - The maximum time to wait for a reading.
+ *                                 Only applicable when the LTC2309 is
+ *                                 protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -134,11 +178,13 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
  *     - EINVAL              : The channel index is invalid.
  *     - EINVAL (if enabled) : The LTC2309 was initialized with bip=false.
  *     - EIO                 : Communication with the LTC2309 couldn't be established.
+ *     - EBUSY               : Mutex couldn't be taken within the timeout given.
  *     - ERANGE              : The conversion result is invalid.
  */
 int ltc2309_read_signed(ltc2309_t* ltc,
 			LTC2309_DIFF_INPUT index,
-			int16_t* read_value);
+			int16_t* read_value,
+			uint32_t timeout_ms);
 
 #define ltc2309_read_differential(...) ltc2309_read_signed(__VA_ARGS__)
 
@@ -153,6 +199,8 @@ int ltc2309_read_signed(ltc2309_t* ltc,
  *   ltc (ltc2309_t*)        - The LTC2309 to interact with.
  *   index (LTC2309_INPUT)   - Input/channel to read single-ended.
  *   read_value (uint16_t*)  - The value in which the reading will be stored.
+ *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
+ *                             applicable when the LTC2309 is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -163,11 +211,13 @@ int ltc2309_read_signed(ltc2309_t* ltc,
  *     - EINVAL              : The channel index is invalid.
  *     - EINVAL (if enabled) : The LTC2309 was initialized with bip=true.
  *     - EIO                 : Communication with the LTC2309 couldn't be established.
+ *     - EBUSY               : Mutex couldn't be taken within the timeout given.
  *     - ERANGE              : The conversion result is invalid.
  */
 int ltc2309_read_unsigned(ltc2309_t* ltc,
 			  LTC2309_INPUT index,
-			  uint16_t* read_value);
+			  uint16_t* read_value,
+			  uint32_t timeout_ms);
 
 #define ltc2309_read_single(...) ltc2309_read_unsigned(__VA_ARGS__)
 
