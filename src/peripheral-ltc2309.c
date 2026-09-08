@@ -39,6 +39,8 @@ static const uint8_t SHUTDOWN        = 0b00000100;
 #define COMMAND_BYTE_BIP                                                    0x00
 // clang-format on
 
+#define LTC2309_IS_BIPOLAR(ltc) (!((ltc)->cmd & COMMAND_BYTE_UNI))
+
 struct _ltc2309_t {
 	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
@@ -154,6 +156,18 @@ int ltc2309_read_signed(ltc2309_t* ltc,
 		return -1;
 	}
 
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+	if (!LTC2309_IS_BIPOLAR(ltc)) {
+		/*
+		 * Per the datasheet's Output Data Format (p.15): the conversion
+		 * result is 2's complement only when the UNI bit selects bipolar
+		 * range.
+		 */
+		errno = EINVAL;
+		return -1;
+	}
+#endif
+
 	uint16_t conversion;
 	if (ltc2309_read(ltc, (uint8_t)index, &conversion, true) != 0) {
 		return -1;
@@ -171,6 +185,18 @@ int ltc2309_read_unsigned(ltc2309_t* ltc,
 		errno = EFAULT;
 		return -1;
 	}
+
+#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+	if (LTC2309_IS_BIPOLAR(ltc)) {
+		/*
+		 * Per the datasheet's Output Data Format (p.15): the conversion
+		 * result is straight binary only when the UNI bit selects
+		 * unipolar range.
+		 */
+		errno = EINVAL;
+		return -1;
+	}
+#endif
 
 	if (ltc2309_read(ltc, (uint8_t)index, read_value, false) != 0) {
 		return -1;

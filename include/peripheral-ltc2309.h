@@ -130,10 +130,11 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed ltc2309_t or the output pointer is NULL.
- *     - EINVAL : The channel index is invalid.
- *     - EIO    : Communication with the LTC2309 couldn't be established.
- *     - ERANGE : The conversion result is invalid.
+ *     - EFAULT              : Passed ltc2309_t or the output pointer is NULL.
+ *     - EINVAL              : The channel index is invalid.
+ *     - EINVAL (if enabled) : The LTC2309 was initialized with bip=false.
+ *     - EIO                 : Communication with the LTC2309 couldn't be established.
+ *     - ERANGE              : The conversion result is invalid.
  */
 int ltc2309_read_signed(ltc2309_t* ltc,
 			LTC2309_DIFF_INPUT index,
@@ -158,10 +159,11 @@ int ltc2309_read_signed(ltc2309_t* ltc,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed ltc2309_t or the output pointer is NULL.
- *     - EINVAL : The channel index is invalid.
- *     - EIO    : Communication with the LTC2309 couldn't be established.
- *     - ERANGE : The conversion result is invalid.
+ *     - EFAULT              : Passed ltc2309_t or the output pointer is NULL.
+ *     - EINVAL              : The channel index is invalid.
+ *     - EINVAL (if enabled) : The LTC2309 was initialized with bip=true.
+ *     - EIO                 : Communication with the LTC2309 couldn't be established.
+ *     - ERANGE              : The conversion result is invalid.
  */
 int ltc2309_read_unsigned(ltc2309_t* ltc,
 			  LTC2309_INPUT index,
