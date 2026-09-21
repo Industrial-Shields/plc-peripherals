@@ -22,11 +22,7 @@
 
 /*
  * The platform-specific half of the resource protector: one implementation
- * per target environment (see plc-resource-protector-linux.c,
- * plc-resource-protector-esp32.c). The portable hash-table/lock bookkeeping is
- * built on top of these functions and lives in plc-resource-protector.h,
- * which includes this header. Include that one instead unless you are
- * implementing or replacing the platform layer.
+ * per target environment (see plc-mutex-linux.c, plc-mutex-esp32.c).
  */
 #include <stdint.h>
 

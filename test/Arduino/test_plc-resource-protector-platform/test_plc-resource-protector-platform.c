@@ -1,1 +1,0 @@
-../../test_plc-resource-protector-platform.c

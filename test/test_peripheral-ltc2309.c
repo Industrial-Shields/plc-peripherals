@@ -18,7 +18,6 @@
 /*
  * Tests for src/peripheral-ltc2309.c. Both of its dependencies are mocked:
  * plc-peripherals-i2c.h (the level i2c_write/i2c_read calls) and
- * plc-resource-protector.h (the plc_resource_* locking calls).  i2c_get_bus is
  * mocked too: ltc2309_protect calls it directly, one layer below
  * plc-peripherals-i2c.h.
  *
@@ -32,9 +31,10 @@
 
 #include "unity.h"
 
+#include "mock_plc-mutex.h"
+
 #include "fake-i2c.h"
 #include "mock_plc-peripherals-i2c-hal.h"
-#include "mock_plc-resource-protector.h"
 #include "peripheral-ltc2309.h"
 
 #include <errno.h>
@@ -44,7 +44,6 @@
 #define TEST_I2C FAKE_I2C_IFACE
 #define TEST_ADDR ((plc_i2c_addr_t)0x08)
 #define TEST_BUS ((uint8_t)3)
-#define TEST_RESOURCE I2C_RESOURCE(TEST_BUS, TEST_ADDR)
 
 // clang-format off
 #define INITIAL_STATE                                                      0x00
@@ -94,31 +93,21 @@ static ltc2309_t* create_ltc(bool bip)
 	return ltc;
 }
 
-// create_ltc() plus a successful ltc2309_protect().
-static ltc2309_t* create_protected_ltc(bool bip)
-{
-	ltc2309_t* ltc = create_ltc(bip);
-
-	i2c_get_bus_ExpectAndReturn(TEST_I2C, NULL, 0);
-	i2c_get_bus_IgnoreArg_bus();
-	static uint8_t stashed_bus;
-	stashed_bus = TEST_BUS;
-	i2c_get_bus_ReturnThruPtr_bus(&stashed_bus);
-	plc_resource_add_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(ltc));
-	return ltc;
-}
-
 static void destroy_ltc(ltc2309_t* ltc)
 {
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(ltc, false));
 }
 
+static ltc2309_t* create_protected_ltc(bool bip)
+{
+	ltc2309_t* ltc = create_ltc(bip);
+
+	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(ltc));
+	return ltc;
+}
+
 static void destroy_protected_ltc(ltc2309_t* ltc)
 {
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
-
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(ltc, false));
 }
 
@@ -197,26 +186,6 @@ void test_ltc2309_deinit_fails_when_the_shutdown_write_fails(void)
 	free(ltc); // deinit bailed out before freeing it
 }
 
-void test_ltc2309_deinit_also_unprotects_when_protected(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(true);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(ltc, false));
-}
-
-void test_ltc2309_deinit_fails_when_the_unprotect_fails(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(true);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, -1);
-
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_deinit(ltc, false));
-
-	free(ltc); // deinit bailed out before freeing it
-}
-
 void test_ltc2309_deinit_fails_with_efault_for_null(void)
 {
 	errno = 0;
@@ -226,98 +195,7 @@ void test_ltc2309_deinit_fails_with_efault_for_null(void)
 
 /* --------------------------- ltc2309_protect ------------------------------ */
 
-void test_ltc2309_protect_fails_with_einval_for_null(void)
-{
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-}
-
-void test_ltc2309_protect_adds_the_resource_for_its_bus_and_address(void)
-{
-	ltc2309_t* ltc = create_ltc(true);
-
-	i2c_get_bus_ExpectAndReturn(TEST_I2C, NULL, 0);
-	i2c_get_bus_IgnoreArg_bus();
-	static uint8_t stashed_bus;
-	stashed_bus = TEST_BUS;
-	i2c_get_bus_ReturnThruPtr_bus(&stashed_bus);
-	plc_resource_add_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(ltc));
-
-	destroy_protected_ltc(ltc);
-}
-
-void test_ltc2309_protect_fails_when_the_bus_cant_be_read(void)
-{
-	ltc2309_t* ltc = create_ltc(true);
-
-	i2c_get_bus_ExpectAndReturn(TEST_I2C, NULL, -1);
-	i2c_get_bus_IgnoreArg_bus();
-
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(ltc));
-
-	destroy_ltc(ltc);
-}
-
-void test_ltc2309_protect_returns_1_if_already_protected(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(true);
-
-	i2c_get_bus_ExpectAndReturn(TEST_I2C, NULL, 0);
-	i2c_get_bus_IgnoreArg_bus();
-	static uint8_t stashed_bus;
-	stashed_bus = TEST_BUS;
-	i2c_get_bus_ReturnThruPtr_bus(&stashed_bus);
-	plc_resource_add_ExpectAndReturn(TEST_RESOURCE, 1);
-
-	TEST_ASSERT_EQUAL_INT(1, ltc2309_protect(ltc));
-
-	destroy_protected_ltc(ltc);
-}
-
 /* -------------------------- ltc2309_unprotect ------------------------------ */
-
-void test_ltc2309_unprotect_fails_with_einval_for_null(void)
-{
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-}
-
-void test_ltc2309_unprotect_removes_the_resource(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(true);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ltc2309_unprotect(ltc));
-
-	destroy_ltc(ltc);
-}
-
-void test_ltc2309_unprotect_fails_when_the_resource_cant_be_removed(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(true);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, -1);
-
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(ltc));
-
-	destroy_protected_ltc(ltc);
-}
-
-void test_ltc2309_unprotect_returns_1_if_already_unprotected(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(true);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 1);
-
-	TEST_ASSERT_EQUAL_INT(1, ltc2309_unprotect(ltc));
-
-	destroy_ltc(ltc);
-}
 
 /* ------------------------- ltc2309_read_signed ----------------------------- */
 
@@ -441,35 +319,6 @@ void test_ltc2309_read_signed_selects_every_differential_pair(void)
 	}
 }
 
-void test_ltc2309_read_signed_when_protected_locks_and_unlocks(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(true);
-	static const uint8_t reading[2] = { 0x0F, 0xF0 };
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	fake_i2c_read_answers(reading, 2);
-	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		0, ltc2309_read_signed(ltc, LTC2309_P0_N1, &value, 1000));
-
-	destroy_protected_ltc(ltc);
-}
-
-void test_ltc2309_read_signed_fails_immediately_when_the_lock_times_out(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(true);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 50, -1);
-
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ltc2309_read_signed(ltc, LTC2309_P0_N1, &value, 50));
-
-	destroy_protected_ltc(ltc);
-}
-
 void test_ltc2309_read_signed_fails_when_writing_the_command_byte_fails(void)
 {
 	ltc2309_t* ltc = create_ltc(true);
@@ -534,24 +383,6 @@ void test_ltc2309_read_signed_fails_with_einval_when_device_is_unipolar(void)
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_ltc(ltc);
-}
-
-void test_ltc2309_read_signed_unlocks_when_bip_mismatched_and_protected(void)
-{
-	// Regression test: the EINVAL bip-mismatch branch must release the
-	// lock it already took before returning, not bail out early.
-	ltc2309_t* ltc = create_protected_ltc(false);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	errno = 0;
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ltc2309_read_signed(ltc, LTC2309_P0_N1, &value, 1000));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-
-	destroy_protected_ltc(ltc);
 }
 
 /* ------------------------ ltc2309_read_unsigned ---------------------------- */
@@ -665,35 +496,6 @@ void test_ltc2309_read_unsigned_selects_every_channel(void)
 	}
 }
 
-void test_ltc2309_read_unsigned_when_protected_locks_and_unlocks(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(false);
-	static const uint8_t reading[2] = { 0x0F, 0xF0 };
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	fake_i2c_read_answers(reading, 2);
-	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	uint16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		0, ltc2309_read_unsigned(ltc, LTC2309_CH0, &value, 1000));
-
-	destroy_protected_ltc(ltc);
-}
-
-void test_ltc2309_read_unsigned_fails_immediately_when_the_lock_times_out(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(false);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 50, -1);
-
-	uint16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ltc2309_read_unsigned(ltc, LTC2309_CH0, &value, 50));
-
-	destroy_protected_ltc(ltc);
-}
-
 void test_ltc2309_read_unsigned_fails_when_writing_the_command_byte_fails(void)
 {
 	ltc2309_t* ltc = create_ltc(false);
@@ -763,6 +565,146 @@ void test_ltc2309_read_unsigned_fails_with_einval_when_device_is_bipolar(void)
 	destroy_ltc(ltc);
 }
 
+void test_ltc2309_deinit_also_unprotects_when_protected(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(true);
+
+	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(ltc, false));
+}
+
+void test_ltc2309_deinit_fails_when_the_unprotect_fails(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(true);
+
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_deinit(ltc, false));
+
+	free(ltc); // deinit bailed out before freeing it
+}
+
+void test_ltc2309_protect_fails_with_einval_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(NULL));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_ltc2309_protect_adds_the_resource_for_its_bus_and_address(void)
+{
+	ltc2309_t* ltc = create_ltc(true);
+
+	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(ltc));
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_protect_fails_when_the_bus_cant_be_read(void)
+{
+	ltc2309_t* ltc = create_ltc(true);
+
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(ltc));
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_protect_returns_1_if_already_protected(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(true);
+
+	TEST_ASSERT_EQUAL_INT(1, ltc2309_protect(ltc));
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_unprotect_fails_with_einval_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(NULL));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_ltc2309_unprotect_removes_the_resource(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(true);
+
+	TEST_ASSERT_EQUAL_INT(0, ltc2309_unprotect(ltc));
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_unprotect_fails_when_the_resource_cant_be_removed(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(true);
+
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(ltc));
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_unprotect_returns_1_if_already_unprotected(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(true);
+
+	TEST_ASSERT_EQUAL_INT(1, ltc2309_unprotect(ltc));
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_read_signed_when_protected_locks_and_unlocks(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(true);
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	fake_i2c_read_answers(reading, 2);
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ltc2309_read_signed(ltc, LTC2309_P0_N1, &value, 1000));
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_read_signed_unlocks_when_bip_mismatched_and_protected(void)
+{
+	// Regression test: the EINVAL bip-mismatch branch must release the
+	// lock it already took before returning, not bail out early.
+	ltc2309_t* ltc = create_protected_ltc(false);
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ltc2309_read_signed(ltc, LTC2309_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_read_unsigned_when_protected_locks_and_unlocks(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(false);
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	fake_i2c_read_answers(reading, 2);
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+
+	uint16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ltc2309_read_unsigned(ltc, LTC2309_CH0, &value, 1000));
+
+	destroy_protected_ltc(ltc);
+}
+
 void test_ltc2309_read_unsigned_unlocks_when_bip_mismatched_and_protected(void)
 {
 	// Regression test: the EINVAL bip-mismatch branch must release the
@@ -771,8 +713,10 @@ void test_ltc2309_read_unsigned_unlocks_when_bip_mismatched_and_protected(void)
 	// CMock fails this test.
 	ltc2309_t* ltc = create_protected_ltc(true);
 
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
 
 	errno = 0;
 	uint16_t value;

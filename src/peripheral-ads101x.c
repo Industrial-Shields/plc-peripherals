@@ -18,7 +18,6 @@
  */
 
 #include <plc-peripherals-i2c.h>
-#include <plc-resource-protector.h>
 #include <peripheral-ads101x.h>
 
 #include <malloc.h>
@@ -51,8 +50,6 @@
 struct _ads101x_t {
 	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
-	plc_resource_t cached_resource;
-	bool is_protected;
 	uint16_t expected_cfg_reg;
 	uint16_t old_cfg_reg;
 };
@@ -61,22 +58,9 @@ struct _ads101x_t {
 	i2c_write8_16b(i2c, addr, register_name, register_name##_RESET_VALUE)
 #define PASS_ADS(ads) ads->i2c, ads->addr
 
-#define ADS101X_LOCK(ads, timeout_ms)                                 \
-	do {                                                          \
-		if ((ads)->is_protected) {                            \
-			if (plc_resource_lock((ads)->cached_resource, \
-					      (timeout_ms)) != 0) {   \
-				return -1;                            \
-			}                                             \
-		}                                                     \
-	} while (0)
+#define ADS101X_LOCK(ads, timeout_ms) ((void)(ads), (void)(timeout_ms))
 
-#define ADS101X_UNLOCK(ads)                                        \
-	do {                                                       \
-		if (ads->is_protected) {                           \
-			plc_resource_unlock(ads->cached_resource); \
-		}                                                  \
-	} while (0)
+#define ADS101X_UNLOCK(ads) ((void)(ads))
 
 // Calculate the conversion time of the ADS101X in microseconds.
 // 1 / DR + 10% clock variation + 5% for edge cases
@@ -208,7 +192,6 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 
 	ret->i2c = i2c;
 	ret->addr = addr;
-	ret->is_protected = false;
 	ret->expected_cfg_reg = cfg_reg;
 	ret->old_cfg_reg = cfg_reg;
 	return ret;
@@ -230,51 +213,24 @@ int ads101x_deinit(ads101x_t* ads, bool shutdown)
 		}
 	}
 
-	if (ads->is_protected) {
-		int ret = ads101x_unprotect(ads);
-		if (ret < 0) {
-			return ret;
-		}
-	}
-
 	free(ads);
 	return 0;
 }
 
 int ads101x_protect(ads101x_t* ads)
 {
-	if (ads == NULL) {
-		errno = EINVAL;
-		return -1;
-	}
+	(void)ads;
 
-	uint8_t bus;
-	if (i2c_get_bus(ads->i2c, &bus) != 0) {
-		return -1;
-	}
-
-	plc_resource_t res = I2C_RESOURCE(bus, ads->addr);
-	int result = plc_resource_add(res);
-	if (result >= 0) {
-		ads->is_protected = true;
-		ads->cached_resource = res;
-	}
-	return result;
+	errno = ENOTSUP;
+	return -1;
 }
 
 int ads101x_unprotect(ads101x_t* ads)
 {
-	if (ads == NULL) {
-		errno = EINVAL;
-		return -1;
-	}
+	(void)ads;
 
-	int result = plc_resource_remove(ads->cached_resource);
-	if (result >= 0) {
-		ads->is_protected = false;
-	}
-
-	return result;
+	errno = ENOTSUP;
+	return -1;
 }
 
 int ads101x_single_read(ads101x_t* ads,

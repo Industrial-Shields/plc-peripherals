@@ -18,7 +18,6 @@
 /*
  * Tests for src/peripheral-ads101x.c. Both of its dependencies are mocked:
  * plc-peripherals-i2c.h (the register-level i2c_write8_16b/i2c_read8_16b
- * calls) and plc-resource-protector.h (the plc_resource_* locking calls).
  * i2c_get_bus is mocked too: ads101x_protect calls it directly, one layer
  * below plc-peripherals-i2c.h.
  *
@@ -32,9 +31,10 @@
 
 #include "unity.h"
 
+#include "mock_plc-mutex.h"
+
 #include "mock_plc-peripherals-i2c-hal.h"
 #include "mock_plc-peripherals-i2c.h"
-#include "mock_plc-resource-protector.h"
 #include "peripheral-ads101x.h"
 
 #include <errno.h>
@@ -44,7 +44,6 @@
 #define TEST_I2C ((i2c_interface_t*)0x1)
 #define TEST_ADDR ((plc_i2c_addr_t)0x48)
 #define TEST_BUS ((uint8_t)3)
-#define TEST_RESOURCE I2C_RESOURCE(TEST_BUS, TEST_ADDR)
 
 #define CONVERSION_REG 0x00
 #define CONFIG_REG 0x01
@@ -149,31 +148,21 @@ static ads101x_t* create_ads(bool continuous)
 	return ads;
 }
 
-// create_ads() plus a successful ads101x_protect().
-static ads101x_t* create_protected_ads(bool continuous)
-{
-	ads101x_t* ads = create_ads(continuous);
-
-	i2c_get_bus_ExpectAndReturn(TEST_I2C, NULL, 0);
-	i2c_get_bus_IgnoreArg_bus();
-	static uint8_t stashed_bus;
-	stashed_bus = TEST_BUS;
-	i2c_get_bus_ReturnThruPtr_bus(&stashed_bus);
-	plc_resource_add_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(ads));
-	return ads;
-}
-
 static void destroy_ads(ads101x_t* ads)
 {
 	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
 }
 
+static ads101x_t* create_protected_ads(bool continuous)
+{
+	ads101x_t* ads = create_ads(continuous);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(ads));
+	return ads;
+}
+
 static void destroy_protected_ads(ads101x_t* ads)
 {
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
-
 	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
 }
 
@@ -511,120 +500,9 @@ void test_ads101x_deinit_fails_when_writing_the_config_reg_fails(void)
 	free(ads); // deinit bailed out before freeing it
 }
 
-void test_ads101x_deinit_also_unprotects_when_protected(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
-}
-
-void test_ads101x_deinit_fails_when_the_unprotect_fails(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, -1);
-
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(ads, false));
-
-	free(ads); // deinit bailed out before freeing it
-}
-
 /* --------------------------- ads101x_protect ------------------------------ */
 
-void test_ads101x_protect_fails_with_einval_for_null(void)
-{
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-}
-
-void test_ads101x_protect_adds_the_resource_for_its_bus_and_address(void)
-{
-	ads101x_t* ads = create_ads(false);
-
-	i2c_get_bus_ExpectAndReturn(TEST_I2C, NULL, 0);
-	i2c_get_bus_IgnoreArg_bus();
-	static uint8_t stashed_bus;
-	stashed_bus = TEST_BUS;
-	i2c_get_bus_ReturnThruPtr_bus(&stashed_bus);
-	plc_resource_add_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(ads));
-
-	destroy_protected_ads(ads);
-}
-
-void test_ads101x_protect_fails_when_the_bus_cant_be_read(void)
-{
-	ads101x_t* ads = create_ads(false);
-
-	i2c_get_bus_ExpectAndReturn(TEST_I2C, NULL, -1);
-	i2c_get_bus_IgnoreArg_bus();
-
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(ads));
-
-	destroy_ads(ads);
-}
-
-void test_ads101x_protect_returns_1_if_already_protected(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	i2c_get_bus_ExpectAndReturn(TEST_I2C, NULL, 0);
-	i2c_get_bus_IgnoreArg_bus();
-	static uint8_t stashed_bus;
-	stashed_bus = TEST_BUS;
-	i2c_get_bus_ReturnThruPtr_bus(&stashed_bus);
-	plc_resource_add_ExpectAndReturn(TEST_RESOURCE, 1);
-
-	TEST_ASSERT_EQUAL_INT(1, ads101x_protect(ads));
-
-	destroy_protected_ads(ads);
-}
-
 /* -------------------------- ads101x_unprotect ------------------------------ */
-
-void test_ads101x_unprotect_fails_with_einval_for_null(void)
-{
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-}
-
-void test_ads101x_unprotect_removes_the_resource(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ads101x_unprotect(ads));
-
-	destroy_ads(ads);
-}
-
-void test_ads101x_unprotect_fails_when_the_resource_cant_be_removed(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, -1);
-
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(ads));
-
-	destroy_protected_ads(ads);
-}
-
-void test_ads101x_unprotect_returns_1_if_already_unprotected(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_remove_ExpectAndReturn(TEST_RESOURCE, 1);
-
-	TEST_ASSERT_EQUAL_INT(1, ads101x_unprotect(ads));
-
-	destroy_ads(ads);
-}
 
 /* ------------------------- ads101x_single_read ----------------------------- */
 
@@ -694,36 +572,6 @@ void test_ads101x_single_read_switches_correctly_between_two_nonzero_channels(
 	destroy_ads(ads);
 }
 
-void test_ads101x_single_read_when_protected_locks_and_unlocks(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
-	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
-	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
-
-	destroy_protected_ads(ads);
-}
-
-void test_ads101x_single_read_fails_immediately_when_the_lock_times_out(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 50, -1);
-
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 50));
-
-	destroy_protected_ads(ads);
-}
-
 void test_ads101x_single_read_fails_when_writing_the_config_reg_fails(void)
 {
 	ads101x_t* ads = create_ads(false);
@@ -784,19 +632,6 @@ void test_ads101x_single_read_fails_with_einval_when_device_is_continuous_mode(
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_ads(ads);
-}
-
-void test_ads101x_single_read_does_not_lock_when_device_is_continuous_mode(void)
-{
-	ads101x_t* ads = create_protected_ads(true);
-
-	errno = 0;
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-
-	destroy_protected_ads(ads);
 }
 
 /* --------------------- ads101x_unsigned_single_read ------------------------ */
@@ -1003,21 +838,6 @@ void test_ads101x_continuous_read_reads_directly_after_set_fs_already_settled_th
 	destroy_ads(ads);
 }
 
-void test_ads101x_continuous_read_when_protected_locks_and_unlocks(void)
-{
-	ads101x_t* ads = create_protected_ads(true);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
-	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
-
-	destroy_protected_ads(ads);
-}
-
 void test_ads101x_continuous_read_fails_when_writing_the_config_reg_fails(void)
 {
 	ads101x_t* ads = create_ads(true);
@@ -1061,19 +881,6 @@ void test_ads101x_continuous_read_fails_with_einval_when_device_is_single_mode(
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_ads(ads);
-}
-
-void test_ads101x_continuous_read_does_not_lock_when_device_is_single_mode(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	errno = 0;
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-
-	destroy_protected_ads(ads);
 }
 
 /* -------------------- ads101x_unsigned_continuous_read ---------------------- */
@@ -1154,32 +961,6 @@ void test_ads101x_get_fs_maps_the_0b111_encoding_to_3300sps(void)
 	destroy_ads(ads);
 }
 
-void test_ads101x_get_fs_when_protected_locks_and_unlocks(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	ADS101X_DATA_RATE dr;
-	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
-	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
-
-	destroy_protected_ads(ads);
-}
-
-void test_ads101x_get_fs_fails_immediately_when_the_lock_times_out(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 50, -1);
-
-	ADS101X_DATA_RATE dr;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_fs(ads, &dr, 50));
-
-	destroy_protected_ads(ads);
-}
-
 /* --------------------------- ads101x_set_fs -------------------------------- */
 
 void test_ads101x_set_fs_patches_only_the_dr_bits(void)
@@ -1205,29 +986,6 @@ void test_ads101x_set_fs_patches_only_the_dr_bits(void)
 		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
-}
-
-void test_ads101x_set_fs_when_protected_locks_and_unlocks(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 1000, 0);
-	plc_resource_unlock_ExpectAndReturn(TEST_RESOURCE, 0);
-
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
-
-	destroy_protected_ads(ads);
-}
-
-void test_ads101x_set_fs_fails_immediately_when_the_lock_times_out(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	plc_resource_lock_ExpectAndReturn(TEST_RESOURCE, 50, -1);
-
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(ads, ADS101X_920SPS, 50));
-
-	destroy_protected_ads(ads);
 }
 
 void test_ads101x_set_fs_writes_and_waits_when_the_rate_actually_changes_in_continuous_mode(
@@ -1377,4 +1135,154 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 	}
 
 	destroy_ads(ads);
+}
+
+void test_ads101x_deinit_also_unprotects_when_protected(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
+}
+
+void test_ads101x_deinit_fails_when_the_unprotect_fails(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(ads, false));
+
+	free(ads); // deinit bailed out before freeing it
+}
+
+void test_ads101x_protect_fails_with_einval_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(NULL));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_ads101x_protect_adds_the_resource_for_its_bus_and_address(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(ads));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_protect_fails_when_the_bus_cant_be_read(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(ads));
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_protect_returns_1_if_already_protected(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(1, ads101x_protect(ads));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_unprotect_fails_with_einval_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(NULL));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_ads101x_unprotect_removes_the_resource(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_unprotect(ads));
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_unprotect_fails_when_the_resource_cant_be_removed(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(ads));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_unprotect_returns_1_if_already_unprotected(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	TEST_ASSERT_EQUAL_INT(1, ads101x_unprotect(ads));
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_single_read_when_protected_locks_and_unlocks(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_continuous_read_when_protected_locks_and_unlocks(void)
+{
+	ads101x_t* ads = create_protected_ads(true);
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_get_fs_when_protected_locks_and_unlocks(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+
+	ADS101X_DATA_RATE dr;
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
+	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_set_fs_when_protected_locks_and_unlocks(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+
+	destroy_protected_ads(ads);
 }

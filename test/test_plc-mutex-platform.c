@@ -16,7 +16,7 @@
  */
 
 /*
- * Tests for src/plc-resource-protector-linux.c, the real pthread-backed
+ * Tests for src/plc-mutex-linux.c, the real pthread-backed
  * plc_mutex_* implementation. Unlike every other suite in this project, this
  * one mocks nothing: it calls the genuine pthread_mutex_t machinery with real
  * threads, since that's exactly what needs verifying here (the timeout math
@@ -29,7 +29,7 @@
  * unconditional and is tested below.
  *
  * This file also runs as the Arduino ESP32 sketch at
- * test/Arduino/test_plc-resource-protector-platform/ (symlinked in, alongside
+ * test/Arduino/test_plc-mutex-platform/ (symlinked in, alongside
  * the platform source and Unity itself). That .ino declares each test_*
  * function with extern "C" and calls it via RUN_TEST(); if you add, remove,
  * or rename a test_* function here, update the .ino to match.
@@ -37,11 +37,11 @@
 
 #include "unity.h"
 #include "plc-peripherals-platform.h"
-#include "plc-resource-protector-mutex.h"
+#include "plc-mutex.h"
 
-// No header of its own maps to plc-resource-protector-linux.c
+// No header of its own maps to plc-mutex-linux.c
 #if PLC_ENVIRONMENT == PLC_LINUX
-TEST_SOURCE_FILE("plc-resource-protector-linux.c")
+TEST_SOURCE_FILE("plc-mutex-linux.c")
 #endif
 
 #include <errno.h>

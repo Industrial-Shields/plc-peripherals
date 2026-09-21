@@ -22,7 +22,6 @@
 
 #include <plc-peripherals-version.h>
 #include <plc-peripherals-i2c.h>
-#include <plc-resource-protector.h>
 #include <peripheral-ads101x.h>
 
 #endif // PLC_PERIPHERALS_H_

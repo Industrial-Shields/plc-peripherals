@@ -16,18 +16,18 @@
  */
 
 /*
- * Real-thread stress test for src/plc-resource-protector.c + the real Linux
- * mutex backend (src/plc-resource-protector-linux.c).
+ * Real-thread stress test for the Linux mutex backend
+ * (src/plc-mutex-linux.c).
  */
 
 #include "unity.h"
 
 #include "plc-peripherals-platform.h"
-#include "plc-resource-protector.h"
+#include "plc-mutex.h"
 
-// No header of its own maps to plc-resource-protector-linux.c
+// No header of its own maps to plc-mutex-linux.c
 #if PLC_ENVIRONMENT == PLC_LINUX
-TEST_SOURCE_FILE("plc-resource-protector-linux.c")
+TEST_SOURCE_FILE("plc-mutex-linux.c")
 #endif
 
 #include <errno.h>
@@ -35,16 +35,16 @@ TEST_SOURCE_FILE("plc-resource-protector-linux.c")
 #include <stdatomic.h>
 #include <stdint.h>
 
-#define NUM_RESOURCES 4
+#define NUM_MUTEXES 4
 #define NUM_THREADS 8
 #define ITERATIONS_PER_THREAD 500
 #define LOCK_TIMEOUT_MS 1000
 
-static plc_resource_t resources[NUM_RESOURCES];
+static plc_mutex_t* mutexes[NUM_MUTEXES];
 
-// Per-resource count of threads currently holding that resource's lock.
-static atomic_int concurrent_holders[NUM_RESOURCES];
-static atomic_int max_concurrent_holders_seen[NUM_RESOURCES];
+// Per-mutex count of threads currently holding it.
+static atomic_int concurrent_holders[NUM_MUTEXES];
+static atomic_int max_concurrent_holders_seen[NUM_MUTEXES];
 
 // Set by any thread that gets an unexpected error from lock/unlock. Unity
 // assertions aren't safe to call from worker threads, so failures are
@@ -58,9 +58,9 @@ static void* hammer_thread(void* arg)
 	uintptr_t thread_id = (uintptr_t)arg;
 
 	for (int i = 0; i < ITERATIONS_PER_THREAD; i++) {
-		int idx = (int)((thread_id + (uintptr_t)i) % NUM_RESOURCES);
+		int idx = (int)((thread_id + (uintptr_t)i) % NUM_MUTEXES);
 
-		if (plc_resource_lock(resources[idx], LOCK_TIMEOUT_MS) != 0) {
+		if (plc_mutex_acquire(mutexes[idx], LOCK_TIMEOUT_MS) != 0) {
 			atomic_fetch_add(&unexpected_lock_failures, 1);
 			continue;
 		}
@@ -77,7 +77,7 @@ static void* hammer_thread(void* arg)
 
 		atomic_fetch_sub(&concurrent_holders[idx], 1);
 
-		if (plc_resource_unlock(resources[idx]) != 0) {
+		if (plc_mutex_release(mutexes[idx]) != 0) {
 			atomic_fetch_add(&unexpected_unlock_failures, 1);
 		}
 	}
@@ -87,13 +87,11 @@ static void* hammer_thread(void* arg)
 
 void setUp(void)
 {
-	TEST_ASSERT_EQUAL_INT(0, plc_resource_init());
-
-	for (int i = 0; i < NUM_RESOURCES; i++) {
-		resources[i] = I2C_RESOURCE(0, (unsigned int)i);
+	for (int i = 0; i < NUM_MUTEXES; i++) {
+		mutexes[i] = plc_mutex_create();
+		TEST_ASSERT_NOT_NULL(mutexes[i]);
 		atomic_store(&concurrent_holders[i], 0);
 		atomic_store(&max_concurrent_holders_seen[i], 0);
-		TEST_ASSERT_EQUAL_INT(0, plc_resource_add(resources[i]));
 	}
 
 	atomic_store(&unexpected_lock_failures, 0);
@@ -102,14 +100,12 @@ void setUp(void)
 
 void tearDown(void)
 {
-	for (int i = 0; i < NUM_RESOURCES; i++) {
-		plc_resource_remove(resources[i]);
+	for (int i = 0; i < NUM_MUTEXES; i++) {
+		plc_mutex_destroy(mutexes[i]);
 	}
-	plc_resource_deinit();
 }
 
-void test_concurrent_lock_unlock_never_lets_two_threads_hold_the_same_resource(
-	void)
+void test_concurrent_acquire_release_never_lets_two_threads_hold_one_mutex(void)
 {
 	pthread_t threads[NUM_THREADS];
 
@@ -127,7 +123,7 @@ void test_concurrent_lock_unlock_never_lets_two_threads_hold_the_same_resource(
 	TEST_ASSERT_EQUAL_INT(0, atomic_load(&unexpected_lock_failures));
 	TEST_ASSERT_EQUAL_INT(0, atomic_load(&unexpected_unlock_failures));
 
-	for (int i = 0; i < NUM_RESOURCES; i++) {
+	for (int i = 0; i < NUM_MUTEXES; i++) {
 		TEST_ASSERT_LESS_OR_EQUAL_INT(
 			1, atomic_load(&max_concurrent_holders_seen[i]));
 	}

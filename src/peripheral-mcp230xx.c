@@ -23,7 +23,6 @@
  */
 
 #include <plc-peripherals-i2c.h>
-#include <plc-resource-protector.h>
 #include <peripheral-mcp230xx.h>
 
 #include <malloc.h>
@@ -55,8 +54,6 @@
 struct _mcp230xx_t {
 	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
-	plc_resource_t cached_resource;
-	bool is_protected;
 	MCP230XX_TYPE type;
 };
 
@@ -68,22 +65,9 @@ struct _mcp230xx_t {
 #define REG_A(reg, type) type == MCP230XX_017 ? reg << 1 : reg
 #define REG_B(reg, type) type == MCP230XX_017 ? (reg << 1) + 1 : reg + 1
 
-#define MCP230XX_LOCK(mcp, timeout_ms)                                \
-	do {                                                          \
-		if ((mcp)->is_protected) {                            \
-			if (plc_resource_lock((mcp)->cached_resource, \
-					      (timeout_ms)) != 0) {   \
-				return -1;                            \
-			}                                             \
-		}                                                     \
-	} while (0)
+#define MCP230XX_LOCK(mcp, timeout_ms) ((void)(mcp), (void)(timeout_ms))
 
-#define MCP230XX_UNLOCK(mcp)                                       \
-	do {                                                       \
-		if (mcp->is_protected) {                           \
-			plc_resource_unlock(mcp->cached_resource); \
-		}                                                  \
-	} while (0)
+#define MCP230XX_UNLOCK(mcp) ((void)(mcp))
 
 static int mcp230xx_reset(const i2c_interface_t* i2c,
 			  plc_i2c_addr_t addr,
@@ -178,7 +162,6 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 
 	ret->i2c = i2c;
 	ret->addr = addr;
-	ret->is_protected = false;
 	ret->type = type;
 	return ret;
 
@@ -196,52 +179,24 @@ int mcp230xx_deinit(mcp230xx_t* mcp, bool restart)
 		}
 	}
 
-	if (mcp->is_protected) {
-		int ret = mcp230xx_unprotect(mcp);
-		if (ret < 0) {
-			return ret;
-		}
-	}
-
 	free(mcp);
 	return 0;
 }
 
 int mcp230xx_protect(mcp230xx_t* mcp)
 {
-	if (mcp == NULL) {
-		errno = EINVAL;
-		return -1;
-	}
+	(void)mcp;
 
-	uint8_t bus;
-	if (i2c_get_bus(mcp->i2c, &bus) != 0) {
-		return -1;
-	}
-
-	plc_resource_t res = I2C_RESOURCE(bus, mcp->addr);
-	int result = plc_resource_add(res);
-	if (result >= 0) {
-		mcp->is_protected = true;
-		mcp->cached_resource = res;
-	}
-
-	return result;
+	errno = ENOTSUP;
+	return -1;
 }
 
 int mcp230xx_unprotect(mcp230xx_t* mcp)
 {
-	if (mcp == NULL) {
-		errno = EINVAL;
-		return -1;
-	}
+	(void)mcp;
 
-	int result = plc_resource_remove(mcp->cached_resource);
-	if (result >= 0) {
-		mcp->is_protected = false;
-	}
-
-	return result;
+	errno = ENOTSUP;
+	return -1;
 }
 
 #if !defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)

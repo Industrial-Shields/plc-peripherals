@@ -17,11 +17,12 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <plc-resource-protector.h>
+#include <plc-mutex.h>
 #include <plc-peripherals-platform.h>
 
 #if PLC_ENVIRONMENT == PLC_LINUX
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <malloc.h>
 #include <pthread.h>

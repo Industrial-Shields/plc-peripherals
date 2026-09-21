@@ -17,12 +17,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <plc-resource-protector.h>
+#include <plc-mutex.h>
 #include <plc-peripherals-platform.h>
 
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
 
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <errno.h>
 
 typedef struct {

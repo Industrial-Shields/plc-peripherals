@@ -1,6 +1,6 @@
 #include <unity.h>
 
-// test_plc-resource-protector-platform.c is plain C; declare its test
+// test_plc-mutex-platform.c is plain C; declare its test
 // functions here (compiled as C++) with C linkage so RUN_TEST can call them.
 extern "C" {
 void test_plc_mutex_create_returns_a_valid_mutex(void);

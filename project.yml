@@ -252,7 +252,7 @@
   :path_flag: "-L ${1}"
   :system: []    # for example, you might list 'm' to grab the math library
   :test:
-    - pthread # test_plc-resource-protector-platform.c spawns real threads
+    - pthread # test_plc-mutex-platform.c spawns real threads
   :release: []
 
 ################################################################
