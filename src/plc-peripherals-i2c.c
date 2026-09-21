@@ -20,6 +20,7 @@
 #include <plc-peripherals-i2c.h>
 
 #include <stdbool.h>
+#include <errno.h>
 #include <arpa/inet.h>
 
 int i2c_write8_8b(const i2c_interface_t* i2c,
@@ -58,8 +59,20 @@ int i2c_read8_8b(const i2c_interface_t* i2c,
 	ssize_t i2c_write_then_read_result = i2c_write_then_read(
 		i2c, addr, &reg, 1, to_read, 1, &bytes_read);
 
-	bool is_correct = i2c_write_then_read_result == 1 && bytes_read == 1;
-	return is_correct ? 0 : -1;
+	if (i2c_write_then_read_result != 1) {
+		return -1;
+	}
+
+	if (bytes_read != 1) {
+		/*
+		 * The register address went out but the device returned
+		 * nothing.
+		 */
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
 }
 
 int i2c_read8_16b(const i2c_interface_t* i2c,
@@ -71,15 +84,23 @@ int i2c_read8_16b(const i2c_interface_t* i2c,
 	ssize_t i2c_write_then_read_result = i2c_write_then_read(
 		i2c, addr, &reg, 1, (uint8_t*)to_read, 2, &bytes_read);
 
-	bool is_correct = i2c_write_then_read_result == 1 && bytes_read == 2;
-	if (is_correct) {
-		/*
-                 * I2C returns an array in big-endian, set it to the host
-		 * endianness to make the uint16_t cast correct.
-		 */
-		*to_read = ntohs(*to_read);
-		return 0;
+	if (i2c_write_then_read_result != 1) {
+		return -1;
 	}
 
-	return -1;
+	if (bytes_read != 2) {
+		/*
+		 * The register address went out but the device returned
+		 * nothing.
+		 */
+		errno = EIO;
+		return -1;
+	}
+
+	/*
+	 * I2C returns an array in big-endian, set it to the host endianness to
+	 * make the uint16_t cast correct.
+	 */
+	*to_read = ntohs(*to_read);
+	return 0;
 }

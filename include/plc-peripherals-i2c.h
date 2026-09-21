@@ -46,11 +46,7 @@ extern "C" {
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled)  : Some of the arguments given is invalid (bad
- *                              i2c_interface, invalid address, bad write
- * 				array...
- *     - ESP32 specific       :
- *       - EIO                : i2cWrite function reported some error.
+ *     - (others)    : Whatever i2c_write() reports.
  */
 int i2c_write8_8b(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
@@ -73,11 +69,7 @@ int i2c_write8_8b(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled)  : Some of the arguments given is invalid (bad
- *                              i2c_interface, invalid address, bad write
- * 				array...
- *     - ESP32 specific       :
- *       - EIO                : i2cWrite function reported some error.
+ *     - (others)    : Whatever i2c_write() reports.
  */
 int i2c_write8_16b(const i2c_interface_t* i2c,
 		   plc_i2c_addr_t addr,
@@ -100,11 +92,8 @@ int i2c_write8_16b(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled)  : Some of the arguments given is invalid (bad
- *                              i2c_interface, invalid address, bad read
- * 				array...
- *     - ESP32 specific       :
- *       - EIO                : i2cRead function reported some error.
+ *     - EIO      : The device did not return the register value.
+ *     - (others) : Whatever i2c_write_then_read() reports.
  */
 int i2c_read8_8b(const i2c_interface_t* i2c,
 		 plc_i2c_addr_t addr,
@@ -127,11 +116,8 @@ int i2c_read8_8b(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled)  : Some of the arguments given is invalid (bad
- *                              i2c_interface, invalid address, bad read
- * 				array...
- *     - ESP32 specific       :
- *       - EIO                : i2cRead function reported some error.
+ *     - EIO      : The device did not return the register value.
+ *     - (others) : Whatever i2c_write_then_read() reports.
  */
 int i2c_read8_16b(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
