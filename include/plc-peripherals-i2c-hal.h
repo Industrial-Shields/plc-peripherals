@@ -158,6 +158,7 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  *     - ENOTSUP              : The address needs 10-bit addressing, which the
  *                              adapter does not support. The Arduino HAL
  *                              never supports it.
+ *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error.
  *     - Linux specific       :
@@ -168,7 +169,6 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  *                              the caller must retry if desired.
  *       - EIO                : The transfer failed on the adapter.
  *       - ENXIO              : No device acknowledged the address.
- *       - ETIMEDOUT          : The adapter timed out.
  *       - EREMOTEIO          : The device did not acknowledge.
  *       - (others)           : Any other errno that ioctl(I2C_RDWR) reports
  *                              on the underlying adapter driver.
@@ -203,6 +203,7 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  *     - ENOTSUP              : The address needs 10-bit addressing, which the
  *                              adapter does not support. The Arduino HAL
  *                              never supports it.
+ *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cRead function reported some error.
  *     - Linux specific       :
@@ -213,7 +214,6 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  *                              the caller must retry if desired.
  *       - EIO                : The transfer failed on the adapter.
  *       - ENXIO              : No device acknowledged the address.
- *       - ETIMEDOUT          : The adapter timed out.
  *       - EREMOTEIO          : The device did not acknowledge.
  *       - (others)           : Any other errno that ioctl(I2C_RDWR) reports
  *                              on the underlying adapter driver.
@@ -251,6 +251,7 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *     - ENOTSUP              : The address needs 10-bit addressing, which the
  *                              adapter does not support. The Arduino HAL
  *                              never supports it.
+ *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cWriteReadNonStop function reported some
  *                              error.
@@ -262,7 +263,6 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *                              the caller must retry if desired.
  *       - EIO                : The transfer failed on the adapter.
  *       - ENXIO              : No device acknowledged the address.
- *       - ETIMEDOUT          : The adapter timed out.
  *       - EREMOTEIO          : The device did not acknowledge.
  *       - (others)           : Any other errno that ioctl(I2C_RDWR) reports
  *                              on the underlying adapter driver.

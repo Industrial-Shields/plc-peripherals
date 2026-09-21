@@ -136,7 +136,8 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 	case ESP_OK:
 		return to_write_len;
 	case ESP_ERR_TIMEOUT:
-		return 0;
+		errno = ETIMEDOUT;
+		return -1;
 	default:
 		ESP_LOGE(TAG,
 			 "Can't write to I2C bus: %s",
@@ -169,8 +170,10 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 					&read_count);
 	switch (read_result) {
 	case ESP_OK:
-	case ESP_ERR_TIMEOUT:
 		return read_count;
+	case ESP_ERR_TIMEOUT:
+		errno = ETIMEDOUT;
+		return -1;
 	default:
 		ESP_LOGE(TAG,
 			 "Can't read to I2C bus: %s",
@@ -210,7 +213,8 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 	case ESP_OK:
 		return to_write_len;
 	case ESP_ERR_TIMEOUT:
-		return 0;
+		errno = ETIMEDOUT;
+		return -1;
 	default:
 		ESP_LOGE(TAG,
 			 "Can't write/read to I2C bus: %s",
