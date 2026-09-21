@@ -106,13 +106,11 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		  const uint8_t* to_write,
 		  size_t to_write_len)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
 	    to_write == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
 
 	esp_err_t write_result = i2cWrite(i2c->bus_number,
 					  addr,
@@ -138,13 +136,11 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		 uint8_t* to_read,
 		 size_t to_read_len)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
 	    to_read == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
 
 	size_t read_count = 0;
 	esp_err_t read_result = i2cRead(i2c->bus_number,
@@ -174,13 +170,11 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    size_t to_read_len,
 			    size_t* read_bytes)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
 	    to_write == NULL || to_read == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
 
 	int write_read_result = i2cWriteReadNonStop(i2c->bus_number,
 						    addr,

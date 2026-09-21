@@ -40,10 +40,6 @@ struct _i2c_interface_t {
 };
 static const uint16_t MAXIMUM_I2C_ADDRESS = 1024;
 
-static inline bool is_i2c_platform_correct(const i2c_interface_t* i2c)
-{
-	return i2c != NULL && i2c->fd >= 0;
-}
 static inline bool is_i2c_address_valid(plc_i2c_addr_t addr)
 {
 	return addr < MAXIMUM_I2C_ADDRESS;
@@ -102,7 +98,7 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 
 int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 {
-	if (!is_i2c_platform_correct(i2c) || bus == NULL) {
+	if (i2c == NULL || bus == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -116,13 +112,10 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		  const uint8_t* to_write,
 		  size_t to_write_len)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (i2c == NULL || !is_i2c_platform_correct(i2c) ||
-	    !is_i2c_address_valid(addr) || to_write == NULL) {
+	if (i2c == NULL || !is_i2c_address_valid(addr) || to_write == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
 	if (to_write_len == 0) {
 		errno = 0;
 		return 0;
@@ -164,13 +157,10 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		 uint8_t* to_read,
 		 size_t to_read_len)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (i2c == NULL || !is_i2c_platform_correct(i2c) ||
-	    !is_i2c_address_valid(addr) || to_read == NULL) {
+	if (i2c == NULL || !is_i2c_address_valid(addr) || to_read == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
 	if (to_read_len == 0) {
 		errno = 0;
 		return 0;
@@ -210,14 +200,11 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    size_t to_read_len,
 			    size_t* read_bytes)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (i2c == NULL || !is_i2c_platform_correct(i2c) ||
-	    !is_i2c_address_valid(addr) || to_write == NULL ||
+	if (i2c == NULL || !is_i2c_address_valid(addr) || to_write == NULL ||
 	    to_read == NULL || read_bytes == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
 	if (to_write_len == 0 || to_read_len == 0) {
 		*read_bytes = 0;
 		return 0;
