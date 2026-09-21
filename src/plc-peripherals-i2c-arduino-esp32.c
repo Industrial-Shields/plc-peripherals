@@ -37,10 +37,6 @@ static const uint32_t MAXIMUM_I2C_TIMEOUT = 25;
 // The Arduino HAL explicitly supports only 7-bit addresses
 static const plc_i2c_addr_t MAXIMUM_7BIT_ADDRESS = 0x7F;
 static const plc_i2c_addr_t MAXIMUM_10BIT_ADDRESS = 0x3FF;
-static inline bool is_i2c_platform_correct(const i2c_interface_t* i2c)
-{
-	return i2c != NULL && i2c->bus_number < SOC_I2C_NUM;
-}
 static int check_i2c_address(plc_i2c_addr_t addr)
 {
 	if (addr <= MAXIMUM_7BIT_ADDRESS) {
@@ -79,8 +75,8 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 
 int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 {
-	if (!is_i2c_platform_correct(i2c) || bus == NULL) {
-		errno = EINVAL;
+	if (i2c == NULL || bus == NULL) {
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -90,8 +86,8 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 
 int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 {
-	if (!is_i2c_platform_correct(interface)) {
-		errno = EINVAL;
+	if (interface == NULL) {
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -118,8 +114,8 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		  const uint8_t* to_write,
 		  size_t to_write_len)
 {
-	if (!is_i2c_platform_correct(i2c) || to_write == NULL) {
-		errno = EINVAL;
+	if (i2c == NULL || to_write == NULL) {
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -138,6 +134,9 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 	case ESP_ERR_TIMEOUT:
 		errno = ETIMEDOUT;
 		return -1;
+	case ESP_ERR_INVALID_ARG:
+		errno = EINVAL;
+		return -1;
 	default:
 		ESP_LOGE(TAG,
 			 "Can't write to I2C bus: %s",
@@ -152,8 +151,8 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		 uint8_t* to_read,
 		 size_t to_read_len)
 {
-	if (!is_i2c_platform_correct(i2c) || to_read == NULL) {
-		errno = EINVAL;
+	if (i2c == NULL || to_read == NULL) {
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -174,6 +173,9 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 	case ESP_ERR_TIMEOUT:
 		errno = ETIMEDOUT;
 		return -1;
+	case ESP_ERR_INVALID_ARG:
+		errno = EINVAL;
+		return -1;
 	default:
 		ESP_LOGE(TAG,
 			 "Can't read to I2C bus: %s",
@@ -191,9 +193,8 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    size_t to_read_len,
 			    size_t* read_bytes)
 {
-	if (!is_i2c_platform_correct(i2c) || to_write == NULL ||
-	    to_read == NULL) {
-		errno = EINVAL;
+	if (i2c == NULL || to_write == NULL || to_read == NULL) {
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -214,6 +215,9 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 		return to_write_len;
 	case ESP_ERR_TIMEOUT:
 		errno = ETIMEDOUT;
+		return -1;
+	case ESP_ERR_INVALID_ARG:
+		errno = EINVAL;
 		return -1;
 	default:
 		ESP_LOGE(TAG,

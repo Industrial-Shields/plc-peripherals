@@ -114,7 +114,7 @@ i2c_init_return_null:
 int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 {
 	if (interface == NULL) {
-		errno = EINVAL;
+		errno = EFAULT;
 		return -1;
 	}
 	if (deinit_i2c_bus) {
@@ -137,7 +137,7 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 {
 	if (i2c == NULL || bus == NULL) {
-		errno = EINVAL;
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -151,7 +151,7 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		  size_t to_write_len)
 {
 	if (i2c == NULL || to_write == NULL) {
-		errno = EINVAL;
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -186,10 +186,20 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		errno = EAGAIN;
 		return 0;
 	case -1:
+		if (errno == EBADF) {
+			/*
+			 * If the file descriptor was bad, technically the
+			 * "bus" was bad, like on ESP32. Which translates to a
+			 * bad argument.
+			 */
+			errno = EINVAL;
+		}
 		return -1;
 	default:
-		// i2c_transfer() only ever returns nmsgs or a negative errno;
-		// this guards against a misbehaving adapter driver.
+		/*
+		 * i2c_transfer() only ever returns nmsgs or a negative errno.
+		 * This guards against a misbehaving adapter driver.
+		 */
 		errno = EBADE;
 		return -1;
 	}
@@ -201,7 +211,7 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		 size_t to_read_len)
 {
 	if (i2c == NULL || to_read == NULL) {
-		errno = EINVAL;
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -231,6 +241,14 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		errno = EAGAIN;
 		return 0;
 	case -1:
+		if (errno == EBADF) {
+			/*
+			 * If the file descriptor was bad, technically the
+			 * "bus" was bad, like on ESP32. Which translates to a
+			 * bad argument.
+			 */
+			errno = EINVAL;
+		}
 		return -1;
 	default:
 		// i2c_transfer() only ever returns nmsgs or a negative errno;
@@ -250,7 +268,7 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 {
 	if (i2c == NULL || to_write == NULL || to_read == NULL ||
 	    read_bytes == NULL) {
-		errno = EINVAL;
+		errno = EFAULT;
 		return -1;
 	}
 
@@ -294,6 +312,14 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 		errno = EAGAIN;
 		return 0;
 	case -1:
+		if (errno == EBADF) {
+			/*
+			 * If the file descriptor was bad, technically the
+			 * "bus" was bad, like on ESP32. Which translates to a
+			 * bad argument.
+			 */
+			errno = EINVAL;
+		}
 		return -1;
 	default:
 		// i2c_transfer() only ever returns nmsgs or a negative errno;

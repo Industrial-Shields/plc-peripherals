@@ -104,7 +104,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed i2c_interface is NULL or invalid, or bus is NULL.
+ *     - EFAULT : Passed i2c_interface or bus is NULL.
  */
 int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
 
@@ -126,7 +126,7 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
  *
  * Errors:
  *   errno set to:
- *     - EINVAL        : Passed i2c_interface is NULL.
+ *     - EFAULT        : Passed i2c_interface is NULL.
  *     - ESP32 specific:
  *       - EIO         : i2cDeinit function reported some error.
  *     - Linux specific:
@@ -153,11 +153,11 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  *
  * Errors:
  *   errno set to:
- *     - EINVAL               : A NULL pointer was given, or the address is
+ *     - EFAULT               : A NULL pointer was given.
+ *     - EINVAL               : The address, or the passed i2c_interface, is
  *                              invalid.
- *     - ENOTSUP              : The address needs 10-bit addressing, which the
- *                              adapter does not support. The Arduino HAL
- *                              never supports it.
+ *     - ENOTSUP              : The address asks for 10-bit addressing, which
+ *                              this platform does not support.
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error.
@@ -198,11 +198,11 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EINVAL               : A NULL pointer was given, or the address is
+ *     - EFAULT               : A NULL pointer was given.
+ *     - EINVAL               : The address, or the passed i2c_interface, is
  *                              invalid.
- *     - ENOTSUP              : The address needs 10-bit addressing, which the
- *                              adapter does not support. The Arduino HAL
- *                              never supports it.
+ *     - ENOTSUP              : The address asks for 10-bit addressing, which
+ *                              this platform does not support.
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cRead function reported some error.
@@ -246,11 +246,11 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EINVAL               : A NULL pointer was given, or the address is
+ *     - EFAULT               : A NULL pointer was given.
+ *     - EINVAL               : The address, or the passed i2c_interface, is
  *                              invalid.
- *     - ENOTSUP              : The address needs 10-bit addressing, which the
- *                              adapter does not support. The Arduino HAL
- *                              never supports it.
+ *     - ENOTSUP              : The address asks for 10-bit addressing, which
+ *                              this platform does not support.
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cWriteReadNonStop function reported some
