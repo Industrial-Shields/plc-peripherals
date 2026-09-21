@@ -86,7 +86,8 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 	char i2c_file_name[32];
 	snprintf(i2c_file_name, sizeof(i2c_file_name), "/dev/i2c-%d", bus);
 
-	i2c->fd = open(i2c_file_name, O_RDWR);
+	// O_CLOEXEC: Do not propagate the I2C file descriptor to exec'd child.
+	i2c->fd = open(i2c_file_name, O_RDWR | O_CLOEXEC);
 	if (i2c->fd < 0) {
 		// No node means no such bus, like on ESP32.
 		if (errno == ENOENT) {
