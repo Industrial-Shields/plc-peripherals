@@ -122,15 +122,19 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 		return -1;
 	}
 
-	int ret = close(interface->fd);
-	if (ret != 0) {
-		return -1;
-	}
+	int fd = interface->fd;
 
-	interface->fd = -1;
 	free(interface);
 
-	errno = 0;
+	/*
+	 * On Linux, close(2) releases the descriptor even when it reports an
+	 * error, so the interface is gone either way and the failure is only
+	 * reported.
+	 */
+	if (close(fd) != 0) {
+		errno = 0;
+	}
+
 	return 0;
 }
 
