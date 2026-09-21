@@ -34,14 +34,26 @@ struct _i2c_interface_t {
 	uint8_t bus_number;
 };
 static const uint32_t MAXIMUM_I2C_TIMEOUT = 25;
-static const uint16_t MAXIMUM_I2C_ADDRESS = 1024;
+// The Arduino HAL explicitly supports only 7-bit addresses
+static const plc_i2c_addr_t MAXIMUM_7BIT_ADDRESS = 0x7F;
+static const plc_i2c_addr_t MAXIMUM_10BIT_ADDRESS = 0x3FF;
 static inline bool is_i2c_platform_correct(const i2c_interface_t* i2c)
 {
 	return i2c != NULL && i2c->bus_number < SOC_I2C_NUM;
 }
-static inline bool is_i2c_address_valid(plc_i2c_addr_t addr)
+static int check_i2c_address(plc_i2c_addr_t addr)
 {
-	return addr < MAXIMUM_I2C_ADDRESS;
+	if (addr <= MAXIMUM_7BIT_ADDRESS) {
+		return 0;
+	}
+
+	if (addr > MAXIMUM_10BIT_ADDRESS) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	errno = ENOTSUP;
+	return -1;
 }
 
 i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
@@ -67,7 +79,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 
 int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 {
-	if (!is_i2c_platform_correct(i2c)) {
+	if (!is_i2c_platform_correct(i2c) || bus == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -106,9 +118,12 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		  const uint8_t* to_write,
 		  size_t to_write_len)
 {
-	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
-	    to_write == NULL) {
+	if (!is_i2c_platform_correct(i2c) || to_write == NULL) {
 		errno = EINVAL;
+		return -1;
+	}
+
+	if (check_i2c_address(addr) != 0) {
 		return -1;
 	}
 
@@ -136,9 +151,12 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		 uint8_t* to_read,
 		 size_t to_read_len)
 {
-	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
-	    to_read == NULL) {
+	if (!is_i2c_platform_correct(i2c) || to_read == NULL) {
 		errno = EINVAL;
+		return -1;
+	}
+
+	if (check_i2c_address(addr) != 0) {
 		return -1;
 	}
 
@@ -170,9 +188,13 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    size_t to_read_len,
 			    size_t* read_bytes)
 {
-	if (!is_i2c_platform_correct(i2c) || !is_i2c_address_valid(addr) ||
-	    to_write == NULL || to_read == NULL) {
+	if (!is_i2c_platform_correct(i2c) || to_write == NULL ||
+	    to_read == NULL) {
 		errno = EINVAL;
+		return -1;
+	}
+
+	if (check_i2c_address(addr) != 0) {
 		return -1;
 	}
 

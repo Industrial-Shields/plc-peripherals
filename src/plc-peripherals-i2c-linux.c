@@ -34,43 +34,81 @@
 #include <linux/i2c.h>
 #include <sys/stat.h>
 
+// The kernel doesn't define it...
+#define I2C_M_SEVEN 0
+
 struct _i2c_interface_t {
 	uint8_t bus;
 	int fd;
+	bool does_it_have_10_bits;
 };
-static const uint16_t MAXIMUM_I2C_ADDRESS = 1024;
 
-static inline bool is_i2c_address_valid(plc_i2c_addr_t addr)
+static const plc_i2c_addr_t MAXIMUM_7BIT_ADDRESS = 0x7F;
+static const plc_i2c_addr_t MAXIMUM_10BIT_ADDRESS = 0x3FF;
+
+static int set_i2c_address_flags(plc_i2c_addr_t addr,
+				 const i2c_interface_t* i2c,
+				 uint16_t* flags)
 {
-	return addr < MAXIMUM_I2C_ADDRESS;
+	if (addr <= MAXIMUM_7BIT_ADDRESS) {
+		*flags = I2C_M_SEVEN;
+		return 0;
+	}
+
+	if (addr > MAXIMUM_10BIT_ADDRESS) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (!i2c->does_it_have_10_bits) {
+		errno = ENOTSUP;
+		return -1;
+	}
+
+	*flags = I2C_M_TEN;
+	return 0;
 }
 
 i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 {
+	int funcs_errno;
+
 	if (sda >= 0 || scl >= 0) {
 		errno = ENOTSUP;
-		return NULL;
+		goto i2c_init_return_null;
 	}
 
 	i2c_interface_t* i2c = malloc(sizeof(i2c_interface_t));
 	if (!i2c) {
-		return NULL;
+		goto i2c_init_return_null;
 	}
-	// Assuming that we use two's compliment (-1 for ints)...
-	memset(i2c, 0b11111111, sizeof(i2c_interface_t));
 
 	char i2c_file_name[32];
 	snprintf(i2c_file_name, sizeof(i2c_file_name), "/dev/i2c-%d", bus);
 
 	i2c->fd = open(i2c_file_name, O_RDWR);
 	if (i2c->fd < 0) {
-		free(i2c);
-		return NULL;
+		goto free_i2c;
 	}
 
+	unsigned long funcs;
+	if (ioctl(i2c->fd, I2C_FUNCS, &funcs) != 0) {
+		funcs_errno = errno;
+		goto free_i2c_fd;
+	}
+
+	i2c->does_it_have_10_bits = (funcs & I2C_FUNC_10BIT_ADDR) != 0;
 	i2c->bus = bus;
 	errno = 0;
 	return i2c;
+
+free_i2c_fd:
+	close(i2c->fd);
+	errno = funcs_errno;
+free_i2c:
+	free(i2c);
+i2c_init_return_null:
+	return NULL;
 }
 
 int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
@@ -112,8 +150,13 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		  const uint8_t* to_write,
 		  size_t to_write_len)
 {
-	if (i2c == NULL || !is_i2c_address_valid(addr) || to_write == NULL) {
+	if (i2c == NULL || to_write == NULL) {
 		errno = EINVAL;
+		return -1;
+	}
+
+	uint16_t addr_flags;
+	if (set_i2c_address_flags(addr, i2c, &addr_flags) != 0) {
 		return -1;
 	}
 	if (to_write_len == 0) {
@@ -127,7 +170,7 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 	 * I2C_M_RD messages, so it's safe to discard const here.
 	 */
 	const struct i2c_msg msg = { .addr = addr,
-				     .flags = 0,
+				     .flags = addr_flags,
 				     .len = to_write_len,
 				     .buf = (uint8_t*)to_write };
 	struct i2c_msg msgs[1] = { msg };
@@ -157,8 +200,13 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		 uint8_t* to_read,
 		 size_t to_read_len)
 {
-	if (i2c == NULL || !is_i2c_address_valid(addr) || to_read == NULL) {
+	if (i2c == NULL || to_read == NULL) {
 		errno = EINVAL;
+		return -1;
+	}
+
+	uint16_t addr_flags;
+	if (set_i2c_address_flags(addr, i2c, &addr_flags) != 0) {
 		return -1;
 	}
 	if (to_read_len == 0) {
@@ -167,7 +215,7 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 	}
 
 	const struct i2c_msg msg = { .addr = addr,
-				     .flags = I2C_M_RD,
+				     .flags = I2C_M_RD | addr_flags,
 				     .len = to_read_len,
 				     .buf = to_read };
 	struct i2c_msg msgs[1] = { msg };
@@ -200,9 +248,14 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    size_t to_read_len,
 			    size_t* read_bytes)
 {
-	if (i2c == NULL || !is_i2c_address_valid(addr) || to_write == NULL ||
-	    to_read == NULL || read_bytes == NULL) {
+	if (i2c == NULL || to_write == NULL || to_read == NULL ||
+	    read_bytes == NULL) {
 		errno = EINVAL;
+		return -1;
+	}
+
+	uint16_t addr_flags;
+	if (set_i2c_address_flags(addr, i2c, &addr_flags) != 0) {
 		return -1;
 	}
 	if (to_write_len == 0 || to_read_len == 0) {
@@ -216,11 +269,11 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 	 * I2C_M_RD messages, so it's safe to discard const here.
 	 */
 	const struct i2c_msg read_order_msg = { .addr = addr,
-						.flags = 0,
+						.flags = addr_flags,
 						.len = to_write_len,
 						.buf = (uint8_t*)to_write };
 	const struct i2c_msg to_read_msg = { .addr = addr,
-					     .flags = I2C_M_RD,
+					     .flags = I2C_M_RD | addr_flags,
 					     .len = to_read_len,
 					     .buf = to_read };
 

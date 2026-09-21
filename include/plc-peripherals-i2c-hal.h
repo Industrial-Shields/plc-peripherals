@@ -33,8 +33,8 @@
 #include <stdbool.h>
 
 /*
- * If uncommented, the I2C functions check that the arguments are valid (check
- * for NULLs, invalid addresses...)
+ * If uncommented, the peripheral drivers check that the arguments are valid
+ * (check for NULLs, invalid indexes...).
  */
 // #define PLC_PERIPHERALS_CHECK_ARGUMENTS
 
@@ -79,8 +79,12 @@ typedef uint16_t plc_i2c_addr_t;
  *       - ENOENT       : /dev/i2c-<bus> does not exist.
  *       - EACCES       : No permission to open /dev/i2c-<bus>.
  *       - ENFILE/EMFILE: Out of file descriptors, system-wide or per-process.
+ *       - ENOTTY       : /dev/i2c-<bus> is not an i2c-dev device. The adapter
+ *                        capabilities are queried here, which doubles as a
+ *                        check that the node is the real thing.
  *       - (others)     : Any other errno that open(2) can report for O_RDWR on
- *                        a character device.
+ *                        a character device, or that ioctl(I2C_FUNCS) can
+ *                        report on the adapter driver.
  */
 i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
 
@@ -100,7 +104,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed i2c_interface is NULL or invalid.
+ *     - EINVAL : Passed i2c_interface is NULL or invalid, or bus is NULL.
  */
 int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
 
@@ -125,6 +129,9 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
  *     - EINVAL        : Passed i2c_interface is NULL.
  *     - ESP32 specific:
  *       - EIO         : i2cDeinit function reported some error.
+ *     - Linux specific:
+ *       - ENOTSUP     : deinit_i2c_bus was true. This function only closes
+ *                       the interface, it doesn't take down the I2C bus.
  */
 int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
 
@@ -146,19 +153,25 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled)  : Some of the arguments given is invalid (bad
- *                              i2c_interface, invalid address, bad write
- * 				array...
+ *     - EINVAL               : A NULL pointer was given, or the address is
+ *                              invalid.
+ *     - ENOTSUP              : The address needs 10-bit addressing, which the
+ *                              adapter does not support. The Arduino HAL
+ *                              never supports it.
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error.
- *     - Linux specific       : errno is whatever ioctl(I2C_RDWR) reports on
- *                              the underlying adapter driver (e.g. EIO,
- *                              ENXIO, ETIMEDOUT, EREMOTEIO). In particular,
- *                              EINTR is possible and is not retried
- *                              internally; the caller must retry if desired.
- *                              EAGAIN means the transfer completed zero
- *                              messages; EBADE means the adapter driver
- *                              returned an unexpected message count.
+ *     - Linux specific       :
+ *       - EAGAIN             : The transfer completed zero messages.
+ *       - EBADE              : The adapter driver returned an unexpected
+ *                              message count.
+ *       - EINTR              : Interrupted. It is not retried internally;
+ *                              the caller must retry if desired.
+ *       - EIO                : The transfer failed on the adapter.
+ *       - ENXIO              : No device acknowledged the address.
+ *       - ETIMEDOUT          : The adapter timed out.
+ *       - EREMOTEIO          : The device did not acknowledge.
+ *       - (others)           : Any other errno that ioctl(I2C_RDWR) reports
+ *                              on the underlying adapter driver.
  */
 ssize_t i2c_write(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
@@ -185,19 +198,25 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled)  : Some of the arguments given is invalid (bad
- *                              i2c_interface, invalid address, bad read
- * 				array...
+ *     - EINVAL               : A NULL pointer was given, or the address is
+ *                              invalid.
+ *     - ENOTSUP              : The address needs 10-bit addressing, which the
+ *                              adapter does not support. The Arduino HAL
+ *                              never supports it.
  *     - ESP32 specific       :
  *       - EIO                : i2cRead function reported some error.
- *     - Linux specific       : errno is whatever ioctl(I2C_RDWR) reports on
- *                              the underlying adapter driver (e.g. EIO,
- *                              ENXIO, ETIMEDOUT, EREMOTEIO). In particular,
- *                              EINTR is possible and is not retried
- *                              internally; the caller must retry if desired.
- *                              EAGAIN means the transfer completed zero
- *                              messages; EBADE means the adapter driver
- *                              returned an unexpected message count.
+ *     - Linux specific       :
+ *       - EAGAIN             : The transfer completed zero messages.
+ *       - EBADE              : The adapter driver returned an unexpected
+ *                              message count.
+ *       - EINTR              : Interrupted. It is not retried internally;
+ *                              the caller must retry if desired.
+ *       - EIO                : The transfer failed on the adapter.
+ *       - ENXIO              : No device acknowledged the address.
+ *       - ETIMEDOUT          : The adapter timed out.
+ *       - EREMOTEIO          : The device did not acknowledge.
+ *       - (others)           : Any other errno that ioctl(I2C_RDWR) reports
+ *                              on the underlying adapter driver.
  */
 ssize_t i2c_read(const i2c_interface_t* i2c,
 		 plc_i2c_addr_t addr,
@@ -227,20 +246,26 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled)  : Some of the arguments given is invalid (bad
- *                              i2c_interface, invalid address, bad write
- * 				or read array...
+ *     - EINVAL               : A NULL pointer was given, or the address is
+ *                              invalid.
+ *     - ENOTSUP              : The address needs 10-bit addressing, which the
+ *                              adapter does not support. The Arduino HAL
+ *                              never supports it.
  *     - ESP32 specific       :
  *       - EIO                : i2cWriteReadNonStop function reported some
  *                              error.
- *     - Linux specific       : errno is whatever ioctl(I2C_RDWR) reports on
- *                              the underlying adapter driver (e.g. EIO,
- *                              ENXIO, ETIMEDOUT, EREMOTEIO). In particular,
- *                              EINTR is possible and is not retried
- *                              internally; the caller must retry if desired.
- *                              EAGAIN means the transfer completed zero
- *                              messages; EBADE means the adapter driver
- *                              returned an unexpected message count.
+ *     - Linux specific       :
+ *       - EAGAIN             : The transfer completed zero messages.
+ *       - EBADE              : The adapter driver returned an unexpected
+ *                              message count.
+ *       - EINTR              : Interrupted. It is not retried internally;
+ *                              the caller must retry if desired.
+ *       - EIO                : The transfer failed on the adapter.
+ *       - ENXIO              : No device acknowledged the address.
+ *       - ETIMEDOUT          : The adapter timed out.
+ *       - EREMOTEIO          : The device did not acknowledge.
+ *       - (others)           : Any other errno that ioctl(I2C_RDWR) reports
+ *                              on the underlying adapter driver.
  */
 ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    plc_i2c_addr_t addr,
