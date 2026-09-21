@@ -99,7 +99,6 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 
 	i2c->does_it_have_10_bits = (funcs & I2C_FUNC_10BIT_ADDR) != 0;
 	i2c->bus = bus;
-	errno = 0;
 	return i2c;
 
 free_i2c_fd:
@@ -128,12 +127,13 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 
 	/*
 	 * On Linux, close(2) releases the descriptor even when it reports an
-	 * error, so the interface is gone either way and the failure is only
-	 * reported.
+	 * error, so the interface is gone either way and there is nothing for
+	 * the caller to act on.
 	 */
-	if (close(fd) != 0) {
-		errno = 0;
-	}
+	int saved_errno = errno;
+
+	close(fd);
+	errno = saved_errno;
 
 	return 0;
 }
@@ -164,7 +164,6 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		return -1;
 	}
 	if (to_write_len == 0) {
-		errno = 0;
 		return 0;
 	}
 
@@ -224,7 +223,6 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 	if (to_read_len == 0) {
-		errno = 0;
 		return 0;
 	}
 

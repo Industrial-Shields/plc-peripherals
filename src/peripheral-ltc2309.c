@@ -125,7 +125,6 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown)
 
 	free(ltc);
 
-	errno = 0;
 	return 0;
 }
 
