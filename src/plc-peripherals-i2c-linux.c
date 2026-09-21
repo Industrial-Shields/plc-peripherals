@@ -88,6 +88,10 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 
 	i2c->fd = open(i2c_file_name, O_RDWR);
 	if (i2c->fd < 0) {
+		// No node means no such bus, like on ESP32.
+		if (errno == ENOENT) {
+			errno = EINVAL;
+		}
 		goto free_i2c;
 	}
 

@@ -61,7 +61,14 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 			ESP_LOGE(TAG,
 				 "Can't initialize I2C bus: %s",
 				 esp_err_to_name(init_result));
-			errno = EIO;
+			switch (init_result) {
+			case ESP_ERR_INVALID_ARG:
+				errno = EINVAL;
+				break;
+			default:
+				errno = EIO;
+				break;
+			}
 			return NULL;
 		}
 	}

@@ -70,13 +70,13 @@ typedef uint16_t plc_i2c_addr_t;
  *
  * Errors:
  *   errno set to:
+ *     - EINVAL        : The bus number does not exist.
  *     - ENOMEM        : Out of memory during allocation.
  *     - ESP32 specific:
  *       - EIO         : i2cInit function reported some error.
  *     - Linux specific:
  *       - ENOTSUP      : SDA/SCL were given. Linux addresses buses through
  *                        /dev/i2c-<bus> only.
- *       - ENOENT       : /dev/i2c-<bus> does not exist.
  *       - EACCES       : No permission to open /dev/i2c-<bus>.
  *       - ENFILE/EMFILE: Out of file descriptors, system-wide or per-process.
  *       - ENOTTY       : /dev/i2c-<bus> is not an i2c-dev device. The adapter
