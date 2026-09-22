@@ -4,15 +4,40 @@
 // functions here (compiled as C++) with C linkage so RUN_TEST can call them.
 extern "C" {
 void test_plc_mutex_create_returns_a_valid_mutex(void);
-void test_plc_mutex_destroy_fails_with_einval_for_null(void);
+void test_plc_mutex_destroy_fails_with_efault_for_null(void);
 void test_plc_mutex_destroy_succeeds_for_an_unlocked_mutex(void);
 void test_plc_mutex_destroy_fails_with_ebusy_for_a_locked_mutex(void);
-void test_plc_mutex_acquire_succeeds_immediately_when_free(void);
-void test_plc_mutex_acquire_times_out_when_already_held_by_the_same_thread(
+void test_plc_mutex_destroy_fails_with_ebusy_when_another_thread_holds_it(void);
+void test_plc_mutex_static_create_makes_a_usable_mutex(void);
+void test_plc_mutex_static_create_makes_a_usable_shared_mutex(void);
+void test_plc_mutex_static_create_fails_with_efault_for_null(void);
+void test_plc_mutex_static_create_fails_with_efault_for_misaligned_storage(
 	void);
+void test_plc_mutex_static_create_accepts_an_aligned_address_in_a_buffer(void);
+void test_plc_mutex_static_create_fails_with_einval_for_a_bad_scope(void);
+void test_plc_mutex_static_destroy_fails_with_efault_for_null(void);
+void test_plc_mutex_static_destroy_succeeds_for_an_unlocked_mutex(void);
+void test_plc_mutex_static_destroy_fails_with_ebusy_for_a_locked_mutex(void);
+void test_plc_mutex_static_destroy_fails_with_ebusy_when_another_thread_holds_it(
+	void);
+void test_plc_mutex_static_destroy_leaves_the_storage_reusable(void);
+void test_plc_mutex_acquire_fails_with_efault_for_null(void);
+void test_plc_mutex_acquire_succeeds_immediately_when_free(void);
+void test_plc_mutex_acquire_fails_with_edeadlk_for_the_same_thread(void);
 void test_plc_mutex_acquire_times_out_when_held_by_another_thread(void);
+void test_plc_mutex_acquire_fails_at_once_with_ebusy_for_a_zero_timeout(
+	void);
+void test_plc_mutex_acquire_waits_out_a_timeout_of_seconds_and_milliseconds(
+	void);
+void test_plc_mutex_acquire_waits_for_the_release_with_the_max_delay(void);
+void test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay(void);
+void test_plc_mutex_release_fails_with_efault_for_null(void);
 void test_plc_mutex_release_succeeds_when_held(void);
+void test_plc_mutex_release_fails_with_eperm_from_a_non_owner_thread(void);
 void test_plc_mutex_release_fails_with_ealready_when_not_held(void);
+void test_plc_mutex_release_leaves_a_dead_owners_lock_usable(void);
+void test_plc_mutex_destroy_succeeds_after_the_owner_died_holding_it(void);
+void test_plc_mutex_acquire_reports_eownerdead_with_the_max_delay(void);
 }
 
 void setup()
@@ -21,17 +46,47 @@ void setup()
 
 	RUN_TEST(test_plc_mutex_create_returns_a_valid_mutex);
 
-	RUN_TEST(test_plc_mutex_destroy_fails_with_einval_for_null);
+	RUN_TEST(test_plc_mutex_destroy_fails_with_efault_for_null);
 	RUN_TEST(test_plc_mutex_destroy_succeeds_for_an_unlocked_mutex);
 	RUN_TEST(test_plc_mutex_destroy_fails_with_ebusy_for_a_locked_mutex);
-
-	RUN_TEST(test_plc_mutex_acquire_succeeds_immediately_when_free);
 	RUN_TEST(
-		test_plc_mutex_acquire_times_out_when_already_held_by_the_same_thread);
-	RUN_TEST(test_plc_mutex_acquire_times_out_when_held_by_another_thread);
+		test_plc_mutex_destroy_fails_with_ebusy_when_another_thread_holds_it);
 
+	RUN_TEST(test_plc_mutex_static_create_makes_a_usable_mutex);
+	RUN_TEST(test_plc_mutex_static_create_makes_a_usable_shared_mutex);
+	RUN_TEST(test_plc_mutex_static_create_fails_with_efault_for_null);
+	RUN_TEST(
+		test_plc_mutex_static_create_fails_with_efault_for_misaligned_storage);
+	RUN_TEST(
+		test_plc_mutex_static_create_accepts_an_aligned_address_in_a_buffer);
+	RUN_TEST(test_plc_mutex_static_create_fails_with_einval_for_a_bad_scope);
+
+	RUN_TEST(test_plc_mutex_static_destroy_fails_with_efault_for_null);
+	RUN_TEST(test_plc_mutex_static_destroy_succeeds_for_an_unlocked_mutex);
+	RUN_TEST(test_plc_mutex_static_destroy_fails_with_ebusy_for_a_locked_mutex);
+	RUN_TEST(
+		test_plc_mutex_static_destroy_fails_with_ebusy_when_another_thread_holds_it);
+	RUN_TEST(test_plc_mutex_static_destroy_leaves_the_storage_reusable);
+
+	RUN_TEST(test_plc_mutex_acquire_fails_with_efault_for_null);
+	RUN_TEST(test_plc_mutex_acquire_succeeds_immediately_when_free);
+	RUN_TEST(test_plc_mutex_acquire_fails_with_edeadlk_for_the_same_thread);
+	RUN_TEST(test_plc_mutex_acquire_times_out_when_held_by_another_thread);
+	RUN_TEST(
+		test_plc_mutex_acquire_fails_at_once_with_ebusy_for_a_zero_timeout);
+	RUN_TEST(
+		test_plc_mutex_acquire_waits_out_a_timeout_of_seconds_and_milliseconds);
+	RUN_TEST(
+		test_plc_mutex_acquire_waits_for_the_release_with_the_max_delay);
+	RUN_TEST(test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay);
+
+	RUN_TEST(test_plc_mutex_release_fails_with_efault_for_null);
 	RUN_TEST(test_plc_mutex_release_succeeds_when_held);
+	RUN_TEST(test_plc_mutex_release_fails_with_eperm_from_a_non_owner_thread);
 	RUN_TEST(test_plc_mutex_release_fails_with_ealready_when_not_held);
+	RUN_TEST(test_plc_mutex_release_leaves_a_dead_owners_lock_usable);
+	RUN_TEST(test_plc_mutex_destroy_succeeds_after_the_owner_died_holding_it);
+	RUN_TEST(test_plc_mutex_acquire_reports_eownerdead_with_the_max_delay);
 
 	UNITY_END();
 }

@@ -22,12 +22,6 @@
  * threads, since that's exactly what needs verifying here (the timeout math
  * and the error-checking-mutex error codes).
  *
- * The NULL-argument checks in plc_mutex_acquire/plc_mutex_release are gated
- * behind PLC_PERIPHERALS_CHECK_ARGUMENTS, which defaults off; this suite
- * doesn't enable it, since passing NULL with it disabled is undefined
- * behavior, not something to test. plc_mutex_destroy's NULL check is
- * unconditional and is tested below.
- *
  * This file also runs as the Arduino ESP32 sketch at
  * test/Arduino/test_plc-mutex-platform/ (symlinked in, alongside
  * the platform source and Unity itself). That .ino declares each test_*
@@ -48,6 +42,9 @@ TEST_SOURCE_FILE("plc-mutex-linux.c")
 #include <pthread.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdatomic.h>
 
 static plc_mutex_t* mutex;
 
@@ -70,6 +67,38 @@ static long elapsed_ms(struct timespec start, struct timespec end)
 	       (end.tv_nsec - start.tv_nsec) / 1000000L;
 }
 
+typedef struct {
+	plc_mutex_t* mutex;
+	int hold_ms;
+	atomic_int acquired;
+} hold_lock_args_t;
+
+static void* hold_lock_thread(void* arg)
+{
+	hold_lock_args_t* args = (hold_lock_args_t*)arg;
+
+	if (plc_mutex_acquire(args->mutex, 1000) != 0) {
+		return NULL;
+	}
+	atomic_store(&args->acquired, 1);
+
+	usleep((useconds_t)args->hold_ms * 1000);
+
+	plc_mutex_release(args->mutex);
+	return NULL;
+}
+
+static void wait_until_acquired(atomic_int* acquired)
+{
+	int waited_ms = 0;
+	while (!atomic_load(acquired) && waited_ms < 1000) {
+		usleep(1000); // 1ms
+		waited_ms++;
+	}
+	TEST_ASSERT_TRUE_MESSAGE(atomic_load(acquired),
+				 "Worker thread never acquired the mutex");
+}
+
 /* -------------------------- plc_mutex_create ------------------------------ */
 
 void test_plc_mutex_create_returns_a_valid_mutex(void)
@@ -81,11 +110,11 @@ void test_plc_mutex_create_returns_a_valid_mutex(void)
 
 /* -------------------------- plc_mutex_destroy ------------------------------ */
 
-void test_plc_mutex_destroy_fails_with_einval_for_null(void)
+void test_plc_mutex_destroy_fails_with_efault_for_null(void)
 {
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_destroy(NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
 void test_plc_mutex_destroy_succeeds_for_an_unlocked_mutex(void)
@@ -105,7 +134,180 @@ void test_plc_mutex_destroy_fails_with_ebusy_for_a_locked_mutex(void)
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
 }
 
+void test_plc_mutex_destroy_fails_with_ebusy_when_another_thread_holds_it(void)
+{
+	hold_lock_args_t args = { .mutex = mutex,
+				  .hold_ms = 300,
+				  .acquired = 0 };
+	pthread_t thread;
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
+	wait_until_acquired(&args.acquired);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_destroy(mutex));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	pthread_join(thread, NULL);
+}
+
+/* ----------------------- plc_mutex_static_create --------------------------- */
+
+void test_plc_mutex_static_create_makes_a_usable_mutex(void)
+{
+	plc_mutex_t storage;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(&storage, 0));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(&storage));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
+}
+
+void test_plc_mutex_static_create_makes_a_usable_shared_mutex(void)
+{
+	plc_mutex_t storage;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_SHARED));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(&storage, 0));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(&storage));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
+}
+
+void test_plc_mutex_static_create_fails_with_efault_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, plc_mutex_static_create(NULL, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_plc_mutex_static_create_fails_with_efault_for_misaligned_storage(void)
+{
+	// A byte buffer is 1-aligned; deliberately start one byte in.
+	static unsigned char arena[sizeof(plc_mutex_t) + PLC_MUTEX_ALIGN];
+	plc_mutex_t* misaligned = (plc_mutex_t*)&arena[1];
+
+	TEST_ASSERT_NOT_EQUAL_INT(0, (uintptr_t)misaligned % PLC_MUTEX_ALIGN);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      plc_mutex_static_create(misaligned,
+						      PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_plc_mutex_static_create_accepts_an_aligned_address_in_a_buffer(void)
+{
+	// The embedded case: a mutex carved out of a region the caller owns.
+	static unsigned char arena[sizeof(plc_mutex_t) + PLC_MUTEX_ALIGN];
+	uintptr_t base = (uintptr_t)arena;
+	plc_mutex_t* aligned =
+		(plc_mutex_t*)((base + PLC_MUTEX_ALIGN - 1) &
+			       ~(uintptr_t)(PLC_MUTEX_ALIGN - 1));
+
+	TEST_ASSERT_EQUAL_INT(0, (uintptr_t)aligned % PLC_MUTEX_ALIGN);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_mutex_static_create(aligned, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(aligned, 0));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(aligned));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(aligned));
+}
+
+void test_plc_mutex_static_create_fails_with_einval_for_a_bad_scope(void)
+{
+	plc_mutex_t storage;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, plc_mutex_static_create(&storage, (plc_mutex_scope_t)0xFF));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+/* ---------------------- plc_mutex_static_destroy --------------------------- */
+
+void test_plc_mutex_static_destroy_fails_with_efault_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_static_destroy(NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_plc_mutex_static_destroy_succeeds_for_an_unlocked_mutex(void)
+{
+	plc_mutex_t storage;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
+}
+
+void test_plc_mutex_static_destroy_fails_with_ebusy_for_a_locked_mutex(void)
+{
+	plc_mutex_t storage;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(&storage, 0));
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_static_destroy(&storage));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(&storage));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
+}
+
+void test_plc_mutex_static_destroy_fails_with_ebusy_when_another_thread_holds_it(
+	void)
+{
+	plc_mutex_t storage;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+
+	hold_lock_args_t args = { .mutex = &storage,
+				  .hold_ms = 300,
+				  .acquired = 0 };
+	pthread_t thread;
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
+	wait_until_acquired(&args.acquired);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_static_destroy(&storage));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	pthread_join(thread, NULL);
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
+}
+
+void test_plc_mutex_static_destroy_leaves_the_storage_reusable(void)
+{
+	plc_mutex_t storage;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
+
+	// The same storage again: proof it was never handed to free().
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(&storage, 0));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(&storage));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
+}
+
 /* -------------------------- plc_mutex_acquire ------------------------------ */
+
+void test_plc_mutex_acquire_fails_with_efault_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_acquire(NULL, 0));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
 
 void test_plc_mutex_acquire_succeeds_immediately_when_free(void)
 {
@@ -118,7 +320,7 @@ void test_plc_mutex_acquire_succeeds_immediately_when_free(void)
 	TEST_ASSERT_LESS_THAN_INT(50, elapsed_ms(start, end));
 }
 
-void test_plc_mutex_acquire_times_out_when_already_held_by_the_same_thread(void)
+void test_plc_mutex_acquire_fails_with_edeadlk_for_the_same_thread(void)
 {
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(mutex, 0));
 
@@ -129,42 +331,10 @@ void test_plc_mutex_acquire_times_out_when_already_held_by_the_same_thread(void)
 	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_acquire(mutex, 100));
 
 	clock_gettime(CLOCK_MONOTONIC, &end);
-	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
-	long ms = elapsed_ms(start, end);
-	TEST_ASSERT_GREATER_OR_EQUAL_INT(95, ms);
-	TEST_ASSERT_LESS_THAN_INT(300, ms);
-}
+	TEST_ASSERT_EQUAL_INT(EDEADLK, errno);
 
-typedef struct {
-	plc_mutex_t* mutex;
-	int hold_ms;
-	volatile int acquired;
-} hold_lock_args_t;
-
-static void* hold_lock_thread(void* arg)
-{
-	hold_lock_args_t* args = (hold_lock_args_t*)arg;
-
-	if (plc_mutex_acquire(args->mutex, 1000) != 0) {
-		return NULL;
-	}
-	args->acquired = 1;
-
-	usleep((useconds_t)args->hold_ms * 1000);
-
-	plc_mutex_release(args->mutex);
-	return NULL;
-}
-
-static void wait_until_acquired(volatile int* acquired)
-{
-	int waited_ms = 0;
-	while (!*acquired && waited_ms < 1000) {
-		usleep(1000); // 1ms
-		waited_ms++;
-	}
-	TEST_ASSERT_TRUE_MESSAGE(*acquired,
-				 "worker thread never acquired the mutex");
+	// Reported at once: it must not sit out the 100 ms timeout.
+	TEST_ASSERT_LESS_THAN_INT(50, elapsed_ms(start, end));
 }
 
 void test_plc_mutex_acquire_times_out_when_held_by_another_thread(void)
@@ -192,7 +362,95 @@ void test_plc_mutex_acquire_times_out_when_held_by_another_thread(void)
 	pthread_join(thread, NULL);
 }
 
+void test_plc_mutex_acquire_fails_at_once_with_ebusy_for_a_zero_timeout(void)
+{
+	static hold_lock_args_t args;
+	args = (hold_lock_args_t){ .mutex = mutex,
+				   .hold_ms = 300,
+				   .acquired = 0 };
+	pthread_t thread;
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
+	wait_until_acquired(&args.acquired);
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_acquire(mutex, 0));
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+	TEST_ASSERT_LESS_THAN_INT(50, elapsed_ms(start, end));
+
+	pthread_join(thread, NULL);
+}
+
+void test_plc_mutex_acquire_waits_out_a_timeout_of_seconds_and_milliseconds(void)
+{
+	hold_lock_args_t args = { .mutex = mutex,
+				  .hold_ms = 2500,
+				  .acquired = 0 };
+	pthread_t thread;
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
+	wait_until_acquired(&args.acquired);
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	// 999 ms carries into the seconds unless the clock is within 1 ms of
+	// a whole second.
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_acquire(mutex, 1999));
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+	TEST_ASSERT_GREATER_OR_EQUAL_INT(1990, elapsed_ms(start, end));
+
+	pthread_join(thread, NULL);
+}
+
+void test_plc_mutex_acquire_waits_for_the_release_with_the_max_delay(void)
+{
+	hold_lock_args_t args = { .mutex = mutex,
+				  .hold_ms = 300,
+				  .acquired = 0 };
+	pthread_t thread;
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
+	wait_until_acquired(&args.acquired);
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	int result = plc_mutex_acquire(mutex, PLC_MUTEX_MAX_DELAY);
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	pthread_join(thread, NULL);
+
+	TEST_ASSERT_EQUAL_INT(0, result);
+	TEST_ASSERT_GREATER_OR_EQUAL_INT(250, elapsed_ms(start, end));
+}
+
+void test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay(void)
+{
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(mutex, 0));
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      plc_mutex_acquire(mutex, PLC_MUTEX_MAX_DELAY));
+	TEST_ASSERT_EQUAL_INT(EDEADLK, errno);
+}
+
 /* -------------------------- plc_mutex_release ------------------------------ */
+
+void test_plc_mutex_release_fails_with_efault_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_release(NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
 
 void test_plc_mutex_release_succeeds_when_held(void)
 {
@@ -200,9 +458,122 @@ void test_plc_mutex_release_succeeds_when_held(void)
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(mutex));
 }
 
+void test_plc_mutex_release_fails_with_eperm_from_a_non_owner_thread(void)
+{
+	hold_lock_args_t args = { .mutex = mutex,
+				  .hold_ms = 300,
+				  .acquired = 0 };
+	pthread_t thread;
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
+	wait_until_acquired(&args.acquired);
+
+	// This thread never acquired it, so it must not be able to release it.
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_release(mutex));
+	TEST_ASSERT_EQUAL_INT(EPERM, errno);
+
+	pthread_join(thread, NULL);
+}
+
 void test_plc_mutex_release_fails_with_ealready_when_not_held(void)
 {
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_release(mutex));
 	TEST_ASSERT_EQUAL_INT(EALREADY, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(mutex, 0));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(mutex));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 }
+
+#if PLC_ENVIRONMENT == PLC_LINUX
+static void* die_holding_thread(void* arg)
+{
+	if (plc_mutex_acquire((plc_mutex_t*)arg, 1000) == 0) {
+		pthread_exit(NULL); // Leave without unlocking
+	}
+	return NULL;
+}
+
+void test_plc_mutex_release_leaves_a_dead_owners_lock_usable(void)
+{
+	pthread_t thread;
+	plc_mutex_t* orphan = plc_mutex_create();
+	TEST_ASSERT_NOT_NULL(orphan);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, die_holding_thread, orphan));
+	TEST_ASSERT_EQUAL_INT(0, pthread_join(thread, NULL));
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_mutex_release(orphan));
+	TEST_ASSERT_EQUAL_INT(EOWNERDEAD, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT_MESSAGE(-1,
+				      plc_mutex_acquire(orphan, 0),
+				      "The mutex wasn't left held.");
+	TEST_ASSERT_EQUAL_INT(EDEADLK, errno);
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(orphan));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_destroy(orphan));
+}
+
+void test_plc_mutex_destroy_succeeds_after_the_owner_died_holding_it(void)
+{
+	pthread_t thread;
+	plc_mutex_t* doomed = plc_mutex_create();
+	TEST_ASSERT_NOT_NULL(doomed);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, die_holding_thread, doomed));
+	TEST_ASSERT_EQUAL_INT(0, pthread_join(thread, NULL));
+
+	errno = 255;
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_destroy(doomed));
+	TEST_ASSERT_EQUAL_INT_MESSAGE(
+		255,
+		errno,
+		"errno was modified by plc_mutex_destroy, and it shouldn't");
+}
+
+void test_plc_mutex_acquire_reports_eownerdead_with_the_max_delay(void)
+{
+	pthread_t thread;
+	plc_mutex_t* orphan = plc_mutex_create();
+	TEST_ASSERT_NOT_NULL(orphan);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, die_holding_thread, orphan));
+	TEST_ASSERT_EQUAL_INT(0, pthread_join(thread, NULL));
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      plc_mutex_acquire(orphan, PLC_MUTEX_MAX_DELAY));
+	TEST_ASSERT_EQUAL_INT(EOWNERDEAD, errno);
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(orphan));
+	TEST_ASSERT_EQUAL_INT(0,
+			      plc_mutex_acquire(orphan, PLC_MUTEX_MAX_DELAY));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(orphan));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_destroy(orphan));
+}
+#else
+void test_plc_mutex_release_leaves_a_dead_owners_lock_usable(void)
+{
+	TEST_IGNORE_MESSAGE("Needs a robust mutex");
+}
+
+void test_plc_mutex_destroy_succeeds_after_the_owner_died_holding_it(void)
+{
+	TEST_IGNORE_MESSAGE("Needs a robust mutex");
+}
+
+void test_plc_mutex_acquire_reports_eownerdead_with_the_max_delay(void)
+{
+	TEST_IGNORE_MESSAGE("Needs a robust mutex");
+}
+
+#endif
