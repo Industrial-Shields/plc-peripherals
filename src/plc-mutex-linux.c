@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Industrial Shields. All rights reserved
+ * Copyright (c) 2026 Industrial Shields. All rights reserved
  *
  * This file is part of plc-peripherals.
  *
@@ -17,96 +17,290 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// Needed for pthread_mutex_clocklock, a GNU extension
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <plc-mutex.h>
 #include <plc-peripherals-platform.h>
 
 #if PLC_ENVIRONMENT == PLC_LINUX
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <pthread.h>
 #include <errno.h>
+#include <stdint.h>
+
+/*
+ * GCC's ThreadSanitizer (up to GCC 14 at least) intercepts pthread_mutex_lock,
+ * trylock, timedlock and unlock, but not clocklock. LLVM's does, but clang
+ * doesn't define __SANITIZE_THREAD__. Hardcode helpful macros from
+ * libstdc++-v3/include/bits/shared_ptr_atomic.h to manually patch it.
+ */
+#if defined(__SANITIZE_THREAD__)
+#include <sanitizer/tsan_interface.h>
+#define PLC_TSAN_MUTEX_DESTROY(X) \
+	__tsan_mutex_destroy(X, __tsan_mutex_not_static)
+#define PLC_TSAN_MUTEX_TRY_LOCK(X) \
+	__tsan_mutex_pre_lock(X,   \
+			      __tsan_mutex_not_static | __tsan_mutex_try_lock)
+#define PLC_TSAN_MUTEX_TRY_LOCK_FAILED(X) \
+	__tsan_mutex_post_lock(           \
+		X, __tsan_mutex_not_static | __tsan_mutex_try_lock_failed, 0)
+#define PLC_TSAN_MUTEX_LOCKED(X) \
+	__tsan_mutex_post_lock(X, __tsan_mutex_not_static, 0)
+#define PLC_TSAN_MUTEX_PRE_UNLOCK(X) __tsan_mutex_pre_unlock(X, 0)
+#define PLC_TSAN_MUTEX_POST_UNLOCK(X) __tsan_mutex_post_unlock(X, 0)
+#define PLC_TSAN_MUTEX_PRE_SIGNAL(X) __tsan_mutex_pre_signal(X, 0)
+#define PLC_TSAN_MUTEX_POST_SIGNAL(X) __tsan_mutex_post_signal(X, 0)
+#else
+#define PLC_TSAN_MUTEX_DESTROY(X)
+#define PLC_TSAN_MUTEX_TRY_LOCK(X)
+#define PLC_TSAN_MUTEX_TRY_LOCK_FAILED(X)
+#define PLC_TSAN_MUTEX_LOCKED(X)
+#define PLC_TSAN_MUTEX_PRE_UNLOCK(X)
+#define PLC_TSAN_MUTEX_POST_UNLOCK(X)
+#define PLC_TSAN_MUTEX_PRE_SIGNAL(X)
+#define PLC_TSAN_MUTEX_POST_SIGNAL(X)
+#endif // #if defined(__SANITIZE_THREAD__)
+
+_Static_assert(sizeof(plc_mutex_t) == sizeof(pthread_mutex_t),
+	       "Not exactly a pthread_mutex_t");
+_Static_assert(PLC_MUTEX_INTERNAL_ALIGNOF(plc_mutex_t) ==
+		       PLC_MUTEX_INTERNAL_ALIGNOF(pthread_mutex_t),
+	       "Not aligned exactly as a pthread_mutex_t");
+
+#define PTHREAD(m) ((pthread_mutex_t*)(m))
+
+static int create_pthread_mutex(plc_mutex_t* mutex, plc_mutex_scope_t scope)
+{
+	assert(mutex != NULL);
+
+	pthread_mutexattr_t attr;
+	int local_errno;
+
+	local_errno = pthread_mutexattr_init(&attr);
+	if (local_errno != 0) {
+		errno = local_errno;
+		return -1;
+	}
+
+	/*
+	 * - Reports EDEADLK if the thread already locked this mutex.
+	 * - Reports EPERM if you try to unlock a mutex the thread
+	 *   doesn't own.
+	 */
+	local_errno =
+		pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+	if (local_errno != 0) {
+		goto create_pthread_mutex_error;
+	}
+
+	/*
+	 * - Reports EOWNERDEAD if the last owner dies without
+	 *   unlocking it, or if the new owner after receiving
+	 *   EOWNERDEAD is terminated.
+	 * - Reports ENOTRECOVERABLE if you unlock the mutex before
+	 *   making it consistent again.
+	 * - Destroying a robust mutex is legal now. But it shouldn't.
+	 */
+	local_errno = pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
+	if (local_errno != 0) {
+		goto create_pthread_mutex_error;
+	}
+
+	// Mutexes can be shared across threads and processes
+	switch (scope) {
+	case PLC_MUTEX_SCOPE_PRIVATE:
+		local_errno = pthread_mutexattr_setpshared(
+			&attr, PTHREAD_PROCESS_PRIVATE);
+
+		break;
+	case PLC_MUTEX_SCOPE_SHARED:
+		local_errno = pthread_mutexattr_setpshared(
+			&attr, PTHREAD_PROCESS_SHARED);
+
+		break;
+	default:
+		local_errno = EINVAL;
+		break;
+	}
+	if (local_errno != 0) {
+		goto create_pthread_mutex_error;
+	}
+
+	local_errno = pthread_mutex_init(PTHREAD(mutex), &attr);
+	if (local_errno != 0) {
+		goto create_pthread_mutex_error;
+	}
+
+	// Destroy should always work, since we used valid attributes
+	local_errno = pthread_mutexattr_destroy(&attr);
+	assert(local_errno == 0);
+
+	return 0;
+
+create_pthread_mutex_error:;
+	int destroy_result = pthread_mutexattr_destroy(&attr);
+	(void)destroy_result;
+	assert(destroy_result == 0);
+	errno = local_errno;
+	return -1;
+}
+
+static int destroy_pthread_mutex(plc_mutex_t* mutex)
+{
+	assert(mutex != NULL);
+
+	// Best-effort to check if the mutex is being used before destroying it.
+	int saved_errno = errno;
+	if (plc_mutex_acquire(mutex, 0) < 0 && errno != EOWNERDEAD) {
+		if (errno == EDEADLK) {
+			errno = EBUSY;
+		}
+		return -1;
+	}
+	int release_result = plc_mutex_release(mutex);
+	(void)release_result;
+	assert(release_result == 0);
+	errno = saved_errno;
+
+	int local_errno = pthread_mutex_destroy(PTHREAD(mutex));
+	if (local_errno == 0) {
+		return 0;
+	}
+
+	// EBUSY if still locked, EINVAL if it was never a live mutex.
+	errno = local_errno;
+	return -1;
+}
 
 plc_mutex_t* plc_mutex_create(void)
 {
-	pthread_mutex_t* mutex = malloc(sizeof(pthread_mutex_t));
+	plc_mutex_t* mutex = malloc(sizeof(plc_mutex_t));
 
-	if (mutex != NULL) { // GCOVR_EXCL_BR_LINE
-		pthread_mutexattr_t attr;
-		pthread_mutexattr_init(&attr);
-		pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-		pthread_mutex_init(mutex, &attr);
+	if (mutex != NULL &&
+	    create_pthread_mutex(mutex, PLC_MUTEX_SCOPE_PRIVATE) != 0) {
+		free(mutex);
+		mutex = NULL;
 	}
 
-	return (plc_mutex_t*)mutex;
+	return mutex;
 }
 
 int plc_mutex_destroy(plc_mutex_t* mutex)
 {
 	if (mutex == NULL) {
-		errno = EINVAL;
+		errno = EFAULT;
 		return -1;
 	}
 
-	int result = pthread_mutex_destroy((pthread_mutex_t*)mutex);
-	if (result == 0) {
-		free(mutex);
-		return 0;
+	if (destroy_pthread_mutex(mutex) != 0) {
+		return -1;
 	}
 
-	errno = EBUSY;
-	return -1;
+	free(mutex);
+	return 0;
+}
+
+int plc_mutex_static_create(plc_mutex_t* mutex, plc_mutex_scope_t scope)
+{
+	// The kernel can reject a non-aligned address for a futex...
+	if (mutex == NULL || ((uintptr_t)mutex % PLC_MUTEX_ALIGN) != 0) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	return create_pthread_mutex(mutex, scope);
+}
+
+int plc_mutex_static_destroy(plc_mutex_t* mutex)
+{
+	if (mutex == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	return destroy_pthread_mutex(mutex);
 }
 
 int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
+	int local_errno, consistent_result;
+	struct timespec deadline;
+
 	if (mutex == NULL) {
-		errno = EINVAL;
-		return -1;
-	}
-#endif
-
-	struct timespec start, now, deadline;
-
-	int local_errno;
-	local_errno = pthread_mutex_trylock(mutex);
-	if (local_errno == 0) {
-		return 0;
-	}
-
-	if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
-		errno = EINVAL;
+		errno = EFAULT;
 		return -1;
 	}
 
-	deadline.tv_sec = start.tv_sec + timeout_ms / 1000;
-	deadline.tv_nsec = start.tv_nsec + (timeout_ms % 1000) * 1000000L;
+	if (timeout_ms == PLC_MUTEX_MAX_DELAY) {
+		local_errno = pthread_mutex_lock(PTHREAD(mutex));
+		if (local_errno == 0) {
+			return 0;
+		} else if (local_errno == EOWNERDEAD) {
+			/*
+			 * Only fails with EINVAL if the mutex is not robust or not
+			 * inconsistent. It has just answered EOWNERDEAD, so it must be
+			 * both. Cover it, so if any mad person tries to acquire a
+			 * non-robust with this library or something...
+			 */
+			consistent_result =
+				pthread_mutex_consistent(PTHREAD(mutex));
+			(void)consistent_result;
+			assert(consistent_result == 0);
+			errno = EOWNERDEAD;
+			return -1;
+		}
+
+		errno = local_errno;
+		return -1;
+	}
+
+	if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) {
+		errno = ENOTSUP;
+		return -1;
+	}
+
+	deadline.tv_sec += timeout_ms / 1000;
+	deadline.tv_nsec += (timeout_ms % 1000) * 1000000L;
 	if (deadline.tv_nsec >= 1000000000L) {
 		deadline.tv_sec++;
 		deadline.tv_nsec -= 1000000000L;
 	}
 
-	do {
-		local_errno = pthread_mutex_trylock(mutex);
-		if (local_errno == 0) {
-			return 0;
-		} else if (local_errno == EBUSY) {
-			if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
-				local_errno = EINVAL;
-				break;
-			}
-			if (now.tv_sec > deadline.tv_sec ||
-			    (now.tv_sec == deadline.tv_sec &&
-			     now.tv_nsec >= deadline.tv_nsec)) {
-				local_errno = EBUSY;
-				break;
-			}
-		} else {
-			break;
-		}
-	} while (true);
+	PLC_TSAN_MUTEX_TRY_LOCK(PTHREAD(mutex));
+
+	local_errno = pthread_mutex_clocklock(
+		PTHREAD(mutex), CLOCK_MONOTONIC, &deadline);
+	if (local_errno == 0) {
+		PLC_TSAN_MUTEX_LOCKED(mutex);
+		return 0;
+	} else if (local_errno == EOWNERDEAD) {
+		PLC_TSAN_MUTEX_LOCKED(mutex);
+		/*
+		 * Only fails with EINVAL if the mutex is not robust or not
+		 * inconsistent. It has just answered EOWNERDEAD, so it must be
+		 * both. Cover it, so if any mad person tries to acquire a
+		 * non-robust with this library or something...
+		 */
+		consistent_result = pthread_mutex_consistent(PTHREAD(mutex));
+		(void)consistent_result;
+		assert(consistent_result == 0);
+		errno = EOWNERDEAD;
+		return -1;
+	}
+
+	PLC_TSAN_MUTEX_TRY_LOCK_FAILED(PTHREAD(mutex));
+
+	// The documented timeout error is EBUSY, as trylock reports it.
+	if (local_errno == ETIMEDOUT) {
+		local_errno = EBUSY;
+	}
 
 	errno = local_errno;
 	return -1;
@@ -114,20 +308,45 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 
 int plc_mutex_release(plc_mutex_t* mutex)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (mutex == NULL) {
-		errno = EINVAL;
+		errno = EFAULT;
 		return -1;
 	}
-#endif
 
-	int local_errno = pthread_mutex_unlock(mutex);
+	int local_errno = pthread_mutex_unlock(PTHREAD(mutex));
 	if (local_errno == 0) {
 		return 0;
 	}
 
 	if (local_errno == EPERM) {
-		errno = EALREADY;
+		/*
+		 * Best-effort to try and determine if tried to unlock an
+		 * already unlocked mutex, or if the owner died while
+		 * holding it...
+		 */
+		local_errno = pthread_mutex_trylock(PTHREAD(mutex));
+		if (local_errno == 0) {
+			int unlock_result =
+				pthread_mutex_unlock(PTHREAD(mutex));
+			(void)unlock_result;
+			assert(unlock_result == 0);
+			errno = EALREADY;
+		} else if (local_errno == EOWNERDEAD) {
+			/*
+			 * Only fails with EINVAL if the mutex is not robust or
+			 * not inconsistent. It has just answered EOWNERDEAD, so
+			 * it must be both. Cover it, so if any mad person tries
+			 * to acquire a non-robust with this library or
+			 * something...
+			 */
+			int consistent_result =
+				pthread_mutex_consistent(PTHREAD(mutex));
+			(void)consistent_result;
+			assert(consistent_result == 0);
+			errno = EOWNERDEAD;
+		} else {
+			errno = EPERM;
+		}
 	} else {
 		errno = local_errno;
 	}
