@@ -148,6 +148,22 @@
     :link:
       'concurrency':
         - -fsanitize=thread
+  # gcov is not compatible with ThreadSanitizer
+  :gcov:
+    :compile:
+      '*':
+        - -Wall
+        - -Wextra
+    :link:
+      '*':
+        - -g
+  # And neither is Valgrind
+  :valgrind:
+    :compile:
+      - -Wall
+      - -Wextra
+    :link:
+      - -g
 
 # :flags:
 #   :release:
@@ -298,9 +314,21 @@
     # :html_title: Test Coverage Report
     :html_medium_threshold: 75
     :html_high_threshold: 90
+    # The concurrency suite forks, and both processes merge counters into the
+    # same .gcda. That trips a known gcov bug that emits negative branch hit
+    # counts (gcc PR 68080).
+    :gcov_ignore_parse_errors: TRUE
     # :html_absolute_paths: TRUE
     # :html_encoding: UTF-8
     :print_summary: TRUE
+
+:valgrind:
+  :arguments:
+    - --leak-check=full
+    - --errors-for-leak-kinds=definite,indirect
+    # The fork tests leave each child holding the parent's allocations, which
+    # it never frees because it exits with _exit(). Do not report as an error.
+    - --child-silent-after-fork=yes
 
 :cppcheck:
   :reports:
