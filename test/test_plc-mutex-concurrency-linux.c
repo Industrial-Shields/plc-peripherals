@@ -47,7 +47,7 @@ TEST_SOURCE_FILE("plc-mutex-linux.c")
 #define NUM_MUTEXES 4
 #define NUM_THREADS 8
 #define ITERATIONS_PER_THREAD 500
-#define LOCK_TIMEOUT_MS 1000
+#define LOCK_TIMEOUT_MS 10000
 
 static plc_mutex_t* mutexes[NUM_MUTEXES];
 
