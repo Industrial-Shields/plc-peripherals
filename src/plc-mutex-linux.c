@@ -34,6 +34,8 @@
 #include <pthread.h>
 #include <errno.h>
 #include <stdint.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 /*
  * GCC's ThreadSanitizer (up to GCC 14 at least) intercepts pthread_mutex_lock,
@@ -79,6 +81,20 @@ _Static_assert(PLC_MUTEX_INTERNAL_ALIGNOF(plc_mutex_t) ==
 static int create_pthread_mutex(plc_mutex_t* mutex, plc_mutex_scope_t scope)
 {
 	assert(mutex != NULL);
+
+	/*
+	 * glibc registers a robust list per thread at thread start, and still
+	 * accepts PTHREAD_MUTEX_ROBUST if the kernel refused it (seccomp,
+	 * qemu-user, no futex cmpxchg). The mutex is then robust in name only:
+	 * a dead owner is never reported and the lock wedges for good.
+	 */
+	void* robust_head = NULL;
+	size_t robust_len = 0;
+	if (syscall(SYS_get_robust_list, 0, &robust_head, &robust_len) != 0 ||
+	    robust_head == NULL) {
+		errno = ENOTSUP;
+		return -1;
+	}
 
 	pthread_mutexattr_t attr;
 	int local_errno;

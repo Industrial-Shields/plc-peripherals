@@ -40,6 +40,8 @@ TEST_SOURCE_FILE("plc-mutex-linux.c")
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
+#include <sys/syscall.h>
+#include <linux/futex.h>
 #include <malloc.h>
 
 #define NUM_MUTEXES 4
@@ -385,4 +387,53 @@ void test_acquire_reports_eownerdead_when_a_peer_dies_holding_the_lock(void)
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&region->mutex));
 	munmap(region, sizeof(shared_region_t));
 	close(fd);
+}
+
+/*
+ * glibc registers a robust list for every thread as it starts, and still
+ * accepts PTHREAD_MUTEX_ROBUST if the kernel refused it (qemu-user does, on
+ * purpose). The mutex then never reports a dead owner, so the lock wedges for
+ * good. Dropping this thread's robust list leaves it in that same state,
+ * without touching any other thread.
+ */
+static void* create_without_robust_list(void* arg)
+{
+	int* refused = (int*)arg;
+	plc_mutex_t storage;
+
+	if (syscall(SYS_set_robust_list,
+		    NULL,
+		    sizeof(struct robust_list_head)) != 0) {
+		*refused = -1;
+		return NULL;
+	}
+
+	errno = 0;
+	int create_refused = (plc_mutex_create() == NULL && errno == ENOTSUP);
+
+	errno = 0;
+	int static_refused = (plc_mutex_static_create(
+				      &storage, PLC_MUTEX_SCOPE_SHARED) == -1 &&
+			      errno == ENOTSUP);
+
+	*refused = create_refused && static_refused;
+	return NULL;
+}
+
+void test_plc_mutex_create_refuses_a_thread_without_a_robust_list(void)
+{
+	pthread_t thread;
+	int refused = 0;
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		pthread_create(
+			&thread, NULL, create_without_robust_list, &refused));
+	TEST_ASSERT_EQUAL_INT(0, pthread_join(thread, NULL));
+
+	TEST_ASSERT_NOT_EQUAL_INT_MESSAGE(
+		-1, refused, "Could not drop the thread's robust list");
+	TEST_ASSERT_TRUE_MESSAGE(
+		refused,
+		"A mutex that can never report a dead owner was handed out");
 }

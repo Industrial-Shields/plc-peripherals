@@ -89,6 +89,20 @@ typedef struct {
  *                             memory.
  *   PLC_MUTEX_SCOPE_SHARED  - Any process mapping it, forked children
  *                             included.
+ *                             Linux specific:
+ *                               - All the processes that use a SHARED mutex
+ *                                 should be in the same PID namespace.
+ *                                 Otherwise, a waiter may get a false EDEADLK
+ *                                 instead of waiting (assuming trustable
+ *                                 process).
+ *                               - All the processes that use a SHARED mutex
+ *                                 must be built for the same architecture
+ *                                 and word size. A 32-bit and a 64-bit
+ *                                 process disagree on its layout, and leave
+ *                                 it locked forever.
+ *                               - Never unmap the storage while holding the
+ *                                 mutex. If the process then dies, it stays
+ *                                 locked forever.
  */
 typedef enum {
 	PLC_MUTEX_SCOPE_PRIVATE,
@@ -128,6 +142,10 @@ typedef enum {
  *     - ENOMEM : Out of memory during allocation.
  *     - EINVAL : Arguments to create the mutex were invalid (internal
  *                failure).
+ *     - Linux specific:
+ *       - ENOTSUP: The kernel refused this thread's robust list, so a dead
+ *                  owner could never be recovered. See
+ *                  https://gitlab.com/qemu-project/qemu/-/work_items/2424
  */
 plc_mutex_t* plc_mutex_create(void);
 
@@ -191,7 +209,11 @@ int plc_mutex_destroy(plc_mutex_t* mutex);
  *     - ENOMEM : Out of memory setting the mutex up.
  *     - ENOTSUP: The scope is unsupported on this platform. For example, ESP32
  *                rejects _PRIVATE, since all mutexes are shared.
-
+ *     - Linux specific:
+ *       - ENOTSUP: The kernel refused this thread's robust list, so a dead
+ *                  owner could never be recovered. See
+ *                  https://gitlab.com/qemu-project/qemu/-/work_items/2424
+ *
  */
 int plc_mutex_static_create(plc_mutex_t* mutex, plc_mutex_scope_t scope);
 
