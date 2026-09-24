@@ -32,6 +32,7 @@ void test_plc_mutex_acquire_waits_out_a_timeout_of_seconds_and_milliseconds(
 	void);
 void test_plc_mutex_acquire_waits_for_the_release_with_the_max_delay(void);
 void test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay(void);
+void test_plc_mutex_acquire_boosts_the_holder_by_priority_inheritance(void);
 void test_plc_mutex_release_fails_with_efault_for_null(void);
 void test_plc_mutex_release_succeeds_when_held(void);
 void test_plc_mutex_release_fails_with_eperm_from_a_non_owner_thread(void);
@@ -81,6 +82,8 @@ void setup()
 	RUN_TEST(
 		test_plc_mutex_acquire_waits_for_the_release_with_the_max_delay);
 	RUN_TEST(test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay);
+	RUN_TEST(
+		test_plc_mutex_acquire_boosts_the_holder_by_priority_inheritance);
 
 	RUN_TEST(test_plc_mutex_release_fails_with_efault_for_null);
 	RUN_TEST(test_plc_mutex_release_succeeds_when_held);

@@ -160,6 +160,25 @@ static int create_pthread_mutex(plc_mutex_t* mutex, plc_mutex_scope_t scope)
 	}
 
 	local_errno = pthread_mutex_init(PTHREAD(mutex), &attr);
+
+	/*
+	 * Without priority inheritance futexes in the kernel, go without them.
+	 * glibc's pthread_mutex_init only reports ENOTSUP for:
+	 * - Priority inheritance, when the kernel has no PI futexes.
+	 * - Priority protection on a robust mutex (which is impossible here).
+	 * - A SHARED robust mutex, when the kernel refused the robust list.
+	 *   It can only happen in very concrete situations (seccomp,
+	 *   qemu-user, etc...).
+	 */
+	if (local_errno == ENOTSUP) {
+		local_errno =
+			pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_NONE);
+		if (local_errno == 0) {
+			local_errno = pthread_mutex_init(
+				(pthread_mutex_t*)mutex, &attr);
+		}
+	}
+
 	if (local_errno != 0) {
 		goto create_pthread_mutex_error;
 	}

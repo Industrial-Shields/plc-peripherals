@@ -501,6 +501,11 @@ void test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay(void)
 	TEST_ASSERT_EQUAL_INT(EDEADLK, errno);
 }
 
+void test_plc_mutex_acquire_boosts_the_holder_by_priority_inheritance(void)
+{
+	TEST_IGNORE_MESSAGE("TODO: Priority inheritance is not tested");
+}
+
 /* -------------------------- plc_mutex_release ------------------------------ */
 
 void test_plc_mutex_release_fails_with_efault_for_null(void)

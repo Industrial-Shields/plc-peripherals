@@ -125,6 +125,9 @@ typedef enum {
  * The scope is the narrowest the platform offers, which is
  * PLC_MUTEX_SCOPE_PRIVATE wherever that exists.
  *
+ * Whenever possible, it will try to create a mutex with priority inheritance.
+ * If PI is not available, it will fallback to normal mutex.
+ *
  * Use plc_mutex_static_create, with SHARED scope and storage you placed in a
  * shared mapping, if another process (child or independent) must see it.
  *
@@ -185,6 +188,9 @@ int plc_mutex_destroy(plc_mutex_t* mutex);
  * Create a mutex on the memory region passed by argument. You must ensure that
  * this region is at least of PLC_MUTEX_SIZE, and at least PLC_MUTEX_ALIGN
  * aligned.
+ *
+ * Whenever possible, it will try to create a mutex with priority inheritance.
+ * If PI is not available, it will fallback to normal mutex.
  *
  * The storage must not already hold a live mutex, otherwise it's UB.
  *
