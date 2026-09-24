@@ -251,9 +251,14 @@ int plc_mutex_static_destroy(plc_mutex_t* mutex);
  *
  * Try to acquire a single mutex.
  *
- * Linux specific: not async-signal-safe. A handler runs on top of the thread
- * it interrupted and inherits its ownership, so this is refused with EDEADLK
- * and the handler's work is skipped, not delayed.
+ * Linux specific:
+ *   - Not async-signal-safe. A handler runs on top of the thread it
+ *     interrupted and inherits its ownership, so this is refused with
+ *     EDEADLK and the handler's work is skipped, not delayed.
+ *   - On kernels before 5.14 (and under Valgrind), the timeout follows the
+ *     wall clock, so setting the clock forward or back shortens or stretches
+ *     it. They can't wait on a priority inheritance mutex against the
+ *     monotonic clock.
  *
  * Parameters:
  *   mutex (plc_mutex_t*)  - The mutex to lock.
@@ -277,7 +282,7 @@ int plc_mutex_static_destroy(plc_mutex_t* mutex);
  *                         recover from half-writes, and release the lock after
  *                         you are done.
  *     - Linux specific:
- *       - ENOTSUP: The monotonic clock isn't available.
+ *       - ENOTSUP: The clock the timeout is measured on isn't available.
  */
 int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms);
 

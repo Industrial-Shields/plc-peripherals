@@ -254,10 +254,72 @@ int plc_mutex_static_destroy(plc_mutex_t* mutex)
 	return destroy_pthread_mutex(mutex);
 }
 
+static pthread_once_t deadline_clock_once = PTHREAD_ONCE_INIT;
+static clockid_t deadline_clock;
+
+static void pick_deadline_clock(void)
+{
+	/*
+	 * glibc waits against CLOCK_MONOTONIC with FUTEX_LOCK_PI2, which
+	 * kernels before 5.14 (and Valgrind) don't have, so it reports EINVAL.
+	 * Relocking a normal priority inheritance mutex from its owner takes
+	 * that same kernel path, and times out at once where it works.
+	 *
+	 * The probe is not made with create_pthread_mutex on purpose, since
+	 * glibc answers the relock of an ERRORCHECK mutex with EDEADLK by
+	 * itself, without ever asking the kernel.
+	 */
+	int saved_errno = errno;
+	pthread_mutexattr_t attr;
+	pthread_mutex_t probe;
+	struct timespec now;
+
+	// Set the default value
+	deadline_clock = CLOCK_REALTIME;
+
+	if (pthread_mutexattr_init(&attr) != 0) {
+		goto pick_deadline_clock_end;
+	}
+
+	int init_result =
+		pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
+	if (init_result == 0) {
+		init_result = pthread_mutex_init(&probe, &attr);
+	}
+
+	int attr_destroy_result = pthread_mutexattr_destroy(&attr);
+	(void)attr_destroy_result;
+	assert(attr_destroy_result == 0);
+
+	if (init_result != 0) {
+		goto pick_deadline_clock_end;
+	}
+
+	if (pthread_mutex_lock(&probe) == 0) {
+		if (clock_gettime(CLOCK_MONOTONIC, &now) == 0 &&
+		    pthread_mutex_clocklock(&probe, CLOCK_MONOTONIC, &now) ==
+			    ETIMEDOUT) {
+			deadline_clock = CLOCK_MONOTONIC;
+		}
+
+		int unlock_result = pthread_mutex_unlock(&probe);
+		(void)unlock_result;
+		assert(unlock_result == 0);
+	}
+
+	int destroy_result = pthread_mutex_destroy(&probe);
+	(void)destroy_result;
+	assert(destroy_result == 0);
+
+pick_deadline_clock_end:
+	errno = saved_errno;
+}
+
 int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 {
 	int local_errno, consistent_result;
 	struct timespec deadline;
+	clockid_t clock;
 
 	if (mutex == NULL) {
 		errno = EFAULT;
@@ -287,7 +349,10 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 		return -1;
 	}
 
-	if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) {
+	pthread_once(&deadline_clock_once, pick_deadline_clock);
+	clock = deadline_clock;
+
+	if (clock_gettime(clock, &deadline) != 0) {
 		errno = ENOTSUP;
 		return -1;
 	}
@@ -301,8 +366,7 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 
 	PLC_TSAN_MUTEX_TRY_LOCK(PTHREAD(mutex));
 
-	local_errno = pthread_mutex_clocklock(
-		PTHREAD(mutex), CLOCK_MONOTONIC, &deadline);
+	local_errno = pthread_mutex_clocklock(PTHREAD(mutex), clock, &deadline);
 	if (local_errno == 0) {
 		PLC_TSAN_MUTEX_LOCKED(mutex);
 		return 0;
