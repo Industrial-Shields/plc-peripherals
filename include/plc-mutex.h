@@ -91,10 +91,11 @@ typedef struct {
  *                             included.
  *                             Linux specific:
  *                               - All the processes that use a SHARED mutex
- *                                 should be in the same PID namespace.
- *                                 Otherwise, a waiter may get a false EDEADLK
- *                                 instead of waiting (assuming trustable
- *                                 process).
+ *                                 must be in the same PID namespace (e.g.
+ *                                 containers need --pid=host). Priority
+ *                                 inheritance makes a waiter look its owner up
+ *                                 by TID, so otherwise it can be aborted by
+ *                                 glibc, or time out while the lock is free.
  *                               - All the processes that use a SHARED mutex
  *                                 must be built for the same architecture
  *                                 and word size. A 32-bit and a 64-bit
@@ -259,6 +260,10 @@ int plc_mutex_static_destroy(plc_mutex_t* mutex);
  *     wall clock, so setting the clock forward or back shortens or stretches
  *     it. They can't wait on a priority inheritance mutex against the
  *     monotonic clock.
+ *   - Always acquire mutexes in the same order, in every thread and process.
+ *     If A holds X and waits for Y while B holds Y and waits for X, neither
+ *     can go on. The kernel detects it, and glibc aborts the process instead
+ *     of timing out. This bug appears only because of priority inheritance.
  *
  * Parameters:
  *   mutex (plc_mutex_t*)  - The mutex to lock.

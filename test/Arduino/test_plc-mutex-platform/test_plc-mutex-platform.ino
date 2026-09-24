@@ -8,6 +8,7 @@ void test_plc_mutex_destroy_fails_with_efault_for_null(void);
 void test_plc_mutex_destroy_succeeds_for_an_unlocked_mutex(void);
 void test_plc_mutex_destroy_fails_with_ebusy_for_a_locked_mutex(void);
 void test_plc_mutex_destroy_fails_with_ebusy_when_another_thread_holds_it(void);
+void test_plc_mutex_destroy_fails_with_ebusy_on_a_lock_order_cycle(void);
 void test_plc_mutex_static_create_makes_a_usable_mutex(void);
 void test_plc_mutex_static_create_makes_a_usable_shared_mutex(void);
 void test_plc_mutex_static_create_fails_with_efault_for_null(void);
@@ -51,6 +52,7 @@ void setup()
 	RUN_TEST(test_plc_mutex_destroy_fails_with_ebusy_for_a_locked_mutex);
 	RUN_TEST(
 		test_plc_mutex_destroy_fails_with_ebusy_when_another_thread_holds_it);
+	RUN_TEST(test_plc_mutex_destroy_fails_with_ebusy_on_a_lock_order_cycle);
 
 	RUN_TEST(test_plc_mutex_static_create_makes_a_usable_mutex);
 	RUN_TEST(test_plc_mutex_static_create_makes_a_usable_shared_mutex);

@@ -151,6 +151,64 @@ void test_plc_mutex_destroy_fails_with_ebusy_when_another_thread_holds_it(void)
 	pthread_join(thread, NULL);
 }
 
+typedef struct {
+	plc_mutex_t* first;
+	plc_mutex_t* second;
+	atomic_int acquired;
+} lock_order_args_t;
+
+static void* take_first_then_second(void* arg)
+{
+	lock_order_args_t* args = (lock_order_args_t*)arg;
+
+	if (plc_mutex_acquire(args->first, 1000) != 0) {
+		return NULL;
+	}
+	atomic_store(&args->acquired, 1);
+
+	if (plc_mutex_acquire(args->second, 1000) == 0) {
+		plc_mutex_release(args->second);
+	}
+	plc_mutex_release(args->first);
+	return NULL;
+}
+
+void test_plc_mutex_destroy_fails_with_ebusy_on_a_lock_order_cycle(void)
+{
+	plc_mutex_t* other = plc_mutex_create();
+	TEST_ASSERT_NOT_NULL(other);
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(other, 0));
+
+	// The worker holds mutex, and waits for other
+	lock_order_args_t args = { .first = mutex,
+				   .second = other,
+				   .acquired = 0 };
+	pthread_t thread;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		pthread_create(&thread, NULL, take_first_then_second, &args));
+	for (int waited_ms = 0;
+	     !atomic_load(&args.acquired) && waited_ms < 1000;
+	     waited_ms++) {
+		usleep(1000);
+	}
+	usleep(100 * 1000); // Let it block on other
+
+	// Closes the cycle: holding other, probing mutex
+	errno = 0;
+	int result = plc_mutex_destroy(mutex);
+	int error = errno;
+
+	plc_mutex_release(other);
+	pthread_join(thread, NULL);
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_destroy(other));
+
+	TEST_ASSERT_TRUE_MESSAGE(atomic_load(&args.acquired),
+				 "Worker thread never acquired the mutex");
+	TEST_ASSERT_EQUAL_INT(-1, result);
+	TEST_ASSERT_EQUAL_INT(EBUSY, error);
+}
+
 /* ----------------------- plc_mutex_static_create --------------------------- */
 
 void test_plc_mutex_static_create_makes_a_usable_mutex(void)

@@ -182,20 +182,31 @@ static int destroy_pthread_mutex(plc_mutex_t* mutex)
 {
 	assert(mutex != NULL);
 
-	// Best-effort to check if the mutex is being used before destroying it.
-	int saved_errno = errno;
-	if (plc_mutex_acquire(mutex, 0) < 0 && errno != EOWNERDEAD) {
-		if (errno == EDEADLK) {
-			errno = EBUSY;
-		}
+	/*
+	 * Best-effort to check if the mutex is being used before destroying it.
+	 * trylock, unlike a timed lock, never waits in the kernel, which would
+	 * abort on a lock-order cycle.
+	 */
+	int local_errno = pthread_mutex_trylock(PTHREAD(mutex));
+	if (local_errno == EOWNERDEAD) {
+		/*
+		 * Only fails with EINVAL if the mutex is not robust or not
+		 * inconsistent. It has just answered EOWNERDEAD, so it must be
+		 * both.
+		 */
+		int consistent_result =
+			pthread_mutex_consistent(PTHREAD(mutex));
+		(void)consistent_result;
+		assert(consistent_result == 0);
+	} else if (local_errno != 0) {
+		errno = local_errno == EDEADLK ? EBUSY : local_errno;
 		return -1;
 	}
-	int release_result = plc_mutex_release(mutex);
-	(void)release_result;
-	assert(release_result == 0);
-	errno = saved_errno;
+	int unlock_result = pthread_mutex_unlock(PTHREAD(mutex));
+	(void)unlock_result;
+	assert(unlock_result == 0);
 
-	int local_errno = pthread_mutex_destroy(PTHREAD(mutex));
+	local_errno = pthread_mutex_destroy(PTHREAD(mutex));
 	if (local_errno == 0) {
 		return 0;
 	}
