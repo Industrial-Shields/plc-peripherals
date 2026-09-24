@@ -121,3 +121,9 @@ void test_plc_mutex_works_without_priority_inheritance_futexes(void)
 	TEST_ASSERT_EQUAL_INT_MESSAGE(
 		0, WEXITSTATUS(status), "The mutex didn't work");
 }
+
+void test_plc_mutex_timeout_follows_the_monotonic_clock_without_pi_futexes(void)
+{
+	TEST_IGNORE_MESSAGE(
+		"TODO: The monotonic clock without PI futexes is not tested");
+}

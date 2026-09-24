@@ -321,6 +321,13 @@ static void pick_deadline_clock(void)
 	(void)attr_destroy_result;
 	assert(attr_destroy_result == 0);
 
+	if (init_result == ENOTSUP) {
+		/*
+		 * No PI futexes, so no mutex will have priority inheritance,
+		 * and those can wait against the monotonic clock on any kernel.
+		 */
+		deadline_clock = CLOCK_MONOTONIC;
+	}
 	if (init_result != 0) {
 		goto pick_deadline_clock_end;
 	}
