@@ -129,6 +129,16 @@ static int create_pthread_mutex(plc_mutex_t* mutex, plc_mutex_scope_t scope)
 		goto create_pthread_mutex_error;
 	}
 
+	/*
+	 * - The owner runs at the priority of its highest waiter, so a
+	 *   lower priority thread can't starve it while it holds the lock.
+	 */
+	local_errno =
+		pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
+	if (local_errno != 0) {
+		goto create_pthread_mutex_error;
+	}
+
 	// Mutexes can be shared across threads and processes
 	switch (scope) {
 	case PLC_MUTEX_SCOPE_PRIVATE:
