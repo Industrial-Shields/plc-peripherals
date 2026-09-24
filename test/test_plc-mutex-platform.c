@@ -136,9 +136,10 @@ void test_plc_mutex_destroy_fails_with_ebusy_for_a_locked_mutex(void)
 
 void test_plc_mutex_destroy_fails_with_ebusy_when_another_thread_holds_it(void)
 {
-	hold_lock_args_t args = { .mutex = mutex,
-				  .hold_ms = 300,
-				  .acquired = 0 };
+	static hold_lock_args_t args;
+	args = (hold_lock_args_t){ .mutex = mutex,
+				   .hold_ms = 300,
+				   .acquired = 0 };
 	pthread_t thread;
 	TEST_ASSERT_EQUAL_INT(
 		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
@@ -213,7 +214,7 @@ void test_plc_mutex_destroy_fails_with_ebusy_on_a_lock_order_cycle(void)
 
 void test_plc_mutex_static_create_makes_a_usable_mutex(void)
 {
-	plc_mutex_t storage;
+	static plc_mutex_t storage;
 
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
@@ -224,7 +225,7 @@ void test_plc_mutex_static_create_makes_a_usable_mutex(void)
 
 void test_plc_mutex_static_create_makes_a_usable_shared_mutex(void)
 {
-	plc_mutex_t storage;
+	static plc_mutex_t storage;
 
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_SHARED));
@@ -276,7 +277,7 @@ void test_plc_mutex_static_create_accepts_an_aligned_address_in_a_buffer(void)
 
 void test_plc_mutex_static_create_fails_with_einval_for_a_bad_scope(void)
 {
-	plc_mutex_t storage;
+	static plc_mutex_t storage;
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
@@ -295,7 +296,7 @@ void test_plc_mutex_static_destroy_fails_with_efault_for_null(void)
 
 void test_plc_mutex_static_destroy_succeeds_for_an_unlocked_mutex(void)
 {
-	plc_mutex_t storage;
+	static plc_mutex_t storage;
 
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
@@ -304,7 +305,7 @@ void test_plc_mutex_static_destroy_succeeds_for_an_unlocked_mutex(void)
 
 void test_plc_mutex_static_destroy_fails_with_ebusy_for_a_locked_mutex(void)
 {
-	plc_mutex_t storage;
+	static plc_mutex_t storage;
 
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
@@ -321,14 +322,15 @@ void test_plc_mutex_static_destroy_fails_with_ebusy_for_a_locked_mutex(void)
 void test_plc_mutex_static_destroy_fails_with_ebusy_when_another_thread_holds_it(
 	void)
 {
-	plc_mutex_t storage;
+	static plc_mutex_t storage;
 
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
 
-	hold_lock_args_t args = { .mutex = &storage,
-				  .hold_ms = 300,
-				  .acquired = 0 };
+	static hold_lock_args_t args;
+	args = (hold_lock_args_t){ .mutex = &storage,
+				   .hold_ms = 300,
+				   .acquired = 0 };
 	pthread_t thread;
 	TEST_ASSERT_EQUAL_INT(
 		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
@@ -344,7 +346,7 @@ void test_plc_mutex_static_destroy_fails_with_ebusy_when_another_thread_holds_it
 
 void test_plc_mutex_static_destroy_leaves_the_storage_reusable(void)
 {
-	plc_mutex_t storage;
+	static plc_mutex_t storage;
 
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
@@ -397,9 +399,10 @@ void test_plc_mutex_acquire_fails_with_edeadlk_for_the_same_thread(void)
 
 void test_plc_mutex_acquire_times_out_when_held_by_another_thread(void)
 {
-	hold_lock_args_t args = { .mutex = mutex,
-				  .hold_ms = 300,
-				  .acquired = 0 };
+	static hold_lock_args_t args;
+	args = (hold_lock_args_t){ .mutex = mutex,
+				   .hold_ms = 300,
+				   .acquired = 0 };
 	pthread_t thread;
 	TEST_ASSERT_EQUAL_INT(
 		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
@@ -446,9 +449,10 @@ void test_plc_mutex_acquire_fails_at_once_with_ebusy_for_a_zero_timeout(void)
 
 void test_plc_mutex_acquire_waits_out_a_timeout_of_seconds_and_milliseconds(void)
 {
-	hold_lock_args_t args = { .mutex = mutex,
-				  .hold_ms = 2500,
-				  .acquired = 0 };
+	static hold_lock_args_t args;
+	args = (hold_lock_args_t){ .mutex = mutex,
+				   .hold_ms = 2500,
+				   .acquired = 0 };
 	pthread_t thread;
 	TEST_ASSERT_EQUAL_INT(
 		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
@@ -523,9 +527,10 @@ void test_plc_mutex_release_succeeds_when_held(void)
 
 void test_plc_mutex_release_fails_with_eperm_from_a_non_owner_thread(void)
 {
-	hold_lock_args_t args = { .mutex = mutex,
-				  .hold_ms = 300,
-				  .acquired = 0 };
+	static hold_lock_args_t args;
+	args = (hold_lock_args_t){ .mutex = mutex,
+				   .hold_ms = 300,
+				   .acquired = 0 };
 	pthread_t thread;
 	TEST_ASSERT_EQUAL_INT(
 		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
