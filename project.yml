@@ -99,6 +99,7 @@
   :test:
     - +:test/**
     - -:test/support
+    - -:test/Arduino/**
   :source:
     - src/**
   :include:
