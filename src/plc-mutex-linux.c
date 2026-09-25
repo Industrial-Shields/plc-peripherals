@@ -271,6 +271,13 @@ int plc_mutex_static_create(plc_mutex_t* mutex, plc_mutex_scope_t scope)
 		return -1;
 	}
 
+	// Before create_pthread_mutex can refuse it for another reason
+	if (scope != PLC_MUTEX_SCOPE_PRIVATE &&
+	    scope != PLC_MUTEX_SCOPE_SHARED) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	return create_pthread_mutex(mutex, scope);
 }
 

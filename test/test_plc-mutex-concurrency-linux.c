@@ -437,3 +437,42 @@ void test_plc_mutex_create_refuses_a_thread_without_a_robust_list(void)
 		refused,
 		"A mutex that can never report a dead owner was handed out");
 }
+
+static void* create_a_bad_scope_without_a_robust_list(void* arg)
+{
+	int* error = (int*)arg;
+	plc_mutex_t storage;
+
+	if (syscall(SYS_set_robust_list,
+		    NULL,
+		    sizeof(struct robust_list_head)) != 0) {
+		*error = -1;
+		return NULL;
+	}
+
+	errno = 0;
+	if (plc_mutex_static_create(&storage, (plc_mutex_scope_t)0xFF) == 0) {
+		plc_mutex_static_destroy(&storage);
+	}
+	*error = errno;
+	return NULL;
+}
+
+void test_plc_mutex_static_create_reports_a_bad_scope_before_the_robust_list(
+	void)
+{
+	pthread_t thread;
+	int error = 0;
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		pthread_create(&thread,
+			       NULL,
+			       create_a_bad_scope_without_a_robust_list,
+			       &error));
+	TEST_ASSERT_EQUAL_INT(0, pthread_join(thread, NULL));
+
+	TEST_ASSERT_NOT_EQUAL_INT_MESSAGE(
+		-1, error, "Could not drop the thread's robust list");
+	TEST_ASSERT_EQUAL_INT(EINVAL, error);
+}
