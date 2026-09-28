@@ -31,6 +31,9 @@ void test_plc_mutex_acquire_fails_at_once_with_ebusy_for_a_zero_timeout(
 void test_plc_mutex_acquire_waits_out_a_timeout_of_seconds_and_milliseconds(
 	void);
 void test_plc_mutex_acquire_waits_for_the_release_with_the_max_delay(void);
+void test_plc_mutex_acquire_waits_for_the_release_past_the_tick_wrap(void);
+void test_plc_mutex_acquire_waits_for_the_release_with_the_longest_timeout(
+	void);
 void test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay(void);
 void test_plc_mutex_acquire_boosts_the_holder_by_priority_inheritance(void);
 void test_plc_mutex_release_fails_with_efault_for_null(void);
@@ -81,6 +84,9 @@ void setup()
 		test_plc_mutex_acquire_waits_out_a_timeout_of_seconds_and_milliseconds);
 	RUN_TEST(
 		test_plc_mutex_acquire_waits_for_the_release_with_the_max_delay);
+	RUN_TEST(test_plc_mutex_acquire_waits_for_the_release_past_the_tick_wrap);
+	RUN_TEST(
+		test_plc_mutex_acquire_waits_for_the_release_with_the_longest_timeout);
 	RUN_TEST(test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay);
 	RUN_TEST(
 		test_plc_mutex_acquire_boosts_the_holder_by_priority_inheritance);

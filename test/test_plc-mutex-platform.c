@@ -216,11 +216,19 @@ void test_plc_mutex_static_create_makes_a_usable_mutex(void)
 {
 	static plc_mutex_t storage;
 
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+	// PLC_MUTEX_SCOPE_PRIVATE is not possible on FreeRTOS
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(ENOTSUP, errno);
+#else
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(&storage, 0));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(&storage));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
+#endif // #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
 }
 
 void test_plc_mutex_static_create_makes_a_usable_shared_mutex(void)
@@ -268,8 +276,15 @@ void test_plc_mutex_static_create_accepts_an_aligned_address_in_a_buffer(void)
 
 	TEST_ASSERT_EQUAL_INT(0, (uintptr_t)aligned % PLC_MUTEX_ALIGN);
 
-	TEST_ASSERT_EQUAL_INT(
-		0, plc_mutex_static_create(aligned, PLC_MUTEX_SCOPE_PRIVATE));
+	plc_mutex_scope_t scope;
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+	// PLC_MUTEX_SCOPE_PRIVATE is not possible on FreeRTOS
+	scope = PLC_MUTEX_SCOPE_SHARED;
+#else
+	scope = PLC_MUTEX_SCOPE_PRIVATE;
+#endif // #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_create(aligned, scope));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(aligned, 0));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(aligned));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(aligned));
@@ -298,8 +313,15 @@ void test_plc_mutex_static_destroy_succeeds_for_an_unlocked_mutex(void)
 {
 	static plc_mutex_t storage;
 
-	TEST_ASSERT_EQUAL_INT(
-		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	plc_mutex_scope_t scope;
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+	// PLC_MUTEX_SCOPE_PRIVATE is not possible on FreeRTOS
+	scope = PLC_MUTEX_SCOPE_SHARED;
+#else
+	scope = PLC_MUTEX_SCOPE_PRIVATE;
+#endif // #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_create(&storage, scope));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
 }
 
@@ -307,8 +329,15 @@ void test_plc_mutex_static_destroy_fails_with_ebusy_for_a_locked_mutex(void)
 {
 	static plc_mutex_t storage;
 
-	TEST_ASSERT_EQUAL_INT(
-		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	plc_mutex_scope_t scope;
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+	// PLC_MUTEX_SCOPE_PRIVATE is not possible on FreeRTOS
+	scope = PLC_MUTEX_SCOPE_SHARED;
+#else
+	scope = PLC_MUTEX_SCOPE_PRIVATE;
+#endif // #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_create(&storage, scope));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(&storage, 0));
 
 	errno = 0;
@@ -324,8 +353,15 @@ void test_plc_mutex_static_destroy_fails_with_ebusy_when_another_thread_holds_it
 {
 	static plc_mutex_t storage;
 
-	TEST_ASSERT_EQUAL_INT(
-		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	plc_mutex_scope_t scope;
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+	// PLC_MUTEX_SCOPE_PRIVATE is not possible on FreeRTOS
+	scope = PLC_MUTEX_SCOPE_SHARED;
+#else
+	scope = PLC_MUTEX_SCOPE_PRIVATE;
+#endif // #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_create(&storage, scope));
 
 	static hold_lock_args_t args;
 	args = (hold_lock_args_t){ .mutex = &storage,
@@ -348,13 +384,19 @@ void test_plc_mutex_static_destroy_leaves_the_storage_reusable(void)
 {
 	static plc_mutex_t storage;
 
-	TEST_ASSERT_EQUAL_INT(
-		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	plc_mutex_scope_t scope;
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+	// PLC_MUTEX_SCOPE_PRIVATE is not possible on FreeRTOS
+	scope = PLC_MUTEX_SCOPE_SHARED;
+#else
+	scope = PLC_MUTEX_SCOPE_PRIVATE;
+#endif // #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_create(&storage, scope));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
 
 	// The same storage again: proof it was never handed to free().
-	TEST_ASSERT_EQUAL_INT(
-		0, plc_mutex_static_create(&storage, PLC_MUTEX_SCOPE_PRIVATE));
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_create(&storage, scope));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(&storage, 0));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(&storage));
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_static_destroy(&storage));
@@ -495,6 +537,64 @@ void test_plc_mutex_acquire_waits_for_the_release_with_the_max_delay(void)
 	TEST_ASSERT_GREATER_OR_EQUAL_INT(250, elapsed_ms(start, end));
 }
 
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+/*
+ * The longest finite wait is 2³² - 2 ticks (portMAX_DELAY waits forever),
+ * capped at the largest timeout_ms below PLC_MUTEX_MAX_DELAY.
+ */
+static uint32_t longest_timeout_ms(void)
+{
+	uint64_t ms = ((uint64_t)portMAX_DELAY - 1) * 1000 / configTICK_RATE_HZ;
+	return ms >= PLC_MUTEX_MAX_DELAY ? PLC_MUTEX_MAX_DELAY - 1 :
+					   (uint32_t)ms;
+}
+
+static void assert_waits_for_the_release(uint32_t timeout_ms)
+{
+	static hold_lock_args_t args;
+	args = (hold_lock_args_t){ .mutex = mutex,
+				   .hold_ms = 300,
+				   .acquired = 0 };
+	pthread_t thread;
+	TEST_ASSERT_EQUAL_INT(
+		0, pthread_create(&thread, NULL, hold_lock_thread, &args));
+	wait_until_acquired(&args.acquired);
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	int result = plc_mutex_acquire(mutex, timeout_ms);
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	pthread_join(thread, NULL);
+
+	TEST_ASSERT_EQUAL_INT(0, result);
+	TEST_ASSERT_GREATER_OR_EQUAL_INT(250, elapsed_ms(start, end));
+}
+
+void test_plc_mutex_acquire_waits_for_the_release_past_the_tick_wrap(void)
+{
+	// The first timeout whose ms * configTICK_RATE_HZ overflows 32 bits.
+	// pdMS_TO_TICKS turns it into 0 ticks, a try-once.
+	assert_waits_for_the_release(UINT32_MAX / configTICK_RATE_HZ + 1);
+}
+
+void test_plc_mutex_acquire_waits_for_the_release_with_the_longest_timeout(void)
+{
+	assert_waits_for_the_release(longest_timeout_ms());
+}
+#else
+void test_plc_mutex_acquire_waits_for_the_release_past_the_tick_wrap(void)
+{
+	TEST_IGNORE_MESSAGE("FreeRTOS ticks only");
+}
+
+void test_plc_mutex_acquire_waits_for_the_release_with_the_longest_timeout(void)
+{
+	TEST_IGNORE_MESSAGE("FreeRTOS ticks only");
+}
+#endif // #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+
 void test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay(void)
 {
 	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(mutex, 0));
@@ -505,10 +605,76 @@ void test_plc_mutex_acquire_fails_with_edeadlk_with_the_max_delay(void)
 	TEST_ASSERT_EQUAL_INT(EDEADLK, errno);
 }
 
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+// acquired: 1 when about to wait for the mutex, 2 once it took and released it
+static void wait_for_the_lock_task(void* arg)
+{
+	hold_lock_args_t* args = (hold_lock_args_t*)arg;
+
+	atomic_store(&args->acquired, 1);
+	if (plc_mutex_acquire(args->mutex, 1000) == 0) {
+		plc_mutex_release(args->mutex);
+		atomic_store(&args->acquired, 2);
+	}
+	vTaskDelete(NULL);
+}
+
+void test_plc_mutex_acquire_boosts_the_holder_by_priority_inheritance(void)
+{
+	static hold_lock_args_t args;
+	args = (hold_lock_args_t){ .mutex = mutex, .acquired = 0 };
+
+	UBaseType_t previous = uxTaskPriorityGet(NULL);
+	UBaseType_t base = 2;
+	UBaseType_t high = base + 2;
+	vTaskPrioritySet(NULL, base);
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_acquire(mutex, 0));
+	// Acquiring alone must not change the holder's priority
+	TEST_ASSERT_EQUAL_UINT(base, uxTaskPriorityGet(NULL));
+
+	TEST_ASSERT_EQUAL_INT(pdPASS,
+			      xTaskCreate(wait_for_the_lock_task,
+					  "waiter",
+					  4096,
+					  &args,
+					  high,
+					  NULL));
+
+	int waited_ms = 0;
+	while (atomic_load(&args.acquired) != 1 && waited_ms < 1000) {
+		vTaskDelay(pdMS_TO_TICKS(1));
+		waited_ms++;
+	}
+	TEST_ASSERT_EQUAL_INT_MESSAGE(
+		1, atomic_load(&args.acquired), "The waiter never started");
+
+	// Give it time to block on the mutex, on whichever core it runs
+	vTaskDelay(pdMS_TO_TICKS(10));
+
+	// The holder runs at the waiter's priority while it waits
+	TEST_ASSERT_EQUAL_UINT(high, uxTaskPriorityGet(NULL));
+
+	TEST_ASSERT_EQUAL_INT(0, plc_mutex_release(mutex));
+	TEST_ASSERT_EQUAL_UINT(base, uxTaskPriorityGet(NULL));
+
+	waited_ms = 0;
+	while (atomic_load(&args.acquired) != 2 && waited_ms < 1000) {
+		vTaskDelay(pdMS_TO_TICKS(1));
+		waited_ms++;
+	}
+	TEST_ASSERT_EQUAL_INT_MESSAGE(2,
+				      atomic_load(&args.acquired),
+				      "The waiter never got the mutex");
+
+	vTaskPrioritySet(NULL, previous);
+}
+#else
 void test_plc_mutex_acquire_boosts_the_holder_by_priority_inheritance(void)
 {
 	TEST_IGNORE_MESSAGE("TODO: Priority inheritance is not tested");
 }
+#endif // #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
 
 /* -------------------------- plc_mutex_release ------------------------------ */
 

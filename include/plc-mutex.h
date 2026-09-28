@@ -56,8 +56,14 @@ extern "C" {
 #define PLC_MUTEX_INTERNAL_SIZE (sizeof(pthread_mutex_t))
 #elif PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
 #define PLC_MUTEX_INTERNAL_NATIVE StaticSemaphore_t
-#define PLC_MUTEX_INTERNAL_SIZE                               \
-	PLC_MUTEX_INTERNAL_PAD(sizeof(StaticSemaphore_t) + 1, \
+/*
+ * We keep the atomic_bool as 1 byte because this header is can also be
+ * compiled as C++, where atomic_bool is only usable from <stdatomic.h> since
+ * C++23.
+ */
+#define PLC_MUTEX_INTERNAL_SIZE                                       \
+	PLC_MUTEX_INTERNAL_PAD(sizeof(StaticSemaphore_t) +            \
+				       sizeof(SemaphoreHandle_t) + 1, \
 			       PLC_MUTEX_INTERNAL_ALIGNOF(StaticSemaphore_t))
 #endif
 
@@ -137,6 +143,9 @@ typedef enum {
  * Linux specific: not async-signal-safe. Called from a signal handler it can
  * deadlock inside malloc, with no timeout to break it.
  *
+ * ESP32 specific: never call it from an ISR, since it doesn't use the
+ * FreeRTOS ISR API.
+ *
  * Returns:
  *   plc_mutex_t* - Pointer to the ready mutex on success.
  *                  NULL on failure.
@@ -165,6 +174,9 @@ plc_mutex_t* plc_mutex_create(void);
  * Linux specific: not async-signal-safe. Called from a signal handler it can
  * deadlock inside free, with no timeout to break it.
  *
+ * ESP32 specific: never call it from an ISR, since it doesn't use the
+ * FreeRTOS ISR API.
+ *
  * Parameters:
  *   mutex (plc_mutex_t*) - The mutex to destroy.
  *
@@ -178,7 +190,7 @@ plc_mutex_t* plc_mutex_create(void);
  *     - EBUSY : Mutex can't be destroyed while in use. "In use" only means
  *               "locked" right now, not about to be locked...
  *               A mutex whose owner died holding it isn't in use, so
- *               it's destroyed.
+ *               it's destroyed (not on ESP32, see plc_mutex_acquire).
  */
 int plc_mutex_destroy(plc_mutex_t* mutex);
 
@@ -199,6 +211,9 @@ int plc_mutex_destroy(plc_mutex_t* mutex);
  *
  * Linux specific: not async-signal-safe. Do not call it from a signal
  * handler.
+ *
+ * ESP32 specific: never call it from an ISR, since it doesn't use the
+ * FreeRTOS ISR API.
  *
  * Parameters:
  *   mutex (plc_mutex_t*)      - Storage to make a mutex out of.
@@ -236,6 +251,9 @@ int plc_mutex_static_create(plc_mutex_t* mutex, plc_mutex_scope_t scope);
  * Linux specific: not async-signal-safe. Do not call it from a signal
  * handler.
  *
+ * ESP32 specific: never call it from an ISR, since it doesn't use the
+ * FreeRTOS ISR API.
+ *
  * Parameters:
  *   mutex (plc_mutex_t*) - The mutex to tear down.
  *
@@ -249,7 +267,7 @@ int plc_mutex_static_create(plc_mutex_t* mutex, plc_mutex_scope_t scope);
  *     - EBUSY : Mutex can't be torn down while in use. "In use" only means
  *               "locked" right now, not about to be locked...
  *               A mutex whose owner died holding it isn't in use, so
- *               it's torn down.
+ *               it's torn down (not on ESP32, see plc_mutex_acquire).
  */
 int plc_mutex_static_destroy(plc_mutex_t* mutex);
 
@@ -271,6 +289,14 @@ int plc_mutex_static_destroy(plc_mutex_t* mutex);
  *     can go on. The kernel detects it, and glibc aborts the process instead
  *     of timing out. This bug appears only because of priority inheritance.
  *
+ * ESP32 specific:
+ *   - An owner that dies holding a mutex is not supported. Never delete a
+ *     task (vTaskDelete, pthread_exit) while it holds one. FreeRTOS doesn't
+ *     release it, so it stays locked forever, EOWNERDEAD is never reported,
+ *     and other tasks that wait for it can touch the dead task's freed memory
+ *     through priority inheritance (undefined behaviour).
+ *   - Never call it from an ISR, since it doesn't use the FreeRTOS ISR API.
+ *
  * Parameters:
  *   mutex (plc_mutex_t*)  - The mutex to lock.
  *   timeout_ms (uint32_t) - The maximum time to wait for the unlock (in ms).
@@ -291,9 +317,14 @@ int plc_mutex_static_destroy(plc_mutex_t* mutex);
  *     - EDEADLK         : The calling thread already holds the mutex.
  *     - EOWNERDEAD      : A previous owner died holding the mutex. You must
  *                         recover from half-writes, and release the lock after
- *                         you are done.
+ *                         you are done. Never on ESP32 (see plc_mutex_acquire).
  *     - Linux specific:
  *       - ENOTSUP: The clock the timeout is measured on isn't available.
+ *     - ESP32 specific:
+ *       - EINVAL: timeout_ms needs more ticks than a finite wait can hold,
+ *                 which is only possible with a configTICK_RATE_HZ above
+ *                 1000. The longest accepted timeout is
+ *                 (2³² - 2) * 1000 / configTICK_RATE_HZ ms.
  */
 int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms);
 
@@ -308,6 +339,9 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms);
  * Linux specific: not async-signal-safe. A handler runs on top of the thread
  * it interrupted and inherits its ownership, so this succeeds and strips the
  * lock from a thread still inside its critical section.
+ *
+ * ESP32 specific: never call it from an ISR, since it doesn't use the
+ * FreeRTOS ISR API.
  *
  * Parameters:
  *   mutex (plc_mutex_t*)  - The mutex to unlock.
@@ -325,6 +359,7 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms);
  *                    find this error if you tried to release a mutex that
  *                    isn't yours, and whose owner died before releasing
  *                    it (which is very strange). The lock is now held by you.
+ *                    Never on ESP32 (see plc_mutex_acquire).
  */
 int plc_mutex_release(plc_mutex_t* mutex);
 
