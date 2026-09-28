@@ -57,7 +57,7 @@ extern "C" {
 #elif PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
 #define PLC_MUTEX_INTERNAL_NATIVE StaticSemaphore_t
 /*
- * We keep the atomic_bool as 1 byte because this header is can also be
+ * We keep the atomic_bool as 1 byte because this header can also be
  * compiled as C++, where atomic_bool is only usable from <stdatomic.h> since
  * C++23.
  */
@@ -198,13 +198,14 @@ int plc_mutex_destroy(plc_mutex_t* mutex);
  * plc_mutex_static_create
  *
  * Create a mutex on the memory region passed by argument. You must ensure that
- * this region is at least of PLC_MUTEX_SIZE, and at least PLC_MUTEX_ALIGN
+ * this region is at least PLC_MUTEX_SIZE bytes, and at least PLC_MUTEX_ALIGN
  * aligned.
  *
  * Whenever possible, it will try to create a mutex with priority inheritance.
  * If PI is not available, it will fallback to normal mutex.
  *
- * The storage must not already hold a live mutex, otherwise it's UB.
+ * The storage must not already hold a live mutex, otherwise it's UB. Never
+ * create or destroy the same storage from two threads at once either.
  *
  * WARNING: Tear down with plc_mutex_static_destroy, never with
  *          plc_mutex_destroy.
@@ -230,7 +231,7 @@ int plc_mutex_destroy(plc_mutex_t* mutex);
  *                create the mutex were invalid (internal failure).
  *     - ENOMEM : Out of memory setting the mutex up.
  *     - ENOTSUP: The scope is unsupported on this platform. For example, ESP32
- *                rejects _PRIVATE, since all mutexes are shared.
+ *                rejects PLC_MUTEX_SCOPE_PRIVATE, since all mutexes are shared.
  *     - Linux specific:
  *       - ENOTSUP: The kernel refused this thread's robust list, so a dead
  *                  owner could never be recovered. See

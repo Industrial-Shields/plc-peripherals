@@ -379,7 +379,7 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 			 * Only fails with EINVAL if the mutex is not robust or not
 			 * inconsistent. It has just answered EOWNERDEAD, so it must be
 			 * both. Cover it, so if any mad person tries to acquire a
-			 * non-robust with this library or something...
+			 * non-robust mutex with this library or something...
 			 */
 			consistent_result =
 				pthread_mutex_consistent(PTHREAD(mutex));
@@ -420,7 +420,7 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 		 * Only fails with EINVAL if the mutex is not robust or not
 		 * inconsistent. It has just answered EOWNERDEAD, so it must be
 		 * both. Cover it, so if any mad person tries to acquire a
-		 * non-robust with this library or something...
+		 * non-robust mutex with this library or something...
 		 */
 		consistent_result = pthread_mutex_consistent(PTHREAD(mutex));
 		(void)consistent_result;
@@ -454,7 +454,7 @@ int plc_mutex_release(plc_mutex_t* mutex)
 
 	if (local_errno == EPERM) {
 		/*
-		 * Best-effort to try and determine if tried to unlock an
+		 * Best-effort to try and determine if we tried to unlock an
 		 * already unlocked mutex, or if the owner died while
 		 * holding it...
 		 */
@@ -470,7 +470,7 @@ int plc_mutex_release(plc_mutex_t* mutex)
 			 * Only fails with EINVAL if the mutex is not robust or
 			 * not inconsistent. It has just answered EOWNERDEAD, so
 			 * it must be both. Cover it, so if any mad person tries
-			 * to acquire a non-robust with this library or
+			 * to acquire a non-robust mutex with this library or
 			 * something...
 			 */
 			int consistent_result =
