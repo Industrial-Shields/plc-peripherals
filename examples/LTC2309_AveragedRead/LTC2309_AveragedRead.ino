@@ -49,8 +49,8 @@
  *
  * Build (against this library's Linux build):
  *   make
- *   gcc -Iinclude examples/LTC2309_AveragedRead/LTC2309_AveragedRead.ino \
- *       -Lbuild -lplc-peripherals -o LTC2309_AveragedRead
+ *   gcc -Iinclude -x c examples/LTC2309_AveragedRead/LTC2309_AveragedRead.ino \
+ *       -x none -Lbuild -lplc-peripherals -o LTC2309_AveragedRead
  */
 
 #include <peripheral-ltc2309.h>
