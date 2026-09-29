@@ -20,6 +20,7 @@
 #ifndef PLC_PERIPHERAL_LTC2309_I2C_H_
 #define PLC_PERIPHERAL_LTC2309_I2C_H_
 
+#include "plc-mutex.h"
 #include "plc-peripherals-i2c.h"
 #include "plc-peripherals-platform.h"
 #ifdef __cplusplus
@@ -30,14 +31,12 @@ extern "C" {
 #define LTC2309_NUM_INPUTS  8
 // clang-format on
 
-/*
- * Sized for the private handle in peripheral-ltc2309.c: the I2C address, the
- * bus number and the last command byte sent.
- */
-#define LTC2309_INTERNAL_ALIGN PLC_PERIPHERAL_INTERNAL_ALIGNOF(plc_i2c_addr_t)
-#define LTC2309_INTERNAL_SIZE                                    \
-	PLC_PERIPHERAL_INTERNAL_PAD(sizeof(plc_i2c_addr_t) +     \
-					    2 * sizeof(uint8_t), \
+// Sized for the private handle in peripheral-ltc2309.c.
+#define LTC2309_INTERNAL_ALIGN PLC_MUTEX_ALIGN
+#define LTC2309_INTERNAL_SIZE                                                 \
+	PLC_PERIPHERAL_INTERNAL_PAD(PLC_MUTEX_SIZE + sizeof(plc_i2c_addr_t) + \
+					    2 * sizeof(uint8_t) +             \
+					    sizeof(bool),                     \
 				    LTC2309_INTERNAL_ALIGN)
 
 /*
@@ -55,7 +54,7 @@ extern "C" {
 #define LTC2309_ALIGN LTC2309_INTERNAL_ALIGN
 
 typedef struct {
-	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_i2c_addr_t)
+	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_mutex_t)
 	unsigned char opaque[LTC2309_SIZE];
 } ltc2309_t;
 
@@ -127,7 +126,11 @@ ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr);
  * De-initialize an LTC2309 ADC. If shutdown is true, the LTC2309 is placed in
  * sleep mode before returning.
  *
- * WARNING: Never use this on an ltc2309_static_init handle.
+ * WARNINGS:
+ *   - Never use this on an ltc2309_static_init handle.
+ *   - If the handle is protected, its mutex is destroyed first. If the
+ *     shutdown write fails after that, the handle is not freed, but it is no
+ *     longer protected.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
@@ -145,6 +148,8 @@ ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr);
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_static_destroy reports while protected
+ *                  (see plc-mutex.h). The handle is then left as it was.
  */
 int ltc2309_deinit(const i2c_interface_t* i2c, ltc2309_t* ltc, bool shutdown);
 
@@ -189,7 +194,11 @@ int ltc2309_static_init(const i2c_interface_t* i2c,
  * never freed. If shutdown is true, the LTC2309 is placed in sleep mode before
  * returning.
  *
- * WARNING: Never use this on an ltc2309_init handle.
+ * WARNINGS:
+ *   - Never use this on an ltc2309_init handle.
+ *   - If the handle is protected, its mutex is destroyed first. If the
+ *     shutdown write fails after that, the handle is still initialized, but it
+ *     is no longer protected.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
@@ -207,6 +216,8 @@ int ltc2309_static_init(const i2c_interface_t* i2c,
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_static_destroy reports while protected
+ *                  (see plc-mutex.h). The handle is then left as it was.
  */
 int ltc2309_static_deinit(const i2c_interface_t* i2c,
 			  ltc2309_t* ltc,
@@ -215,42 +226,49 @@ int ltc2309_static_deinit(const i2c_interface_t* i2c,
 /**
  * ltc2309_protect
  *
- * Protect the LTC2309 with a mutex.
+ * Protect the LTC2309 with a mutex embedded in its handle. Every read on the
+ * handle then holds it, waiting up to its timeout_ms for it.
+ *
+ * WARNING: Never call it while another thread or process uses the handle.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
  *   ltc (ltc2309_t*)             - The LTC2309 to protect.
+ *   scope (plc_mutex_scope_t)    - Who the mutex has to exclude. Use
+ *                                  PLC_MUTEX_SCOPE_SHARED if the handle is in
+ *                                  memory shared with other processes (see
+ *                                  plc_mutex_scope_t).
  * Returns:
  *   int - 0 if successful, 1 if already protected, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - ENOMEM : Out of memory during allocation.
- *     - EINVAL : Passed ltc2309_t is NULL, or address is invalid.
- *     - EEXIST : The resource was already added.
- *     - EBUSY  : Hash mutex couldn't be taken.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ltc2309_t or i2c is NULL.
+ *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on.
+ *     - (others) : Whatever plc_mutex_static_create reports (see
+ *                  plc-mutex.h).
  */
-int ltc2309_protect(const i2c_interface_t* i2c, ltc2309_t* ltc);
+int ltc2309_protect(const i2c_interface_t* i2c,
+		    ltc2309_t* ltc,
+		    plc_mutex_scope_t scope);
 
 /**
  * ltc2309_unprotect
  *
- * Remove the mutex associated with the LTC2309.
+ * Destroy the mutex embedded in the LTC2309 handle.
+ *
+ * WARNING: Never call it while another thread or process uses the handle.
  *
  * Parameters:
- *   ltc (ltc2309_t*)        - The LTC2309 to unprotect.
+ *   ltc (ltc2309_t*) - The LTC2309 to unprotect.
  * Returns:
  *   int - 0 if successful, 1 if already unprotected, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed ltc2309_t is NULL, or address is invalid.
- *     - ENODEV : The resource is not present.
- *     - EBUSY  : Hash mutex couldn't be taken.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ltc2309_t is NULL.
+ *     - (others) : Whatever plc_mutex_static_destroy reports (see
+ *                  plc-mutex.h).
  */
 int ltc2309_unprotect(ltc2309_t* ltc);
 
@@ -277,13 +295,16 @@ int ltc2309_unprotect(ltc2309_t* ltc);
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ltc2309_t or read_value is NULL.
+ *     - EFAULT   : Passed ltc2309_t, read_value or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on, or
  *                  index is not a valid LTC2309_INPUT value.
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ltc2309_read_single_ended_unsigned(const i2c_interface_t* i2c,
 				       ltc2309_t* ltc,
@@ -314,13 +335,16 @@ int ltc2309_read_single_ended_unsigned(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ltc2309_t or read_value is NULL.
+ *     - EFAULT   : Passed ltc2309_t, read_value or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on, or
  *                  index is not a valid LTC2309_INPUT value.
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ltc2309_read_single_ended_signed(const i2c_interface_t* i2c,
 				     ltc2309_t* ltc,
@@ -350,13 +374,16 @@ int ltc2309_read_single_ended_signed(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ltc2309_t or read_value is NULL.
+ *     - EFAULT   : Passed ltc2309_t, read_value or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on, or
  *                  index is not a valid LTC2309_DIFF_INPUT value.
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ltc2309_read_differential_unsigned(const i2c_interface_t* i2c,
 				       ltc2309_t* ltc,
@@ -386,13 +413,16 @@ int ltc2309_read_differential_unsigned(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ltc2309_t or read_value is NULL.
+ *     - EFAULT   : Passed ltc2309_t, read_value or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on, or
  *                  index is not a valid LTC2309_DIFF_INPUT value.
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ltc2309_read_differential_signed(const i2c_interface_t* i2c,
 				     ltc2309_t* ltc,

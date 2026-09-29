@@ -16,15 +16,14 @@
  */
 
 /*
- * Tests for src/peripheral-ltc2309.c. Both of its dependencies are mocked:
- * plc-peripherals-i2c.h (the level i2c_write/i2c_read calls) and
- * mocked too: ltc2309_protect calls it directly, one layer below
- * plc-peripherals-i2c.h.
+ * Tests for src/peripheral-ltc2309.c. All of its dependencies are mocked:
+ * plc-peripherals-i2c.h and plc-peripherals-i2c-hal.h (the calls it makes are
+ * stubbed by fake-i2c), and plc-mutex.h (the mutex ltc2309_protect embeds in
+ * the handle).
  *
- * ltc2309_init() always sleeps a real, fixed 200ms (tREFWAKE) with no
- * data-rate-style knob to shorten it -- unlike ADS101X, whose tests pick a
- * fast data rate to keep the suite quick. Every test that needs an
- * initialized ltc2309_t pays this once; the suite is measurably slower than
+ * ltc2309_init() and ltc2309_static_init() always sleep a real, fixed 200ms
+ * (tREFWAKE) with no data-rate-style knob to shorten it. Every test that needs
+ * an initialized ltc2309_t pays this once; the suite is measurably slower than
  * ADS101X's as a result, but there's nothing to fake without changing the
  * driver itself.
  */
@@ -99,17 +98,59 @@ static void destroy_ltc(ltc2309_t* ltc)
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(TEST_I2C, ltc, false));
 }
 
+#define TEST_SCOPE PLC_MUTEX_SCOPE_PRIVATE
+
 static ltc2309_t* create_protected_ltc(void)
 {
 	ltc2309_t* ltc = create_ltc();
 
-	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(TEST_I2C, ltc));
+	plc_mutex_static_create_ExpectAndReturn(NULL, TEST_SCOPE, 0);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(TEST_I2C, ltc, TEST_SCOPE));
 	return ltc;
+}
+
+static void expect_mutex_destroyed(int retval)
+{
+	plc_mutex_static_destroy_ExpectAndReturn(NULL, retval);
+	plc_mutex_static_destroy_IgnoreArg_mutex();
 }
 
 static void destroy_protected_ltc(ltc2309_t* ltc)
 {
+	expect_mutex_destroyed(0);
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(TEST_I2C, ltc, false));
+}
+
+static void expect_mutex_released(void)
+{
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+}
+
+static int acquire_after_owner_died(plc_mutex_t* mutex,
+				    uint32_t timeout_ms,
+				    int cmock_num_calls)
+{
+	(void)mutex;
+	(void)timeout_ms;
+
+	if (cmock_num_calls == 0) {
+		errno = EOWNERDEAD;
+		return -1;
+	}
+	return 0;
+}
+
+static int
+acquire_times_out(plc_mutex_t* mutex, uint32_t timeout_ms, int cmock_num_calls)
+{
+	(void)mutex;
+	(void)timeout_ms;
+	(void)cmock_num_calls;
+
+	errno = EBUSY;
+	return -1;
 }
 
 void setUp(void)
@@ -310,7 +351,7 @@ void test_ltc2309_static_deinit_fails_with_einval_for_another_bus(void)
 			      ltc2309_static_deinit(TEST_I2C, &storage, false));
 }
 
-/* --------------------------- ltc2309_protect ------------------------------ */
+/* ------------------------------ bus checks -------------------------------- */
 
 void test_ltc2309_rejects_an_interface_for_another_bus(void)
 {
@@ -335,8 +376,6 @@ void test_ltc2309_rejects_an_interface_for_another_bus(void)
 	destroy_ltc(ltc);
 }
 
-/* -------------------------- ltc2309_unprotect ------------------------------ */
-
 /* ------------------------- ltc2309_read_differential_signed ----------------------------- */
 
 void test_ltc2309_read_differential_signed_fails_with_efault_for_null_ltc(void)
@@ -353,7 +392,7 @@ void test_ltc2309_read_differential_signed_fails_with_efault_for_null_ltc(void)
 
 void test_ltc2309_read_differential_signed_returns_a_positive_reading(void)
 {
-	ltc2309_t* ltc = create_ltc(); // starts on P0_N1 (cmd=0x00)
+	ltc2309_t* ltc = create_ltc(); // starts on P0_N1 (last_cmd=0x00)
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
@@ -364,7 +403,7 @@ void test_ltc2309_read_differential_signed_returns_a_positive_reading(void)
 		ltc2309_read_differential_signed(
 			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 
-	assert_skipped_write(writes_before); // P0_N1 is already the cached cmd
+	assert_skipped_write(writes_before); // P0_N1 is already last_cmd
 	TEST_ASSERT_EQUAL_INT16(255, value);
 
 	destroy_ltc(ltc);
@@ -478,7 +517,7 @@ void test_ltc2309_read_differential_signed_selects_every_differential_pair(void)
 					      1000));
 
 		if (idx == 0) {
-			// P0_N1 (index 0) is already the cmd byte cmd starts at.
+			// P0_N1 (index 0) is what last_cmd starts at.
 			assert_skipped_write(writes_before);
 		} else {
 			assert_wrote_cmd(
@@ -502,6 +541,32 @@ void test_ltc2309_read_differential_signed_fails_when_writing_the_command_byte_f
 		-1,
 		ltc2309_read_differential_signed(
 			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_read_sends_the_command_again_after_a_failed_write(void)
+{
+	// The chip may have got P2_N3 even though the write failed, so going
+	// back to P0_N1, the last_cmd, must not skip the write.
+	ltc2309_t* ltc = create_ltc(); // last_cmd is INITIAL_STATE (P0_N1)
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+
+	fake_i2c_write_op.retval = -1;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+
+	fake_i2c_write_op.retval = 1;
+	fake_i2c_read_answers(reading, 2);
+	uint32_t writes_before = fake_i2c_write_op.calls;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+	assert_wrote_cmd(writes_before, INITIAL_STATE);
 
 	destroy_ltc(ltc);
 }
@@ -571,7 +636,8 @@ void test_ltc2309_read_single_ended_unsigned_fails_with_efault_for_null_ltc(void
 
 void test_ltc2309_read_single_ended_unsigned_returns_a_positive_reading(void)
 {
-	ltc2309_t* ltc = create_ltc(); // starts on INITIAL_STATE (cmd=0x00)
+	ltc2309_t* ltc =
+		create_ltc(); // starts on INITIAL_STATE (last_cmd=0x00)
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
@@ -582,7 +648,7 @@ void test_ltc2309_read_single_ended_unsigned_returns_a_positive_reading(void)
 		ltc2309_read_single_ended_unsigned(
 			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
-	// SD bit must flip to single-ended: cmd changes even on channel 0.
+	// SD bit must flip to single-ended: last_cmd changes even on channel 0.
 	assert_wrote_cmd(writes_before, COMMAND_BYTE_SGL | COMMAND_BYTE_UNI);
 	TEST_ASSERT_EQUAL_UINT16(255, value);
 
@@ -863,88 +929,219 @@ void test_ltc2309_switching_the_range_on_the_same_channel_rewrites_the_command(
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_deinit_also_unprotects_when_protected(void)
-{
-	ltc2309_t* ltc = create_protected_ltc();
+/* ----------------------- ltc2309_protect / unprotect ---------------------- */
 
-	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(TEST_I2C, ltc, false));
-}
-
-void test_ltc2309_deinit_fails_when_the_unprotect_fails(void)
-{
-	ltc2309_t* ltc = create_protected_ltc();
-
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_deinit(TEST_I2C, ltc, false));
-
-	free(ltc); // deinit bailed out before freeing it
-}
-
-void test_ltc2309_protect_fails_with_einval_for_null(void)
+void test_ltc2309_protect_fails_with_efault_for_null(void)
 {
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(TEST_I2C, NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(TEST_I2C, NULL, TEST_SCOPE));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_ltc2309_protect_adds_the_resource_for_its_bus_and_address(void)
+void test_ltc2309_protect_fails_with_einval_for_another_bus(void)
 {
 	ltc2309_t* ltc = create_ltc();
 
-	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(TEST_I2C, ltc));
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(TEST_I2C, ltc, TEST_SCOPE));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	fake_i2c_bus = TEST_BUS;
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_protect_creates_the_mutex_with_the_given_scope(void)
+{
+	ltc2309_t* ltc = create_ltc();
+
+	plc_mutex_static_create_ExpectAndReturn(
+		NULL, PLC_MUTEX_SCOPE_SHARED, 0);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(
+		0, ltc2309_protect(TEST_I2C, ltc, PLC_MUTEX_SCOPE_SHARED));
 
 	destroy_protected_ltc(ltc);
-}
-
-void test_ltc2309_protect_fails_when_the_bus_cant_be_read(void)
-{
-	ltc2309_t* ltc = create_ltc();
-
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(TEST_I2C, ltc));
-
-	destroy_ltc(ltc);
 }
 
 void test_ltc2309_protect_returns_1_if_already_protected(void)
 {
 	ltc2309_t* ltc = create_protected_ltc();
 
-	TEST_ASSERT_EQUAL_INT(1, ltc2309_protect(TEST_I2C, ltc));
+	// No second plc_mutex_static_create is expected.
+	TEST_ASSERT_EQUAL_INT(1, ltc2309_protect(TEST_I2C, ltc, TEST_SCOPE));
 
 	destroy_protected_ltc(ltc);
 }
 
-void test_ltc2309_unprotect_fails_with_einval_for_null(void)
+void test_ltc2309_protect_leaves_the_handle_unprotected_when_it_fails(void)
 {
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-}
+	ltc2309_t* ltc = create_ltc();
 
-void test_ltc2309_unprotect_removes_the_resource(void)
-{
-	ltc2309_t* ltc = create_protected_ltc();
+	plc_mutex_static_create_ExpectAndReturn(NULL, TEST_SCOPE, -1);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(TEST_I2C, ltc, TEST_SCOPE));
 
-	TEST_ASSERT_EQUAL_INT(0, ltc2309_unprotect(ltc));
+	// No plc_mutex_acquire/release is expected: the handle isn't protected.
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+	fake_i2c_read_answers(reading, 2);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_unprotect_fails_when_the_resource_cant_be_removed(void)
+void test_ltc2309_unprotect_fails_with_efault_for_null(void)
 {
-	ltc2309_t* ltc = create_protected_ltc();
-
-	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(ltc));
-
-	destroy_protected_ltc(ltc);
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_ltc2309_unprotect_returns_1_if_already_unprotected(void)
+void test_ltc2309_unprotect_returns_1_if_not_protected(void)
 {
-	ltc2309_t* ltc = create_protected_ltc();
+	ltc2309_t* ltc = create_ltc();
 
 	TEST_ASSERT_EQUAL_INT(1, ltc2309_unprotect(ltc));
 
 	destroy_ltc(ltc);
+}
+
+void test_ltc2309_unprotect_destroys_the_mutex(void)
+{
+	ltc2309_t* ltc = create_protected_ltc();
+
+	expect_mutex_destroyed(0);
+	TEST_ASSERT_EQUAL_INT(0, ltc2309_unprotect(ltc));
+
+	// No plc_mutex_acquire/release is expected anymore.
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+	fake_i2c_read_answers(reading, 2);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_unprotect_keeps_the_handle_protected_when_it_fails(void)
+{
+	ltc2309_t* ltc = create_protected_ltc();
+
+	expect_mutex_destroyed(-1);
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(ltc));
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	expect_mutex_released();
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+	fake_i2c_read_answers(reading, 2);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_deinit_destroys_the_mutex_when_protected(void)
+{
+	ltc2309_t* ltc = create_protected_ltc();
+
+	expect_mutex_destroyed(0);
+	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(TEST_I2C, ltc, false));
+}
+
+void test_ltc2309_deinit_keeps_the_handle_when_the_mutex_cant_be_destroyed(void)
+{
+	ltc2309_t* ltc = create_protected_ltc();
+
+	uint32_t writes_before = fake_i2c_write_op.calls;
+	expect_mutex_destroyed(-1);
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_deinit(TEST_I2C, ltc, true));
+	assert_skipped_write(writes_before);
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_read_fails_when_the_mutex_cant_be_taken(void)
+{
+	ltc2309_t* ltc = create_protected_ltc();
+
+	// No I2C transfer and no release are expected.
+	plc_mutex_acquire_Stub(acquire_times_out);
+	uint32_t writes_before = fake_i2c_write_op.calls;
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+	assert_skipped_write(writes_before);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_read_op.calls);
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_read_sends_the_command_after_an_owner_died(void)
+{
+	ltc2309_t* ltc = create_protected_ltc(); // last_cmd is INITIAL_STATE
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+	fake_i2c_read_answers(reading, 2);
+	expect_mutex_released();
+
+	// P0_N1 bipolar matches last_cmd, but it is sent anyway.
+	uint32_t writes_before = fake_i2c_write_op.calls;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+	assert_wrote_cmd(writes_before, INITIAL_STATE);
+	TEST_ASSERT_EQUAL_INT16(255, value);
+
+	destroy_protected_ltc(ltc);
+}
+
+void test_ltc2309_read_sends_the_command_again_after_a_failed_recovery(void)
+{
+	ltc2309_t* ltc = create_protected_ltc();
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	fake_i2c_write_op.retval = -1;
+	expect_mutex_released();
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_read_op.calls);
+
+	// The recovery is still pending, so the next read sends the command too.
+	fake_i2c_write_op.retval = 1;
+	fake_i2c_read_answers(reading, 2);
+	expect_mutex_released();
+
+	uint32_t writes_before = fake_i2c_write_op.calls;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+	assert_wrote_cmd(writes_before, INITIAL_STATE);
+
+	destroy_protected_ltc(ltc);
 }
 
 void test_ltc2309_read_differential_signed_when_protected_locks_and_unlocks(void)

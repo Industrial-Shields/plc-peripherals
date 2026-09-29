@@ -39,9 +39,11 @@ static const uint8_t SHUTDOWN        = 0b00000100;
 // clang-format on
 
 typedef struct {
+	plc_mutex_t mutex;
 	plc_i2c_addr_t addr;
 	uint8_t bus;
-	uint8_t cmd;
+	uint8_t last_cmd;
+	bool is_protected;
 } ltc2309_internal_t;
 
 _Static_assert(sizeof(ltc2309_t) == sizeof(ltc2309_internal_t),
@@ -52,9 +54,18 @@ _Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(ltc2309_t) ==
 
 #define LTC(l) ((ltc2309_internal_t*)(l))
 
-#define LTC2309_LOCK(ltc, timeout_ms) ((void)(ltc), (void)(timeout_ms))
-
-#define LTC2309_UNLOCK(ltc) ((void)(ltc))
+/*
+ * last_cmd is the last command byte the LTC2309 got, so a read only sends one
+ * when it changes. When that byte is unknown (a previous owner died holding
+ * the mutex, or a write failed, so the chip may or may not have it),
+ * LTC2309_SET_RESYNC sets last_cmd to LTC2309_CMD_RESYNC, which forces the
+ * next read to send its command.
+ *
+ * Reads build their command from scratch and never set bits 2:0 (SLP and the
+ * don't-care bits), so no real command can be LTC2309_CMD_RESYNC.
+ */
+#define LTC2309_CMD_RESYNC 0x03
+#define LTC2309_SET_RESYNC(ltc) (LTC(ltc)->last_cmd = LTC2309_CMD_RESYNC)
 
 int ltc2309_static_init(const i2c_interface_t* i2c,
 			ltc2309_t* ltc,
@@ -77,7 +88,8 @@ int ltc2309_static_init(const i2c_interface_t* i2c,
 
 	LTC(ltc)->addr = addr;
 	LTC(ltc)->bus = bus;
-	LTC(ltc)->cmd = INITIAL_STATE;
+	LTC(ltc)->last_cmd = INITIAL_STATE;
+	LTC(ltc)->is_protected = false;
 
 	/*
 	 * According to the datasheet: When the LTC2309 is properly addressed,
@@ -123,6 +135,10 @@ int ltc2309_static_deinit(const i2c_interface_t* i2c,
 		return -1;
 	}
 
+	if (ltc2309_unprotect(ltc) < 0) {
+		return -1;
+	}
+
 	if (shutdown &&
 	    i2c_write(i2c, LTC(ltc)->addr, &SHUTDOWN, sizeof(SHUTDOWN)) != 1) {
 		return -1;
@@ -141,21 +157,48 @@ int ltc2309_deinit(const i2c_interface_t* i2c, ltc2309_t* ltc, bool shutdown)
 	return 0;
 }
 
-int ltc2309_protect(const i2c_interface_t* i2c, ltc2309_t* ltc)
+int ltc2309_protect(const i2c_interface_t* i2c,
+		    ltc2309_t* ltc,
+		    plc_mutex_scope_t scope)
 {
-	(void)i2c;
-	(void)ltc;
+	if (ltc == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
 
-	errno = ENOTSUP;
-	return -1;
+	if (i2c_check_bus(i2c, LTC(ltc)->bus) != 0) {
+		return -1;
+	}
+
+	if (LTC(ltc)->is_protected) {
+		return 1;
+	}
+
+	if (plc_mutex_static_create(&LTC(ltc)->mutex, scope) != 0) {
+		return -1;
+	}
+
+	LTC(ltc)->is_protected = true;
+	return 0;
 }
 
 int ltc2309_unprotect(ltc2309_t* ltc)
 {
-	(void)ltc;
+	if (ltc == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
 
-	errno = ENOTSUP;
-	return -1;
+	if (!LTC(ltc)->is_protected) {
+		return 1;
+	}
+
+	if (plc_mutex_static_destroy(&LTC(ltc)->mutex) != 0) {
+		return -1;
+	}
+
+	LTC(ltc)->is_protected = false;
+	return 0;
 }
 
 static inline int16_t ltc2309_conversion_reg_to_value(uint16_t read_value)
@@ -194,26 +237,49 @@ static int ltc2309_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
+	if (LTC(ltc)->is_protected &&
+	    plc_mutex_acquire(&LTC(ltc)->mutex, timeout_ms) != 0) {
+		if (errno != EOWNERDEAD) {
+			return -1;
+		}
+		LTC2309_SET_RESYNC(ltc);
+	}
+
 	/*
 	 * Per the datasheet's Output Data Format (p.15), the UNI bit picks the
 	 * range of every conversion: straight binary when unipolar, 2's
 	 * complement when bipolar. It is sent with each command, so every read
 	 * can pick its own.
 	 */
-	uint8_t new_cmd = LTC(ltc)->cmd;
-	new_cmd &= ~(COMMAND_BYTE_CHANNEL | COMMAND_BYTE_SD | COMMAND_BYTE_UNI);
-	new_cmd |= mux_field << COMMAND_BYTE_CHANNEL_SHIFT;
+	uint8_t new_cmd = mux_field << COMMAND_BYTE_CHANNEL_SHIFT;
 	new_cmd |= diff ? COMMAND_BYTE_DIFF : COMMAND_BYTE_SGL;
 	new_cmd |= bip ? COMMAND_BYTE_BIP : COMMAND_BYTE_UNI;
 
-	LTC2309_LOCK(ltc, timeout_ms);
-
-	if (new_cmd != LTC(ltc)->cmd) {
+	if (new_cmd != LTC(ltc)->last_cmd) {
 		if (i2c_write(i2c, LTC(ltc)->addr, &new_cmd, 1) != 1) {
+			/*
+			 * A failed write doesn't prove the LTC2309 didn't get
+			 * the byte: the transfer can fail after the chip
+			 * latched it (a timeout, or an error at the STOP
+			 * condition). Keeping last_cmd would trust a byte the
+			 * chip may no longer have:
+			 *
+			 *   1. last_cmd is P0_N1, and the chip has P0_N1.
+			 *   2. A read of P2_N3 fails to write, but the chip
+			 *      took P2_N3 anyway. last_cmd still says P0_N1.
+			 *   3. A read of P0_N1 matches last_cmd, skips the
+			 *      write, and returns a P2_N3 conversion as a P0_N1
+			 *      one.
+			 *
+			 * So force the next read to send its command. During a
+			 * resync, last_cmd already is LTC2309_CMD_RESYNC, so
+			 * this changes nothing there.
+			 */
+			LTC2309_SET_RESYNC(ltc);
 			ret = -1;
 			goto ltc2309_read_exit;
 		}
-		LTC(ltc)->cmd = new_cmd;
+		LTC(ltc)->last_cmd = new_cmd;
 		usleep(5); // It must wait 1.8 us minimum before reading
 	}
 
@@ -233,7 +299,9 @@ static int ltc2309_read(const i2c_interface_t* i2c,
 	ret = 0;
 
 ltc2309_read_exit:
-	LTC2309_UNLOCK(ltc);
+	if (LTC(ltc)->is_protected) {
+		plc_mutex_release(&LTC(ltc)->mutex);
+	}
 
 	return ret;
 }
