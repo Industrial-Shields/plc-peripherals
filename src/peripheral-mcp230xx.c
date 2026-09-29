@@ -100,26 +100,43 @@ static int mcp230xx_reset(const i2c_interface_t* i2c,
 	return 0;
 }
 
+static bool mcp230xx_int_config_is_valid(MCP230XX_INT_TYPE int_type,
+					 MCP230XX_INT_POLARITY int_pol)
+{
+	switch (int_type) {
+	case MCP230XX_OPEN_DRAIN_INT:
+		return int_pol == MCP230XX_INT_POLARITY_NONE;
+	case MCP230XX_ACTIVE_DRIVER_INT:
+		// The polarity must be a conscious decision, not a default.
+		return int_pol == MCP230XX_INT_ACTIVE_HIGH ||
+		       int_pol == MCP230XX_INT_ACTIVE_LOW;
+	default:
+		return false;
+	}
+}
+
 mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 			  plc_i2c_addr_t addr,
 			  bool restart,
-			  MCP230XX_TYPE type,
-			  bool disable_slew_rate,
-			  MCP230XX_INT_TYPE int_type,
-			  MCP230XX_INT_POLARITY int_pol,
-			  MCP230XX_MIRROR_INT mirror)
+			  const mcp230xx_config_t* cfg)
 {
-	uint8_t iocon_reg = REG_A(IOCON_REG, type);
 	mcp230xx_t* ret;
 	uint8_t cfg_reg;
 	uint8_t bus;
 
-	if ((int_type == MCP230XX_OPEN_DRAIN_INT &&
-	     int_pol != MCP230XX_INT_POLARITY_NONE) ||
-	    (type != MCP230XX_017 && mirror == MCP230XX_MIRRORED_INT)) {
+	if (cfg == NULL) {
+		errno = EFAULT;
+		return NULL;
+	}
+
+	if (!mcp230xx_int_config_is_valid(cfg->int_type, cfg->int_pol) ||
+	    (cfg->type != MCP230XX_017 &&
+	     cfg->mirror == MCP230XX_MIRRORED_INT)) {
 		errno = EINVAL;
 		return NULL;
 	}
+
+	const uint8_t iocon_reg = REG_A(IOCON_REG, cfg->type);
 
 	if (i2c_get_bus(i2c, &bus) != 0) {
 		return NULL;
@@ -131,7 +148,7 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 	}
 
 	if (restart) {
-		int result = mcp230xx_reset(i2c, addr, type);
+		int result = mcp230xx_reset(i2c, addr, cfg->type);
 		if (result != 0) {
 			goto init_error_cleanup;
 		}
@@ -144,21 +161,21 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 
 	// Enable / Disable I2C slew rate
 	cfg_reg &= ~IOCON_REG_DISSLW;
-	cfg_reg |= (disable_slew_rate ? 1 : 0) << IOCON_REG_DISSLW_SHIFT;
+	cfg_reg |= (cfg->disable_slew_rate ? 1 : 0) << IOCON_REG_DISSLW_SHIFT;
 
 	// Set the type of the interrupt output
 	cfg_reg &= ~IOCON_REG_ODR;
-	cfg_reg |= int_type << IOCON_REG_ODR_SHIFT;
+	cfg_reg |= cfg->int_type << IOCON_REG_ODR_SHIFT;
 
 	// Set the interrupt polarity
 	cfg_reg &= ~IOCON_REG_INTPOL; // Always clear the bit
-	if (int_pol != MCP230XX_INT_POLARITY_NONE) {
-		cfg_reg |= int_pol << IOCON_REG_INTPOL_SHIFT;
+	if (cfg->int_pol != MCP230XX_INT_POLARITY_NONE) {
+		cfg_reg |= cfg->int_pol << IOCON_REG_INTPOL_SHIFT;
 	}
 
 	// Set mirror byte
 	cfg_reg &= ~IOCON_REG_MIRROR;
-	cfg_reg |= mirror << IOCON_REG_MIRROR_SHIFT;
+	cfg_reg |= cfg->mirror << IOCON_REG_MIRROR_SHIFT;
 
 	if (i2c_write8_8b(i2c, addr, iocon_reg, cfg_reg) != 0) {
 		goto init_error_cleanup;
@@ -166,7 +183,7 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 
 	ret->addr = addr;
 	ret->bus = bus;
-	ret->type = type;
+	ret->type = cfg->type;
 	return ret;
 
 init_error_cleanup:

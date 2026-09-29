@@ -46,7 +46,7 @@ typedef enum {
 } MCP230XX_TYPE;
 
 typedef enum {
-	MCP230XX_OPEN_DRAIN_INT = 1, // This overrides the interrupt polarity
+	MCP230XX_OPEN_DRAIN_INT = 1, // Requires MCP230XX_INT_POLARITY_NONE
 	MCP230XX_ACTIVE_DRIVER_INT = 0,
 } MCP230XX_INT_TYPE;
 
@@ -67,18 +67,11 @@ typedef enum {
 } MCP230XX_INPUT_CONFIG;
 
 /**
- * mcp230xx_init
+ * mcp230xx_config_t
  *
- * Initialize an MCP230XX peripheral with address "addr". This function currently
- * supports MCP23008 and MCP23017. You must only have one handle per device.
+ * The configuration mcp230xx_init applies to an MCP230XX. Every field must be
+ * set.
  *
- * Parameters:
- *   i2c (const i2c_interface_t*)    - The I2C interface to access the
- *                                     peripheral.
- *   addr (plc_i2c_addr_t)           - The I2C address of the peripheral.
- *   restart (bool)                  - true if you want to reset the peripheral
- *                                     (that is, set the registers to their
- *                                     default values).
  *   type (MCP230XX_TYPE)            - The chip's specific type.
  *   disable_slew_rate (bool)        - Set it to true if you want to disable the
  *                                     slew rate control of the SDA output.
@@ -86,10 +79,10 @@ typedef enum {
  *                                     MCP230XX either as an open-drain output,
  *                                     or an active driver output.
  *   int_pol (MCP230XX_INT_POLARITY) - The polarity of the interrupt output pin.
- *                                     It's only valid when the pin is
- *                                     configured as an active output. If you
- *                                     want to configure it as an open-drain
- *                                     output, you must set this argument to
+ *                                     With an active driver output, it must be
+ *                                     MCP230XX_INT_ACTIVE_HIGH or
+ *                                     MCP230XX_INT_ACTIVE_LOW. With an
+ *                                     open-drain output, it must be
  *                                     MCP230XX_INT_POLARITY_NONE.
  *   mirror (MCP230XX_MIRROR_INT)    - Configure the behaviour of the two
  *                                     interrupt pins. If mirrored, INTA and
@@ -98,6 +91,30 @@ typedef enum {
  *                                     interrupt occurs). Only useful on
  *                                     MCP23017. It must be
  *                                     MCP230XX_NO_MIRRORED_INT in other chips.
+ */
+typedef struct {
+	MCP230XX_TYPE type;
+	bool disable_slew_rate;
+	MCP230XX_INT_TYPE int_type;
+	MCP230XX_INT_POLARITY int_pol;
+	MCP230XX_MIRROR_INT mirror;
+} mcp230xx_config_t;
+
+/**
+ * mcp230xx_init
+ *
+ * Initialize an MCP230XX peripheral with address "addr". This function currently
+ * supports MCP23008 and MCP23017. You must only have one handle per device.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*)   - The I2C interface to access the
+ *                                    peripheral.
+ *   addr (plc_i2c_addr_t)          - The I2C address of the peripheral.
+ *   restart (bool)                 - true if you want to reset the peripheral
+ *                                    (that is, set the registers to their
+ *                                    default values) before applying cfg.
+ *   cfg (const mcp230xx_config_t*) - The configuration to apply. It is only
+ *                                    read during the call.
  *
  * Returns:
  *   mcp230xx_t* - Pointer to the initialized peripheral struct on success.
@@ -105,8 +122,9 @@ typedef enum {
  *
  * Errors:
  *   errno set to:
- *     - EINVAL   : int_type is MCP230XX_OPEN_DRAIN_INT while int_pol is not
- *                  MCP230XX_INT_POLARITY_NONE, or mirror is
+ *     - EFAULT   : Passed cfg is NULL.
+ *     - EINVAL   : int_type is not an MCP230XX_INT_TYPE value, int_pol doesn't
+ *                  match int_type (see mcp230xx_config_t), or mirror is
  *                  MCP230XX_MIRRORED_INT on a chip other than the MCP23017.
  *     - ENOMEM   : Out of memory during allocation.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
@@ -116,11 +134,7 @@ typedef enum {
 mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 			  plc_i2c_addr_t addr,
 			  bool restart,
-			  MCP230XX_TYPE type,
-			  bool disable_slew_rate,
-			  MCP230XX_INT_TYPE int_type,
-			  MCP230XX_INT_POLARITY int_pol,
-			  MCP230XX_MIRROR_INT mirror);
+			  const mcp230xx_config_t* cfg);
 
 /**
  * mcp230xx_deinit

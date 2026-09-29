@@ -129,6 +129,20 @@ static void expect_ads101x_reset_writes(void)
 				       0);
 }
 
+// Calls ads101x_init on the test bus and address, filling in the config.
+static ads101x_t* init_ads(bool restart,
+			   bool continuous_mode,
+			   ADS101X_GAIN_AMPLIFIER fsr,
+			   ADS101X_DATA_RATE dr)
+{
+	ads101x_config_t cfg;
+
+	cfg.continuous_mode = continuous_mode;
+	cfg.fsr = fsr;
+	cfg.dr = dr;
+	return ads101x_init(TEST_I2C, TEST_ADDR, restart, &cfg);
+}
+
 // Creates and initializes an ads101x_t via restart=true, fsr=4.096V, dr=fast.
 static ads101x_t* create_ads(bool continuous)
 {
@@ -141,12 +155,8 @@ static ads101x_t* create_ads(bool continuous)
 					       INIT_RESTART_CFG_SINGLE,
 				       0);
 
-	ads101x_t* ads = ads101x_init(TEST_I2C,
-				      TEST_ADDR,
-				      true,
-				      continuous,
-				      ADS101X_FSR_4_096V,
-				      FAST_DR);
+	ads101x_t* ads =
+		init_ads(true, continuous, ADS101X_FSR_4_096V, FAST_DR);
 	TEST_ASSERT_NOT_NULL(ads);
 	return ads;
 }
@@ -189,8 +199,7 @@ void test_ads101x_init_with_restart_packs_config_reg_in_single_mode(void)
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 
-	ads101x_t* ads = ads101x_init(
-		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR);
+	ads101x_t* ads = init_ads(true, false, ADS101X_FSR_4_096V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
 	destroy_ads(ads);
@@ -205,8 +214,7 @@ void test_ads101x_init_with_restart_packs_config_reg_in_continuous_mode(void)
 				       INIT_RESTART_CFG_CONTINUOUS,
 				       0);
 
-	ads101x_t* ads = ads101x_init(
-		TEST_I2C, TEST_ADDR, true, true, ADS101X_FSR_4_096V, FAST_DR);
+	ads101x_t* ads = init_ads(true, true, ADS101X_FSR_4_096V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
 	destroy_ads(ads);
@@ -221,8 +229,7 @@ void test_ads101x_init_without_restart_reads_then_patches_config_reg(void)
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x87A3, 0);
 
-	ads101x_t* ads = ads101x_init(
-		TEST_I2C, TEST_ADDR, false, false, ADS101X_FSR_1_024V, FAST_DR);
+	ads101x_t* ads = init_ads(false, false, ADS101X_FSR_1_024V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
 	destroy_ads(ads);
@@ -232,18 +239,14 @@ void test_ads101x_init_without_restart_in_continuous_mode_clears_os_and_mode_bit
 	void)
 {
 	// Device was left configured for single mode (OS=1, MODE=1); an init
-	// with set_continuous_mode=true must clear both, regardless of
+	// with continuous_mode=true must clear both, regardless of
 	// whatever was on the wire before.
 	expect_i2c_read8_16b(CONFIG_REG, 0x8103, 0);
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0003, 0);
 
-	ads101x_t* ads = ads101x_init(TEST_I2C,
-				      TEST_ADDR,
-				      false,
-				      true,
-				      ADS101X_FSR_6_144V,
-				      ADS101X_128SPS);
+	ads101x_t* ads =
+		init_ads(false, true, ADS101X_FSR_6_144V, ADS101X_128SPS);
 
 	TEST_ASSERT_NOT_NULL(ads);
 	destroy_ads(ads);
@@ -256,7 +259,7 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 	 * Exhaustively covers every CONFIG_REG value ads101x_init can
 	 * produce, across both entry paths (restart=true/false).
 	 *
-	 * When restart=false we don't vary set_continuous_mode/fsr/dr. Doing
+	 * When restart=false we don't vary continuous_mode/fsr/dr. Doing
 	 * so would only add cost without coverage, since ads101x_init's OS/MODE/
 	 * PGA/DR overwrite is proven for every value of those already by the
 	 * restart=true sweep above.
@@ -286,13 +289,11 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 							       cfg,
 							       0);
 
-				ads101x_t* ads = ads101x_init(
-					TEST_I2C,
-					TEST_ADDR,
-					true,
-					continuous,
-					(ADS101X_GAIN_AMPLIFIER)fsr,
-					(ADS101X_DATA_RATE)dr);
+				ads101x_t* ads =
+					init_ads(true,
+						 continuous,
+						 (ADS101X_GAIN_AMPLIFIER)fsr,
+						 (ADS101X_DATA_RATE)dr);
 				TEST_ASSERT_NOT_NULL(ads);
 				destroy_ads(ads);
 			}
@@ -322,16 +323,19 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 			i2c_write8_16b_ExpectAndReturn(
 				TEST_I2C, TEST_ADDR, CONFIG_REG, cfg, 0);
 
-			ads101x_t* ads = ads101x_init(TEST_I2C,
-						      TEST_ADDR,
-						      false,
-						      false,
-						      ADS101X_FSR_4_096V,
-						      FAST_DR);
+			ads101x_t* ads = init_ads(
+				false, false, ADS101X_FSR_4_096V, FAST_DR);
 			TEST_ASSERT_NOT_NULL(ads);
 			destroy_ads(ads);
 		}
 	}
+}
+
+void test_ads101x_init_fails_with_efault_for_a_null_config(void)
+{
+	errno = 0;
+	TEST_ASSERT_NULL(ads101x_init(TEST_I2C, TEST_ADDR, true, NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
 void test_ads101x_init_fails_when_the_high_threshold_reset_fails(void)
@@ -342,8 +346,7 @@ void test_ads101x_init_fails_when_the_high_threshold_reset_fails(void)
 				       HIGH_THRESHOLD_REG_RESET_VALUE,
 				       -1);
 
-	TEST_ASSERT_NULL(ads101x_init(
-		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR));
+	TEST_ASSERT_NULL(init_ads(true, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
 void test_ads101x_init_fails_when_the_low_threshold_reset_fails(void)
@@ -359,16 +362,14 @@ void test_ads101x_init_fails_when_the_low_threshold_reset_fails(void)
 				       LOW_THRESHOLD_REG_RESET_VALUE,
 				       -1);
 
-	TEST_ASSERT_NULL(ads101x_init(
-		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR));
+	TEST_ASSERT_NULL(init_ads(true, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
 void test_ads101x_init_fails_when_reading_the_config_reg_fails(void)
 {
 	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
 
-	TEST_ASSERT_NULL(ads101x_init(
-		TEST_I2C, TEST_ADDR, false, false, ADS101X_FSR_4_096V, FAST_DR));
+	TEST_ASSERT_NULL(init_ads(false, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
 void test_ads101x_init_fails_when_writing_the_config_reg_fails(void)
@@ -377,8 +378,7 @@ void test_ads101x_init_fails_when_writing_the_config_reg_fails(void)
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, -1);
 
-	TEST_ASSERT_NULL(ads101x_init(
-		TEST_I2C, TEST_ADDR, true, false, ADS101X_FSR_4_096V, FAST_DR));
+	TEST_ASSERT_NULL(init_ads(true, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
 /* --------------------------- ads101x_deinit ------------------------------- */
@@ -449,9 +449,7 @@ void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combinati
 						cfg,
 						0);
 
-					ads101x_t* ads = ads101x_init(
-						TEST_I2C,
-						TEST_ADDR,
+					ads101x_t* ads = init_ads(
 						false,
 						false,
 						(ADS101X_GAIN_AMPLIFIER)pga,
@@ -487,12 +485,8 @@ void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combinati
 			i2c_write8_16b_ExpectAndReturn(
 				TEST_I2C, TEST_ADDR, CONFIG_REG, cfg, 0);
 
-			ads101x_t* ads = ads101x_init(TEST_I2C,
-						      TEST_ADDR,
-						      false,
-						      true,
-						      ADS101X_FSR_4_096V,
-						      FAST_DR);
+			ads101x_t* ads = init_ads(
+				false, true, ADS101X_FSR_4_096V, FAST_DR);
 			TEST_ASSERT_NOT_NULL(ads);
 
 			i2c_write8_16b_ExpectAndReturn(TEST_I2C,
@@ -1269,8 +1263,7 @@ void test_ads101x_set_fs_waits_for_both_the_old_and_new_conversion_rate(void)
 
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0203, 0);
-	ads101x_t* ads = ads101x_init(
-		TEST_I2C, TEST_ADDR, true, true, ADS101X_FSR_4_096V, SLOW_DR);
+	ads101x_t* ads = init_ads(true, true, ADS101X_FSR_4_096V, SLOW_DR);
 	TEST_ASSERT_NOT_NULL(ads);
 
 	// DR bits replaced: SLOW_DR's 0x00 -> FAST_DR's 0xA0.

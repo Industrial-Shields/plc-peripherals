@@ -46,11 +46,11 @@
  * comment on DATA_RATES below.
  *
  * Uncomment USE_SINGLE_SHOT_READ below to demonstrate single-shot mode
- * instead. That macro guards BOTH ads101x_init's set_continuous_mode
- * argument and which read function loop() calls, so they can't drift out
- * of sync -- mismatching them (e.g. calling ads101x_single_read against a
- * device still in continuous mode) is a silent no-op, not an error: see
- * ads101x_single_read's docs in peripheral-ads101x.h.
+ * instead. That macro guards BOTH the continuous_mode field of the
+ * ads101x_config_t given to ads101x_init and which read function loop()
+ * calls, so they can't drift out of sync -- mismatching them (e.g. calling
+ * ads101x_single_read on a device initialized in continuous mode) fails
+ * with EINVAL: see ads101x_single_read's docs in peripheral-ads101x.h.
  *
  * Other functions in this driver (see include/peripheral-ads101x.h), not
  * used here since this example only focuses on reading:
@@ -148,17 +148,20 @@ void setup()
 		return;
 	}
 
-	// restart=true: reset the ADS101X registers to their defaults first.
+	ads101x_config_t cfg;
 #ifdef USE_SINGLE_SHOT_READ
-	// set_continuous_mode=false: single-shot mode -- required for
-	// ads101x_single_read()'s OS-bit trigger to actually do anything.
-	ads = ads101x_init(
-		i2c, ADS101X_ADDR, true, false, ADS101X_FSR, DATA_RATES[0]);
+	// Single-shot mode -- required for ads101x_single_read()'s OS-bit
+	// trigger to actually do anything.
+	cfg.continuous_mode = false;
 #else
-	// set_continuous_mode=true: run free-running continuous conversions.
-	ads = ads101x_init(
-		i2c, ADS101X_ADDR, true, true, ADS101X_FSR, DATA_RATES[0]);
+	// Run free-running continuous conversions.
+	cfg.continuous_mode = true;
 #endif
+	cfg.fsr = ADS101X_FSR;
+	cfg.dr = DATA_RATES[0];
+
+	// restart=true: reset the ADS101X registers to their defaults first.
+	ads = ads101x_init(i2c, ADS101X_ADDR, true, &cfg);
 	if (ads == NULL) {
 		Serial.print(F("ads101x_init failed, errno="));
 		Serial.println(errno);

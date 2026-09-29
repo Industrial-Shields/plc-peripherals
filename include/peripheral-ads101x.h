@@ -70,18 +70,11 @@ typedef enum {
 } ADS101X_INPUT;
 
 /**
- * ads101x_init
+ * ads101x_config_t
  *
- * Initialize an ADS101X peripheral with address "addr". This function currently
- * supports ADS1015 only. You must only have one handle per device.
+ * The configuration ads101x_init applies to an ADS101X. Every field must be set.
  *
- * Parameters:
- *   i2c (const i2c_interface_t*) - The I2C interface to access the peripheral.
- *   addr (plc_i2c_addr_t)        - The I2C address of the peripheral.
- *   restart (bool)               - true if you want to reset the peripheral
- *                                  (that is, set the registers to their
- *                                  default values).
- *   set_continuous_mode (bool)   - true to put the ADS101X in continuous
+ *   continuous_mode (bool)       - true to put the ADS101X in continuous
  *                                  conversion mode, false to put it in
  *                                  single-shot mode. This setting will apply
  *                                  regardless of whether the restart is true or
@@ -94,6 +87,28 @@ typedef enum {
  *                                  be picked up. This setting will apply
  *                                  regardless of whether the restart is true or
  *                                  false.
+ */
+typedef struct {
+	bool continuous_mode;
+	ADS101X_GAIN_AMPLIFIER fsr;
+	ADS101X_DATA_RATE dr;
+} ads101x_config_t;
+
+/**
+ * ads101x_init
+ *
+ * Initialize an ADS101X peripheral with address "addr". This function currently
+ * supports ADS1015 only. You must only have one handle per device.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*)  - The I2C interface to access the
+ *                                   peripheral.
+ *   addr (plc_i2c_addr_t)         - The I2C address of the peripheral.
+ *   restart (bool)                - true if you want to reset the peripheral
+ *                                   (that is, set the registers to their
+ *                                   default values) before applying cfg.
+ *   cfg (const ads101x_config_t*) - The configuration to apply. It is only
+ *                                   read during the call.
  *
  * Returns:
  *   ads101x_t* - Pointer to the initialized peripheral struct on success.
@@ -101,6 +116,7 @@ typedef enum {
  *
  * Errors:
  *   errno set to:
+ *     - EFAULT   : Passed cfg is NULL.
  *     - ENOMEM   : Out of memory during allocation.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
@@ -109,9 +125,7 @@ typedef enum {
 ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
 			bool restart,
-			bool set_continuous_mode,
-			ADS101X_GAIN_AMPLIFIER fsr,
-			ADS101X_DATA_RATE dr);
+			const ads101x_config_t* cfg);
 
 /**
  * ads101x_deinit
@@ -185,7 +199,7 @@ int ads101x_unprotect(ads101x_t* ads);
  * Trigger a single-shot conversion of an ADS101X channel, and retrieve its
  * reading. This function blocks for one conversion time at the current data
  * rate before reading the result. To use it, the ADS101X must be in single-shot
- * mode (ads101x_init must have been called with set_continuous_mode=false). It
+ * mode (ads101x_init must have been called with continuous_mode=false). It
  * returns the reading as a signed number.
  *
  * Per the ADS1015 datasheet (SBAS473F, section 7.4.2.1 and the OS bit's entry
@@ -229,7 +243,7 @@ int ads101x_single_read(const i2c_interface_t* i2c,
  * Trigger a single-shot conversion of an ADS101X channel, and retrieve its
  * reading. This function blocks for one conversion time at the current data
  * rate before reading the result. To use it, the ADS101X must be in single-shot
- * mode (ads101x_init must have been called with set_continuous_mode=false). It
+ * mode (ads101x_init must have been called with continuous_mode=false). It
  * returns the reading as a signed number.
  *
  * Because of the device offset, a single-ended input close to 0V can still read
@@ -269,7 +283,7 @@ int ads101x_unsigned_single_read(const i2c_interface_t* i2c,
  *
  * Retrieve the latest reading of an ADS101X channel. To use it, the ADS101X
  * must be in continuous mode (ads101x_init must have been called with
- * set_continuous_mode=true).
+ * continuous_mode=true).
  *
  * This function never triggers a conversion: it relies on continuous mode's
  * free-running conversions. If the requested channel is the one being
@@ -310,7 +324,7 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
  *
  * Retrieve the latest reading of an ADS101X channel. To use it, the ADS101X
  * must be in continuous mode (ads101x_init must have been called with
- * set_continuous_mode=true).
+ * continuous_mode=true).
  *
  * Because of the device offset, a single-ended input close to 0V can still read
  * slightly negative (SBAS473F, section 7.5.4). Readings from -8 to -1 are

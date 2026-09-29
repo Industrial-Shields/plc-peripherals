@@ -84,11 +84,11 @@ static void assert_skipped_write(uint32_t calls_before)
 }
 
 // Creates and initializes an ltc2309_t; always writes INITIAL_STATE.
-static ltc2309_t* create_ltc(bool bip)
+static ltc2309_t* create_ltc(void)
 {
 	fake_i2c_write_op.retval = 1;
 
-	ltc2309_t* ltc = ltc2309_init(TEST_I2C, TEST_ADDR, bip);
+	ltc2309_t* ltc = ltc2309_init(TEST_I2C, TEST_ADDR);
 	TEST_ASSERT_NOT_NULL(ltc);
 	assert_last_write_was(INITIAL_STATE);
 	return ltc;
@@ -99,9 +99,9 @@ static void destroy_ltc(ltc2309_t* ltc)
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(TEST_I2C, ltc, false));
 }
 
-static ltc2309_t* create_protected_ltc(bool bip)
+static ltc2309_t* create_protected_ltc(void)
 {
-	ltc2309_t* ltc = create_ltc(bip);
+	ltc2309_t* ltc = create_ltc();
 
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(TEST_I2C, ltc));
 	return ltc;
@@ -138,7 +138,7 @@ void test_ltc2309_init_writes_initial_state_and_waits_trefwake(void)
 	struct timespec start, end;
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
-	ltc2309_t* ltc = ltc2309_init(TEST_I2C, TEST_ADDR, true);
+	ltc2309_t* ltc = ltc2309_init(TEST_I2C, TEST_ADDR);
 
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
@@ -157,7 +157,7 @@ void test_ltc2309_init_fails_with_efault_when_i2c_is_null(void)
 	fake_i2c_bus_retval = -1;
 
 	errno = 0;
-	TEST_ASSERT_NULL(ltc2309_init(NULL, TEST_ADDR, true));
+	TEST_ASSERT_NULL(ltc2309_init(NULL, TEST_ADDR));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
@@ -165,20 +165,20 @@ void test_ltc2309_init_fails_when_the_initial_write_fails(void)
 {
 	fake_i2c_write_op.retval = -1;
 
-	TEST_ASSERT_NULL(ltc2309_init(TEST_I2C, TEST_ADDR, true));
+	TEST_ASSERT_NULL(ltc2309_init(TEST_I2C, TEST_ADDR));
 }
 
 /* --------------------------- ltc2309_deinit ------------------------------- */
 
 void test_ltc2309_deinit_without_shutdown_just_frees(void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(TEST_I2C, ltc, false));
 }
 
 void test_ltc2309_deinit_with_shutdown_writes_the_shutdown_byte(void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(TEST_I2C, ltc, true));
 	assert_last_write_was(SHUTDOWN);
@@ -186,7 +186,7 @@ void test_ltc2309_deinit_with_shutdown_writes_the_shutdown_byte(void)
 
 void test_ltc2309_deinit_fails_when_the_shutdown_write_fails(void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 
 	fake_i2c_write_op.retval = -1;
 
@@ -205,7 +205,7 @@ void test_ltc2309_deinit_fails_with_efault_for_null(void)
 
 void test_ltc2309_rejects_an_interface_for_another_bus(void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 
 	// Same interface pointer, but it now reports a different bus.
 	fake_i2c_bus = TEST_BUS + 1;
@@ -213,7 +213,7 @@ void test_ltc2309_rejects_an_interface_for_another_bus(void)
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_signed(
+		ltc2309_read_differential_signed(
 			TEST_I2C, ltc, LTC2309_P0_N1, &(int16_t){ 0 }, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
@@ -228,23 +228,23 @@ void test_ltc2309_rejects_an_interface_for_another_bus(void)
 
 /* -------------------------- ltc2309_unprotect ------------------------------ */
 
-/* ------------------------- ltc2309_read_signed ----------------------------- */
+/* ------------------------- ltc2309_read_differential_signed ----------------------------- */
 
-void test_ltc2309_read_signed_fails_with_efault_for_null_ltc(void)
+void test_ltc2309_read_differential_signed_fails_with_efault_for_null_ltc(void)
 {
 	int16_t value;
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_signed(
+		ltc2309_read_differential_signed(
 			TEST_I2C, NULL, LTC2309_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_ltc2309_read_signed_returns_a_positive_reading(void)
+void test_ltc2309_read_differential_signed_returns_a_positive_reading(void)
 {
-	ltc2309_t* ltc = create_ltc(true); // starts on P0_N1 (cmd=0x00)
+	ltc2309_t* ltc = create_ltc(); // starts on P0_N1 (cmd=0x00)
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
@@ -252,7 +252,8 @@ void test_ltc2309_read_signed_returns_a_positive_reading(void)
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 
 	assert_skipped_write(writes_before); // P0_N1 is already the cached cmd
 	TEST_ASSERT_EQUAL_INT16(255, value);
@@ -260,27 +261,29 @@ void test_ltc2309_read_signed_returns_a_positive_reading(void)
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_returns_the_maximally_negative_reading(void)
+void test_ltc2309_read_differential_signed_returns_the_maximally_negative_reading(
+	void)
 {
 	// Regression test for avoiding an implementation-defined right shift
 	// on a negative int16_t: 0x8000 must map to -2048, the most negative
 	// value the 12-bit 2's complement conversion result can represent.
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x80, 0x00 };
 	fake_i2c_read_answers(reading, 2);
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT16(-2048, value);
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_writes_on_a_pair_change(void)
+void test_ltc2309_read_differential_signed_writes_on_a_pair_change(void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
@@ -288,7 +291,8 @@ void test_ltc2309_read_signed_writes_on_a_pair_change(void)
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
 
 	assert_wrote_cmd(writes_before,
 			 LTC2309_P2_N3 << COMMAND_BYTE_CHANNEL_SHIFT);
@@ -296,44 +300,49 @@ void test_ltc2309_read_signed_writes_on_a_pair_change(void)
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_skips_the_write_on_the_same_pair(void)
+void test_ltc2309_read_differential_signed_skips_the_write_on_the_same_pair(void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
 
 	uint32_t writes_before = fake_i2c_write_op.calls;
 	fake_i2c_read_answers(reading, 2);
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
 
 	assert_skipped_write(writes_before);
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_clears_high_channel_bit_on_a_low_pair_switch(void)
+void test_ltc2309_read_differential_signed_clears_high_channel_bit_on_a_low_pair_switch(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 
 	fake_i2c_read_answers(reading, 2);
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P1_N0, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P1_N0, &value, 1000));
 
 	fake_i2c_read_answers(reading, 2);
 	uint32_t writes_before = fake_i2c_write_op.calls;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 
 	assert_wrote_cmd(writes_before,
 			 LTC2309_P0_N1 << COMMAND_BYTE_CHANNEL_SHIFT);
@@ -341,23 +350,23 @@ void test_ltc2309_read_signed_clears_high_channel_bit_on_a_low_pair_switch(void)
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_selects_every_differential_pair(void)
+void test_ltc2309_read_differential_signed_selects_every_differential_pair(void)
 {
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 
 	for (uint8_t idx = 0; idx <= 0b111; idx++) {
-		ltc2309_t* ltc = create_ltc(true);
+		ltc2309_t* ltc = create_ltc();
 		fake_i2c_read_answers(reading, 2);
 
 		uint32_t writes_before = fake_i2c_write_op.calls;
 		int16_t value;
-		TEST_ASSERT_EQUAL_INT(
-			0,
-			ltc2309_read_signed(TEST_I2C,
-					    ltc,
-					    (LTC2309_DIFF_INPUT)idx,
-					    &value,
-					    1000));
+		TEST_ASSERT_EQUAL_INT(0,
+				      ltc2309_read_differential_signed(
+					      TEST_I2C,
+					      ltc,
+					      (LTC2309_DIFF_INPUT)idx,
+					      &value,
+					      1000));
 
 		if (idx == 0) {
 			// P0_N1 (index 0) is already the cmd byte cmd starts at.
@@ -372,37 +381,42 @@ void test_ltc2309_read_signed_selects_every_differential_pair(void)
 	}
 }
 
-void test_ltc2309_read_signed_fails_when_writing_the_command_byte_fails(void)
+void test_ltc2309_read_differential_signed_fails_when_writing_the_command_byte_fails(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 
 	fake_i2c_write_op.retval = -1;
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_fails_when_reading_the_conversion_fails(void)
+void test_ltc2309_read_differential_signed_fails_when_reading_the_conversion_fails(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 
 	fake_i2c_read_op.retval = -1;
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_fails_with_erange_for_a_bad_low_nibble(void)
+void test_ltc2309_read_differential_signed_fails_with_erange_for_a_bad_low_nibble(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF1 }; // low nibble != 0
 	fake_i2c_read_answers(reading, 2);
 
@@ -410,56 +424,45 @@ void test_ltc2309_read_signed_fails_with_erange_for_a_bad_low_nibble(void)
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_fails_with_efault_for_null_read_value(void)
+void test_ltc2309_read_differential_signed_fails_with_efault_for_null_read_value(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, NULL, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, NULL, 1000));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_fails_with_einval_when_device_is_unipolar(void)
-{
-	ltc2309_t* ltc = create_ltc(false);
+/* ------------------------ ltc2309_read_single_ended_unsigned ---------------------------- */
 
-	errno = 0;
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-
-	destroy_ltc(ltc);
-}
-
-/* ------------------------ ltc2309_read_unsigned ---------------------------- */
-
-void test_ltc2309_read_unsigned_fails_with_efault_for_null_ltc(void)
+void test_ltc2309_read_single_ended_unsigned_fails_with_efault_for_null_ltc(void)
 {
 	uint16_t value;
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_unsigned(
+		ltc2309_read_single_ended_unsigned(
 			TEST_I2C, NULL, LTC2309_CH0, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_ltc2309_read_unsigned_returns_a_positive_reading(void)
+void test_ltc2309_read_single_ended_unsigned_returns_a_positive_reading(void)
 {
-	ltc2309_t* ltc = create_ltc(false); // starts unipolar (cmd=0x08)
+	ltc2309_t* ltc = create_ltc(); // starts on INITIAL_STATE (cmd=0x00)
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
@@ -467,7 +470,8 @@ void test_ltc2309_read_unsigned_returns_a_positive_reading(void)
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
 	// SD bit must flip to single-ended: cmd changes even on channel 0.
 	assert_wrote_cmd(writes_before, COMMAND_BYTE_SGL | COMMAND_BYTE_UNI);
@@ -476,68 +480,74 @@ void test_ltc2309_read_unsigned_returns_a_positive_reading(void)
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_unsigned_never_sign_extends_the_top_bit(void)
+void test_ltc2309_read_single_ended_unsigned_never_sign_extends_the_top_bit(void)
 {
 	// Straight binary: a top-bit-set code is still a large positive
-	// value, unlike read_signed's 2's complement interpretation of the
+	// value, unlike read_differential_signed's 2's complement interpretation of the
 	// same wire bytes.
-	ltc2309_t* ltc = create_ltc(false);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0xFF, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(4095, value);
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_unsigned_skips_the_write_on_the_same_channel(void)
+void test_ltc2309_read_single_ended_unsigned_skips_the_write_on_the_same_channel(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(false);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
 	uint32_t writes_before = fake_i2c_write_op.calls;
 	fake_i2c_read_answers(reading, 2);
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
 	assert_skipped_write(writes_before);
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_unsigned_clears_high_channel_bit_on_a_low_channel_switch(
+void test_ltc2309_read_single_ended_unsigned_clears_high_channel_bit_on_a_low_channel_switch(
 	void)
 {
-	// Mirror of the read_signed regression above: switching from a
+	// Mirror of the read_differential_signed regression above: switching from a
 	// high-index channel (CH1, mux_field=4) to a low-index one (CH0,
 	// mux_field=0) on the SAME handle must actually clear mux bit 2
 	// (0x40) in the command byte, not leave it stuck from the OR-only
 	// rebuild.
-	ltc2309_t* ltc = create_ltc(false);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 
 	fake_i2c_read_answers(reading, 2);
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH1, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH1, &value, 1000));
 
 	fake_i2c_read_answers(reading, 2);
 	uint32_t writes_before = fake_i2c_write_op.calls;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
 	assert_wrote_cmd(
 		writes_before,
@@ -547,22 +557,23 @@ void test_ltc2309_read_unsigned_clears_high_channel_bit_on_a_low_channel_switch(
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_unsigned_selects_every_channel(void)
+void test_ltc2309_read_single_ended_unsigned_selects_every_channel(void)
 {
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 
 	for (uint8_t idx = 0; idx <= 0b111; idx++) {
-		ltc2309_t* ltc = create_ltc(false);
+		ltc2309_t* ltc = create_ltc();
 		fake_i2c_read_answers(reading, 2);
 
 		uint32_t writes_before = fake_i2c_write_op.calls;
 		uint16_t value;
-		TEST_ASSERT_EQUAL_INT(0,
-				      ltc2309_read_unsigned(TEST_I2C,
-							    ltc,
-							    (LTC2309_INPUT)idx,
-							    &value,
-							    1000));
+		TEST_ASSERT_EQUAL_INT(
+			0,
+			ltc2309_read_single_ended_unsigned(TEST_I2C,
+							   ltc,
+							   (LTC2309_INPUT)idx,
+							   &value,
+							   1000));
 
 		// SGL|UNI must always be set, so every channel writes, even 0.
 		assert_wrote_cmd(
@@ -574,37 +585,42 @@ void test_ltc2309_read_unsigned_selects_every_channel(void)
 	}
 }
 
-void test_ltc2309_read_unsigned_fails_when_writing_the_command_byte_fails(void)
+void test_ltc2309_read_single_ended_unsigned_fails_when_writing_the_command_byte_fails(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(false);
+	ltc2309_t* ltc = create_ltc();
 
 	fake_i2c_write_op.retval = -1;
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_unsigned_fails_when_reading_the_conversion_fails(void)
+void test_ltc2309_read_single_ended_unsigned_fails_when_reading_the_conversion_fails(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(false);
+	ltc2309_t* ltc = create_ltc();
 
 	fake_i2c_read_op.retval = -1;
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_unsigned_fails_with_erange_for_a_bad_low_nibble(void)
+void test_ltc2309_read_single_ended_unsigned_fails_with_erange_for_a_bad_low_nibble(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(false);
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF1 }; // low nibble != 0
 	fake_i2c_read_answers(reading, 2);
 
@@ -612,52 +628,142 @@ void test_ltc2309_read_unsigned_fails_with_erange_for_a_bad_low_nibble(void)
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_unsigned_fails_with_efault_for_null_read_value(void)
+void test_ltc2309_read_single_ended_unsigned_fails_with_efault_for_null_read_value(
+	void)
 {
-	ltc2309_t* ltc = create_ltc(false);
+	ltc2309_t* ltc = create_ltc();
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ltc2309_read_single_ended_unsigned(
+				      TEST_I2C, ltc, LTC2309_CH0, NULL, 1000));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_unsigned_fails_with_einval_when_device_is_bipolar(void)
+/* ------------------- ltc2309_read_single_ended_signed --------------------- */
+
+void test_ltc2309_read_single_ended_signed_writes_sgl_with_bip(void)
 {
-	// Per the datasheet's Output Data Format: the conversion is only
-	// straight binary in unipolar range, so read_unsigned refuses a
-	// device initialized with bip=true (LTC2309_IS_BIPOLAR gated check).
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
+	static const uint8_t reading[2] = { 0x80, 0x00 };
+	fake_i2c_read_answers(reading, 2);
+
+	uint32_t writes_before = fake_i2c_write_op.calls;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_single_ended_signed(
+			TEST_I2C, ltc, LTC2309_CH3, &value, 1000));
+
+	assert_wrote_cmd(
+		writes_before,
+		(uint8_t)(COMMAND_BYTE_SGL | COMMAND_BYTE_BIP |
+			  (LTC2309_CH3 << COMMAND_BYTE_CHANNEL_SHIFT)));
+	TEST_ASSERT_EQUAL_INT16(-2048, value);
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_read_single_ended_signed_fails_with_efault_for_null_read_value(
+	void)
+{
+	ltc2309_t* ltc = create_ltc();
 
 	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ltc2309_read_single_ended_signed(
+				      TEST_I2C, ltc, LTC2309_CH0, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	destroy_ltc(ltc);
+}
+
+/* ------------------ ltc2309_read_differential_unsigned -------------------- */
+
+void test_ltc2309_read_differential_unsigned_writes_diff_with_uni(void)
+{
+	ltc2309_t* ltc = create_ltc();
+	static const uint8_t reading[2] = { 0xFF, 0xF0 };
+	fake_i2c_read_answers(reading, 2);
+
+	uint32_t writes_before = fake_i2c_write_op.calls;
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_unsigned(
+			TEST_I2C, ltc, LTC2309_P5_N4, &value, 1000));
+
+	assert_wrote_cmd(
+		writes_before,
+		(uint8_t)(COMMAND_BYTE_DIFF | COMMAND_BYTE_UNI |
+			  (LTC2309_P5_N4 << COMMAND_BYTE_CHANNEL_SHIFT)));
+	TEST_ASSERT_EQUAL_UINT16(4095, value);
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_read_differential_unsigned_fails_with_efault_for_null_read_value(
+	void)
+{
+	ltc2309_t* ltc = create_ltc();
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+		ltc2309_read_differential_unsigned(
+			TEST_I2C, ltc, LTC2309_P0_N1, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	destroy_ltc(ltc);
+}
+
+/* ---------------------------- range switching ----------------------------- */
+
+void test_ltc2309_switching_the_range_on_the_same_channel_rewrites_the_command(
+	void)
+{
+	ltc2309_t* ltc = create_ltc();
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+
+	fake_i2c_read_answers(reading, 2);
+	uint16_t unsigned_value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_unsigned(
+			TEST_I2C, ltc, LTC2309_P0_N1, &unsigned_value, 1000));
+
+	fake_i2c_read_answers(reading, 2);
+	uint32_t writes_before = fake_i2c_write_op.calls;
+	int16_t signed_value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &signed_value, 1000));
+
+	assert_wrote_cmd(writes_before, COMMAND_BYTE_DIFF | COMMAND_BYTE_BIP);
 
 	destroy_ltc(ltc);
 }
 
 void test_ltc2309_deinit_also_unprotects_when_protected(void)
 {
-	ltc2309_t* ltc = create_protected_ltc(true);
+	ltc2309_t* ltc = create_protected_ltc();
 
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_deinit(TEST_I2C, ltc, false));
 }
 
 void test_ltc2309_deinit_fails_when_the_unprotect_fails(void)
 {
-	ltc2309_t* ltc = create_protected_ltc(true);
+	ltc2309_t* ltc = create_protected_ltc();
 
 	TEST_ASSERT_EQUAL_INT(-1, ltc2309_deinit(TEST_I2C, ltc, false));
 
@@ -673,7 +779,7 @@ void test_ltc2309_protect_fails_with_einval_for_null(void)
 
 void test_ltc2309_protect_adds_the_resource_for_its_bus_and_address(void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_protect(TEST_I2C, ltc));
 
@@ -682,7 +788,7 @@ void test_ltc2309_protect_adds_the_resource_for_its_bus_and_address(void)
 
 void test_ltc2309_protect_fails_when_the_bus_cant_be_read(void)
 {
-	ltc2309_t* ltc = create_ltc(true);
+	ltc2309_t* ltc = create_ltc();
 
 	TEST_ASSERT_EQUAL_INT(-1, ltc2309_protect(TEST_I2C, ltc));
 
@@ -691,7 +797,7 @@ void test_ltc2309_protect_fails_when_the_bus_cant_be_read(void)
 
 void test_ltc2309_protect_returns_1_if_already_protected(void)
 {
-	ltc2309_t* ltc = create_protected_ltc(true);
+	ltc2309_t* ltc = create_protected_ltc();
 
 	TEST_ASSERT_EQUAL_INT(1, ltc2309_protect(TEST_I2C, ltc));
 
@@ -707,7 +813,7 @@ void test_ltc2309_unprotect_fails_with_einval_for_null(void)
 
 void test_ltc2309_unprotect_removes_the_resource(void)
 {
-	ltc2309_t* ltc = create_protected_ltc(true);
+	ltc2309_t* ltc = create_protected_ltc();
 
 	TEST_ASSERT_EQUAL_INT(0, ltc2309_unprotect(ltc));
 
@@ -716,7 +822,7 @@ void test_ltc2309_unprotect_removes_the_resource(void)
 
 void test_ltc2309_unprotect_fails_when_the_resource_cant_be_removed(void)
 {
-	ltc2309_t* ltc = create_protected_ltc(true);
+	ltc2309_t* ltc = create_protected_ltc();
 
 	TEST_ASSERT_EQUAL_INT(-1, ltc2309_unprotect(ltc));
 
@@ -725,16 +831,16 @@ void test_ltc2309_unprotect_fails_when_the_resource_cant_be_removed(void)
 
 void test_ltc2309_unprotect_returns_1_if_already_unprotected(void)
 {
-	ltc2309_t* ltc = create_protected_ltc(true);
+	ltc2309_t* ltc = create_protected_ltc();
 
 	TEST_ASSERT_EQUAL_INT(1, ltc2309_unprotect(ltc));
 
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_when_protected_locks_and_unlocks(void)
+void test_ltc2309_read_differential_signed_when_protected_locks_and_unlocks(void)
 {
-	ltc2309_t* ltc = create_protected_ltc(true);
+	ltc2309_t* ltc = create_protected_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 
 	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
@@ -746,35 +852,16 @@ void test_ltc2309_read_signed_when_protected_locks_and_unlocks(void)
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 
 	destroy_protected_ltc(ltc);
 }
 
-void test_ltc2309_read_signed_unlocks_when_bip_mismatched_and_protected(void)
+void test_ltc2309_read_single_ended_unsigned_when_protected_locks_and_unlocks(
+	void)
 {
-	// Regression test: the EINVAL bip-mismatch branch must release the
-	// lock it already took before returning, not bail out early.
-	ltc2309_t* ltc = create_protected_ltc(false);
-
-	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
-	plc_mutex_acquire_IgnoreArg_mutex();
-	plc_mutex_release_ExpectAndReturn(NULL, 0);
-	plc_mutex_release_IgnoreArg_mutex();
-
-	errno = 0;
-	int16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1,
-		ltc2309_read_signed(TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-
-	destroy_protected_ltc(ltc);
-}
-
-void test_ltc2309_read_unsigned_when_protected_locks_and_unlocks(void)
-{
-	ltc2309_t* ltc = create_protected_ltc(false);
+	ltc2309_t* ltc = create_protected_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 
 	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
@@ -786,30 +873,8 @@ void test_ltc2309_read_unsigned_when_protected_locks_and_unlocks(void)
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
-
-	destroy_protected_ltc(ltc);
-}
-
-void test_ltc2309_read_unsigned_unlocks_when_bip_mismatched_and_protected(void)
-{
-	// Regression test: the EINVAL bip-mismatch branch must release the
-	// lock it already took before returning, not bail out early. If it
-	// doesn't, plc_resource_unlock_ExpectAndReturn below goes unmet and
-	// CMock fails this test.
-	ltc2309_t* ltc = create_protected_ltc(true);
-
-	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
-	plc_mutex_acquire_IgnoreArg_mutex();
-	plc_mutex_release_ExpectAndReturn(NULL, 0);
-	plc_mutex_release_IgnoreArg_mutex();
-
-	errno = 0;
-	uint16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		-1,
-		ltc2309_read_unsigned(TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
 	destroy_protected_ltc(ltc);
 }

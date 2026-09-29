@@ -37,8 +37,6 @@ static const uint8_t SHUTDOWN        = 0b00000100;
 #define COMMAND_BYTE_BIP                                                    0x00
 // clang-format on
 
-#define LTC2309_IS_BIPOLAR(ltc) (!((ltc)->cmd & COMMAND_BYTE_UNI))
-
 struct _ltc2309_t {
 	plc_i2c_addr_t addr;
 	uint8_t bus;
@@ -49,8 +47,7 @@ struct _ltc2309_t {
 
 #define LTC2309_UNLOCK(ltc) ((void)(ltc))
 
-ltc2309_t*
-ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
+ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr)
 {
 	ltc2309_t* ret;
 	uint8_t bus;
@@ -67,7 +64,7 @@ ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
 
 	ret->addr = addr;
 	ret->bus = bus;
-	ret->cmd = INITIAL_STATE | (bip ? COMMAND_BYTE_BIP : COMMAND_BYTE_UNI);
+	ret->cmd = INITIAL_STATE;
 
 	if (i2c_write(i2c, addr, &INITIAL_STATE, sizeof(INITIAL_STATE)) != 1) {
 		free(ret);
@@ -140,128 +137,156 @@ static inline int16_t ltc2309_conversion_reg_to_value(uint16_t read_value)
 static int ltc2309_read(const i2c_interface_t* i2c,
 			ltc2309_t* ltc,
 			uint8_t mux_field,
+			bool diff,
+			bool bip,
 			uint16_t* conversion,
-			bool diff)
+			uint32_t timeout_ms)
 {
+	uint8_t buffer[2];
+	int ret;
+
+	if (ltc == NULL || conversion == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
 	if (mux_field > 0b111) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	uint8_t diff_value = diff ? COMMAND_BYTE_DIFF : COMMAND_BYTE_SGL;
-	uint8_t new_mux = mux_field << COMMAND_BYTE_CHANNEL_SHIFT;
-	uint8_t new_cmd = ltc->cmd;
-	uint8_t buffer[2];
+	if (i2c_check_bus(i2c, ltc->bus) != 0) {
+		return -1;
+	}
 
-	new_cmd &= (~COMMAND_BYTE_CHANNEL) & (~COMMAND_BYTE_SD);
-	new_cmd |= new_mux | diff_value;
+	/*
+	 * Per the datasheet's Output Data Format (p.15), the UNI bit picks the
+	 * range of every conversion: straight binary when unipolar, 2's
+	 * complement when bipolar. It is sent with each command, so every read
+	 * can pick its own.
+	 */
+	uint8_t new_cmd = ltc->cmd;
+	new_cmd &= ~(COMMAND_BYTE_CHANNEL | COMMAND_BYTE_SD | COMMAND_BYTE_UNI);
+	new_cmd |= mux_field << COMMAND_BYTE_CHANNEL_SHIFT;
+	new_cmd |= diff ? COMMAND_BYTE_DIFF : COMMAND_BYTE_SGL;
+	new_cmd |= bip ? COMMAND_BYTE_BIP : COMMAND_BYTE_UNI;
+
+	LTC2309_LOCK(ltc, timeout_ms);
+
 	if (new_cmd != ltc->cmd) {
 		if (i2c_write(i2c, ltc->addr, &new_cmd, 1) != 1) {
-			return -1;
+			ret = -1;
+			goto ltc2309_read_exit;
 		}
 		ltc->cmd = new_cmd;
 		usleep(5); // It must wait 1.8 us minimum before reading
 	}
 
 	if (i2c_read(i2c, ltc->addr, buffer, 2) != 2) {
-		return -1;
+		ret = -1;
+		goto ltc2309_read_exit;
 	}
 
 	*conversion = ((uint16_t)buffer[0] << 8) | buffer[1];
 	if ((*conversion & 0x000F) != 0) {
 		// Last 4 bits were not 0, invalid conversion
 		errno = ERANGE;
-		return -1;
+		ret = -1;
+		goto ltc2309_read_exit;
 	}
 
-	return 0;
+	ret = 0;
+
+ltc2309_read_exit:
+	LTC2309_UNLOCK(ltc);
+
+	return ret;
 }
 
-int ltc2309_read_signed(const i2c_interface_t* i2c,
-			ltc2309_t* ltc,
-			LTC2309_DIFF_INPUT index,
-			int16_t* read_value,
-			uint32_t timeout_ms)
+static int ltc2309_read_signed(const i2c_interface_t* i2c,
+			       ltc2309_t* ltc,
+			       uint8_t mux_field,
+			       bool diff,
+			       int16_t* read_value,
+			       uint32_t timeout_ms)
 {
 	uint16_t conversion;
-	int ret;
 
-	if (ltc == NULL || read_value == NULL) {
+	if (read_value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, ltc->bus) != 0) {
+	if (ltc2309_read(
+		    i2c, ltc, mux_field, diff, true, &conversion, timeout_ms) !=
+	    0) {
 		return -1;
-	}
-
-	LTC2309_LOCK(ltc, timeout_ms);
-
-	if (!LTC2309_IS_BIPOLAR(ltc)) {
-		/*
-		 * Per the datasheet's Output Data Format (p.15): the conversion
-		 * result is 2's complement only when the UNI bit selects bipolar
-		 * range.
-		 */
-		errno = EINVAL;
-		ret = -1;
-		goto ltc2309_read_signed_exit;
-	}
-
-	if (ltc2309_read(i2c, ltc, (uint8_t)index, &conversion, true) != 0) {
-		ret = -1;
-		goto ltc2309_read_signed_exit;
 	}
 
 	*read_value = ltc2309_conversion_reg_to_value(conversion);
-	ret = 0;
-
-ltc2309_read_signed_exit:
-	LTC2309_UNLOCK(ltc);
-
-	return ret;
+	return 0;
 }
 
-int ltc2309_read_unsigned(const i2c_interface_t* i2c,
-			  ltc2309_t* ltc,
-			  LTC2309_INPUT index,
-			  uint16_t* read_value,
-			  uint32_t timeout_ms)
+static int ltc2309_read_unsigned(const i2c_interface_t* i2c,
+				 ltc2309_t* ltc,
+				 uint8_t mux_field,
+				 bool diff,
+				 uint16_t* read_value,
+				 uint32_t timeout_ms)
 {
-	int ret;
+	uint16_t conversion;
 
-	if (ltc == NULL || read_value == NULL) {
+	if (read_value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, ltc->bus) != 0) {
+	if (ltc2309_read(
+		    i2c, ltc, mux_field, diff, false, &conversion, timeout_ms) !=
+	    0) {
 		return -1;
 	}
 
-	LTC2309_LOCK(ltc, timeout_ms);
+	*read_value = conversion >> 4;
+	return 0;
+}
 
-	if (LTC2309_IS_BIPOLAR(ltc)) {
-		/*
-		 * Per the datasheet's Output Data Format (p.15): the conversion
-		 * result is straight binary only when the UNI bit selects
-		 * unipolar range.
-		 */
-		errno = EINVAL;
-		ret = -1;
-		goto ltc2309_read_unsigned_exit;
-	}
+int ltc2309_read_single_ended_unsigned(const i2c_interface_t* i2c,
+				       ltc2309_t* ltc,
+				       LTC2309_INPUT index,
+				       uint16_t* read_value,
+				       uint32_t timeout_ms)
+{
+	return ltc2309_read_unsigned(
+		i2c, ltc, (uint8_t)index, false, read_value, timeout_ms);
+}
 
-	if (ltc2309_read(i2c, ltc, (uint8_t)index, read_value, false) != 0) {
-		ret = -1;
-		goto ltc2309_read_unsigned_exit;
-	}
+int ltc2309_read_single_ended_signed(const i2c_interface_t* i2c,
+				     ltc2309_t* ltc,
+				     LTC2309_INPUT index,
+				     int16_t* read_value,
+				     uint32_t timeout_ms)
+{
+	return ltc2309_read_signed(
+		i2c, ltc, (uint8_t)index, false, read_value, timeout_ms);
+}
 
-	*read_value >>= 4;
-	ret = 0;
+int ltc2309_read_differential_unsigned(const i2c_interface_t* i2c,
+				       ltc2309_t* ltc,
+				       LTC2309_DIFF_INPUT index,
+				       uint16_t* read_value,
+				       uint32_t timeout_ms)
+{
+	return ltc2309_read_unsigned(
+		i2c, ltc, (uint8_t)index, true, read_value, timeout_ms);
+}
 
-ltc2309_read_unsigned_exit:
-	LTC2309_UNLOCK(ltc);
-
-	return ret;
+int ltc2309_read_differential_signed(const i2c_interface_t* i2c,
+				     ltc2309_t* ltc,
+				     LTC2309_DIFF_INPUT index,
+				     int16_t* read_value,
+				     uint32_t timeout_ms)
+{
+	return ltc2309_read_signed(
+		i2c, ltc, (uint8_t)index, true, read_value, timeout_ms);
 }

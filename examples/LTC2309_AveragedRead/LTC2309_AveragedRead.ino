@@ -31,15 +31,19 @@
  *   SDA / SCL            -- the I2C bus given by I2C_BUS below
  *   AD0 / AD1            -- tied to GND here, giving I2C address 0x08
  *
- * ltc2309_read_unsigned() (see src/peripheral-ltc2309.c) always performs a
- * write-then-read transaction that triggers a fresh conversion.
+ * ltc2309_read_single_ended_unsigned() (see src/peripheral-ltc2309.c) writes a
+ * new command byte, which triggers a fresh conversion, whenever the channel or
+ * the range changes. This example changes the channel on every call.
  *
- * This example configures the LTC2309 in unipolar range (bip=false) and reads
- * each channel single-ended, so every code is 0..4095, mapping to roughly
- * 0..4.096V. Other functions in this driver (see include/peripheral-ltc2309.h),
- * not used here since this example only focuses on reading:
- *   ltc2309_read_signed / ltc2309_read_differential
- *     - Differential conversions, returned as a sign-extended int16_t.
+ * This example reads each channel single-ended in unipolar range, so every
+ * code is 0..4095, mapping to roughly 0..4.096V. Other functions in this
+ * driver (see include/peripheral-ltc2309.h), not used here since this example
+ * only focuses on reading:
+ *   ltc2309_read_single_ended_signed
+ *     - Single-ended bipolar conversions (COM midway between GND and
+ *       REFCOMP), returned as a sign-extended int16_t.
+ *   ltc2309_read_differential_unsigned / ltc2309_read_differential_signed
+ *     - Differential conversions, in unipolar or bipolar range.
  *   ltc2309_protect / ltc2309_unprotect
  *     - Guard the device with the resource protector's mutex, so concurrent
  *       tasks/threads sharing this LTC2309 (or its I2C bus) don't race each
@@ -64,7 +68,6 @@ static const int32_t I2C_SDA_PIN = -1;
 static const int32_t I2C_SCL_PIN = -1;
 
 static const uint8_t LTC2309_ADDR = 0x08; // AD0 = AD1 = GND
-static const bool LTC2309_BIPOLAR = false; // unipolar range
 
 #define NUM_CHANNELS 3
 static const LTC2309_INPUT CHANNELS[NUM_CHANNELS] = {
@@ -100,7 +103,7 @@ int main()
 		return 1;
 	}
 
-	ltc = ltc2309_init(i2c, LTC2309_ADDR, LTC2309_BIPOLAR);
+	ltc = ltc2309_init(i2c, LTC2309_ADDR);
 	if (ltc == NULL) {
 		printf("ltc2309_init failed, errno=%d\n", errno);
 		i2c_deinit(i2c, false);
@@ -117,12 +120,12 @@ int main()
 		// unsigned variant is the natural fit here.
 		uint8_t sampled_channel = current_channel;
 		uint16_t raw;
-		if (ltc2309_read_unsigned(i2c,
+		if (ltc2309_read_single_ended_unsigned(i2c,
 			    ltc, CHANNELS[sampled_channel], &raw, 0) == 0) {
 			sample_sum[sampled_channel] += raw;
 			sample_count[sampled_channel]++;
 		} else {
-			printf("ltc2309_read_unsigned failed on %-6s, errno=%d\n",
+			printf("ltc2309_read_single_ended_unsigned failed on %-6s, errno=%d\n",
 			       CHANNEL_NAMES[sampled_channel], errno);
 		}
 

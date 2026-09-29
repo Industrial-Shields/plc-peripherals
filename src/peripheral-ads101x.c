@@ -135,13 +135,16 @@ static void ads101x_delay_until_conversion(ADS101X_DATA_RATE dr)
 ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
 			bool restart,
-			bool set_continuous_mode,
-			ADS101X_GAIN_AMPLIFIER fsr,
-			ADS101X_DATA_RATE dr)
+			const ads101x_config_t* cfg)
 {
 	uint16_t cfg_reg;
 	ads101x_t* ret;
 	uint8_t bus;
+
+	if (cfg == NULL) {
+		errno = EFAULT;
+		return NULL;
+	}
 
 	if (i2c_get_bus(i2c, &bus) != 0) {
 		return NULL;
@@ -164,7 +167,7 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 		}
 	}
 
-	if (set_continuous_mode) {
+	if (cfg->continuous_mode) {
 		// Force continuous conversion mode
 		cfg_reg &= ~CONFIG_REG_MODE;
 		cfg_reg &= ~CONFIG_REG_OS;
@@ -176,22 +179,22 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 
 	// Setup PGA and DR
 	cfg_reg &= ~CONFIG_REG_PGA;
-	cfg_reg |= fsr << CONFIG_REG_PGA_SHIFT;
+	cfg_reg |= cfg->fsr << CONFIG_REG_PGA_SHIFT;
 
 	cfg_reg &= ~CONFIG_REG_DR;
-	cfg_reg |= dr << CONFIG_REG_DR_SHIFT;
+	cfg_reg |= cfg->dr << CONFIG_REG_DR_SHIFT;
 
 	if (i2c_write8_16b(i2c, addr, CONFIG_REG, cfg_reg) != 0) {
 		goto init_error_cleanup;
 	}
 
-	if (set_continuous_mode) {
+	if (cfg->continuous_mode) {
 		/*
 		 * Delay to wait for the first conversion. Needed so
 		 * ads101x_continuous_read with the same initial index works (i.e, when
 		 * calling read right after the init).
 		 */
-		ads101x_delay_until_conversion(dr);
+		ads101x_delay_until_conversion(cfg->dr);
 	}
 
 	ret->addr = addr;

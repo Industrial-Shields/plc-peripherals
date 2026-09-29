@@ -139,6 +139,24 @@ static void assert_last_write_was_a_reset_block(MCP230XX_TYPE type)
 				      reset_len_of(type));
 }
 
+// Calls mcp230xx_init on the test bus and address, filling in the config.
+static mcp230xx_t* init_mcp(bool restart,
+			    MCP230XX_TYPE type,
+			    bool disable_slew_rate,
+			    MCP230XX_INT_TYPE int_type,
+			    MCP230XX_INT_POLARITY int_pol,
+			    MCP230XX_MIRROR_INT mirror)
+{
+	mcp230xx_config_t cfg;
+
+	cfg.type = type;
+	cfg.disable_slew_rate = disable_slew_rate;
+	cfg.int_type = int_type;
+	cfg.int_pol = int_pol;
+	cfg.mirror = mirror;
+	return mcp230xx_init(TEST_I2C, TEST_ADDR, restart, &cfg);
+}
+
 // Creates and initializes an mcp230xx_t via restart=true, IOCON bits all clear.
 static mcp230xx_t* create_mcp(MCP230XX_TYPE type)
 {
@@ -149,14 +167,12 @@ static mcp230xx_t* create_mcp(MCP230XX_TYPE type)
 				      INIT_RESTART_IOCON,
 				      0);
 
-	mcp230xx_t* mcp = mcp230xx_init(TEST_I2C,
-					TEST_ADDR,
-					true,
-					type,
-					false,
-					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW,
-					MCP230XX_NO_MIRRORED_INT);
+	mcp230xx_t* mcp = init_mcp(true,
+				   type,
+				   false,
+				   MCP230XX_ACTIVE_DRIVER_INT,
+				   MCP230XX_INT_ACTIVE_LOW,
+				   MCP230XX_NO_MIRRORED_INT);
 	TEST_ASSERT_NOT_NULL(mcp);
 	return mcp;
 }
@@ -203,14 +219,12 @@ void test_mcp230xx_init_with_restart_resets_an_mcp23008_then_writes_iocon(void)
 	i2c_write8_8b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, IOCON_008, INIT_RESTART_IOCON, 0);
 
-	mcp230xx_t* mcp = mcp230xx_init(TEST_I2C,
-					TEST_ADDR,
-					true,
-					MCP230XX_008,
-					false,
-					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW,
-					MCP230XX_NO_MIRRORED_INT);
+	mcp230xx_t* mcp = init_mcp(true,
+				   MCP230XX_008,
+				   false,
+				   MCP230XX_ACTIVE_DRIVER_INT,
+				   MCP230XX_INT_ACTIVE_LOW,
+				   MCP230XX_NO_MIRRORED_INT);
 
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
@@ -224,14 +238,12 @@ void test_mcp230xx_init_with_restart_resets_an_mcp23017_then_writes_iocon(void)
 	i2c_write8_8b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, IOCON_A_017, INIT_RESTART_IOCON, 0);
 
-	mcp230xx_t* mcp = mcp230xx_init(TEST_I2C,
-					TEST_ADDR,
-					true,
-					MCP230XX_017,
-					false,
-					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_LOW,
-					MCP230XX_NO_MIRRORED_INT);
+	mcp230xx_t* mcp = init_mcp(true,
+				   MCP230XX_017,
+				   false,
+				   MCP230XX_ACTIVE_DRIVER_INT,
+				   MCP230XX_INT_ACTIVE_LOW,
+				   MCP230XX_NO_MIRRORED_INT);
 
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
@@ -246,14 +258,12 @@ void test_mcp230xx_init_without_restart_reads_then_patches_iocon(void)
 	// with open drain), MIRROR cleared: 0xFF & ~0x10 & ~0x02 & ~0x40.
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IOCON_008, 0xAD, 0);
 
-	mcp230xx_t* mcp = mcp230xx_init(TEST_I2C,
-					TEST_ADDR,
-					false,
-					MCP230XX_008,
-					false,
-					MCP230XX_OPEN_DRAIN_INT,
-					MCP230XX_INT_POLARITY_NONE,
-					MCP230XX_NO_MIRRORED_INT);
+	mcp230xx_t* mcp = init_mcp(false,
+				   MCP230XX_008,
+				   false,
+				   MCP230XX_OPEN_DRAIN_INT,
+				   MCP230XX_INT_POLARITY_NONE,
+				   MCP230XX_NO_MIRRORED_INT);
 
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
@@ -268,14 +278,12 @@ void test_mcp230xx_init_packs_every_configurable_iocon_bit(void)
 	i2c_write8_8b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, IOCON_A_017, 0x52, 0);
 
-	mcp230xx_t* mcp = mcp230xx_init(TEST_I2C,
-					TEST_ADDR,
-					true,
-					MCP230XX_017,
-					true,
-					MCP230XX_ACTIVE_DRIVER_INT,
-					MCP230XX_INT_ACTIVE_HIGH,
-					MCP230XX_MIRRORED_INT);
+	mcp230xx_t* mcp = init_mcp(true,
+				   MCP230XX_017,
+				   true,
+				   MCP230XX_ACTIVE_DRIVER_INT,
+				   MCP230XX_INT_ACTIVE_HIGH,
+				   MCP230XX_MIRRORED_INT);
 
 	TEST_ASSERT_NOT_NULL(mcp);
 	destroy_mcp(mcp);
@@ -286,14 +294,48 @@ void test_mcp230xx_init_fails_with_einval_for_open_drain_with_a_polarity(void)
 	// An open-drain INT pin has no polarity to configure, so asking for
 	// one is a contradiction rather than something to silently ignore.
 	errno = 0;
-	TEST_ASSERT_NULL(mcp230xx_init(TEST_I2C,
-				       TEST_ADDR,
-				       true,
-				       MCP230XX_008,
-				       false,
-				       MCP230XX_OPEN_DRAIN_INT,
-				       MCP230XX_INT_ACTIVE_HIGH,
-				       MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_NULL(init_mcp(true,
+				  MCP230XX_008,
+				  false,
+				  MCP230XX_OPEN_DRAIN_INT,
+				  MCP230XX_INT_ACTIVE_HIGH,
+				  MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_init_fails_with_efault_for_a_null_config(void)
+{
+	errno = 0;
+	TEST_ASSERT_NULL(mcp230xx_init(TEST_I2C, TEST_ADDR, true, NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_init_fails_with_einval_for_an_active_driver_without_polarity(
+	void)
+{
+	// An active-driver INT pin always drives some level: pick it.
+	errno = 0;
+	TEST_ASSERT_NULL(init_mcp(true,
+				  MCP230XX_008,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_POLARITY_NONE,
+				  MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_init_fails_with_einval_for_an_invalid_int_type(void)
+{
+	errno = 0;
+	TEST_ASSERT_NULL(init_mcp(true,
+				  MCP230XX_008,
+				  false,
+				  (MCP230XX_INT_TYPE)2,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  MCP230XX_NO_MIRRORED_INT));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 }
@@ -302,14 +344,12 @@ void test_mcp230xx_init_fails_with_einval_for_a_mirrored_int_on_an_mcp23008(void
 {
 	// Only the 23017 has the second INT pin there is to mirror.
 	errno = 0;
-	TEST_ASSERT_NULL(mcp230xx_init(TEST_I2C,
-				       TEST_ADDR,
-				       true,
-				       MCP230XX_008,
-				       false,
-				       MCP230XX_ACTIVE_DRIVER_INT,
-				       MCP230XX_INT_ACTIVE_LOW,
-				       MCP230XX_MIRRORED_INT));
+	TEST_ASSERT_NULL(init_mcp(true,
+				  MCP230XX_008,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  MCP230XX_MIRRORED_INT));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 }
@@ -319,42 +359,36 @@ void test_mcp230xx_init_fails_when_the_reset_is_short_on_the_wire(void)
 	// The device acknowledged one byte fewer than the block that was sent.
 	fake_i2c_write_op.retval = RESET_LEN_008 - 1;
 
-	TEST_ASSERT_NULL(mcp230xx_init(TEST_I2C,
-				       TEST_ADDR,
-				       true,
-				       MCP230XX_008,
-				       false,
-				       MCP230XX_ACTIVE_DRIVER_INT,
-				       MCP230XX_INT_ACTIVE_LOW,
-				       MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_NULL(init_mcp(true,
+				  MCP230XX_008,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  MCP230XX_NO_MIRRORED_INT));
 }
 
 void test_mcp230xx_init_fails_when_the_reset_write_fails(void)
 {
 	fake_i2c_write_op.retval = -1;
 
-	TEST_ASSERT_NULL(mcp230xx_init(TEST_I2C,
-				       TEST_ADDR,
-				       true,
-				       MCP230XX_017,
-				       false,
-				       MCP230XX_ACTIVE_DRIVER_INT,
-				       MCP230XX_INT_ACTIVE_LOW,
-				       MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_NULL(init_mcp(true,
+				  MCP230XX_017,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  MCP230XX_NO_MIRRORED_INT));
 }
 
 void test_mcp230xx_init_fails_when_reading_the_iocon_reg_fails(void)
 {
 	expect_i2c_read8_8b(IOCON_008, 0, -1);
 
-	TEST_ASSERT_NULL(mcp230xx_init(TEST_I2C,
-				       TEST_ADDR,
-				       false,
-				       MCP230XX_008,
-				       false,
-				       MCP230XX_ACTIVE_DRIVER_INT,
-				       MCP230XX_INT_ACTIVE_LOW,
-				       MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_NULL(init_mcp(false,
+				  MCP230XX_008,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  MCP230XX_NO_MIRRORED_INT));
 }
 
 void test_mcp230xx_init_fails_when_writing_the_iocon_reg_fails(void)
@@ -363,14 +397,12 @@ void test_mcp230xx_init_fails_when_writing_the_iocon_reg_fails(void)
 	i2c_write8_8b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, IOCON_008, INIT_RESTART_IOCON, -1);
 
-	TEST_ASSERT_NULL(mcp230xx_init(TEST_I2C,
-				       TEST_ADDR,
-				       true,
-				       MCP230XX_008,
-				       false,
-				       MCP230XX_ACTIVE_DRIVER_INT,
-				       MCP230XX_INT_ACTIVE_LOW,
-				       MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_NULL(init_mcp(true,
+				  MCP230XX_008,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  MCP230XX_NO_MIRRORED_INT));
 }
 
 static uint8_t expected_iocon(uint8_t base,
@@ -410,8 +442,9 @@ static bool config_is_rejected(MCP230XX_TYPE type,
 			       MCP230XX_INT_POLARITY int_pol,
 			       MCP230XX_MIRROR_INT mirror)
 {
-	return (int_type == MCP230XX_OPEN_DRAIN_INT &&
-		int_pol != MCP230XX_INT_POLARITY_NONE) ||
+	// Open drain takes no polarity, and an active driver needs one.
+	return (int_type == MCP230XX_OPEN_DRAIN_INT) !=
+		       (int_pol == MCP230XX_INT_POLARITY_NONE) ||
 	       (type != MCP230XX_017 && mirror == MCP230XX_MIRRORED_INT);
 }
 
@@ -456,9 +489,7 @@ void test_mcp230xx_init_fuzzes_every_configuration_combination(void)
 								    int_pol,
 								    mirror)) {
 								errno = 0;
-								TEST_ASSERT_NULL(mcp230xx_init(
-									TEST_I2C,
-									TEST_ADDR,
+								TEST_ASSERT_NULL(init_mcp(
 									restart,
 									type,
 									slew,
@@ -500,9 +531,7 @@ void test_mcp230xx_init_fuzzes_every_configuration_combination(void)
 								0);
 
 							mcp230xx_t* mcp =
-								mcp230xx_init(
-									TEST_I2C,
-									TEST_ADDR,
+								init_mcp(
 									restart,
 									type,
 									slew,
@@ -533,14 +562,12 @@ void test_mcp230xx_init_fuzzes_every_configuration_combination(void)
 					      untouched | IOCON_REG_DISSLW,
 					      0);
 
-		mcp230xx_t* mcp = mcp230xx_init(TEST_I2C,
-						TEST_ADDR,
-						false,
-						MCP230XX_008,
-						true,
-						MCP230XX_ACTIVE_DRIVER_INT,
-						MCP230XX_INT_ACTIVE_LOW,
-						MCP230XX_NO_MIRRORED_INT);
+		mcp230xx_t* mcp = init_mcp(false,
+					   MCP230XX_008,
+					   true,
+					   MCP230XX_ACTIVE_DRIVER_INT,
+					   MCP230XX_INT_ACTIVE_LOW,
+					   MCP230XX_NO_MIRRORED_INT);
 		TEST_ASSERT_NOT_NULL(mcp);
 		destroy_mcp(mcp);
 	}
