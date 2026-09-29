@@ -76,8 +76,11 @@ plc_mutex_t* plc_mutex_create(void)
 	error_checker_mutex_t* mutex_struct =
 		ECM(malloc(sizeof(error_checker_mutex_t)));
 
-	if (mutex_struct != NULL && create_esp_mutex(mutex_struct) != 0) {
+	if (mutex_struct == NULL) {
 		errno = ENOMEM;
+	}
+
+	else if (create_esp_mutex(mutex_struct) != 0) {
 		free(mutex_struct);
 		mutex_struct = NULL;
 	}
