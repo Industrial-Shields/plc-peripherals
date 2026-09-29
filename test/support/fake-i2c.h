@@ -29,6 +29,9 @@
  *	i2c_write_Stub(fake_i2c_write);
  *	i2c_read_Stub(fake_i2c_read);
  *	i2c_write_then_read_Stub(fake_i2c_write_then_read);
+ *	fake_i2c_bus = EXPECTED_BUS;
+ *	i2c_get_bus_Stub(fake_i2c_get_bus);
+ *	i2c_check_bus_Stub(fake_i2c_check_bus);
  *
  * fake_i2c_reset() must come first in every test, or state leaks between them.
  */
@@ -37,6 +40,7 @@
 #define TEST_FAKE_I2C_H_
 
 #include <plc-peripherals-i2c-hal.h>
+#include <plc-peripherals-i2c.h>
 
 #define FAKE_I2C_MAX_WIRE_BYTES 32
 
@@ -91,6 +95,21 @@ extern fake_i2c_read_t fake_i2c_read_op;
  */
 extern plc_i2c_addr_t fake_i2c_expected_addr;
 
+/*
+ * The bus the fake interface reports from i2c_get_bus. Peripherals record it
+ * at init and reject an interface for any other one, so a test makes that
+ * happen by assigning a different value here. fake_i2c_bus_retval forces the
+ * lookup itself to fail instead, the way a NULL interface makes the real
+ * i2c_get_bus fail. fake_i2c_bus_errno is the errno that failure reports: it
+ * defaults to EFAULT, what the platforms set for a NULL pointer, and can be
+ * anything else to check that the caller passes it through untouched.
+ *
+ * Set fake_i2c_bus after fake_i2c_reset(); it zeroes all three.
+ */
+extern uint8_t fake_i2c_bus;
+extern int fake_i2c_bus_retval;
+extern int fake_i2c_bus_errno;
+
 /**
  * fake_i2c_reset
  *
@@ -122,6 +141,10 @@ void fake_i2c_read_answers(const uint8_t* bytes, size_t len);
  * Bodies for the CMock stubs of the platform layer. The trailing int is CMock's
  * call counter, part of the callback signature.
  */
+int fake_i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus, int num_calls);
+
+int fake_i2c_check_bus(const i2c_interface_t* i2c, uint8_t bus, int num_calls);
+
 ssize_t fake_i2c_write(const i2c_interface_t* i2c,
 		       plc_i2c_addr_t addr,
 		       const uint8_t* to_write,

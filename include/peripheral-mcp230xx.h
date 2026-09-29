@@ -32,6 +32,11 @@ extern "C" {
 #define MCP230XX_LOW           0
 // clang-format on
 
+/*
+ * WARNING: Never copy a live mcp230xx_t. Assigning a mcp230xx_t, embedding one in a
+ * struct that is assigned or passed by value, memcpying it, or reallocating an
+ * array of them all do it. The backend does not necessarily support it!
+ */
 struct _mcp230xx_t;
 typedef struct _mcp230xx_t mcp230xx_t;
 
@@ -65,32 +70,34 @@ typedef enum {
  * mcp230xx_init
  *
  * Initialize an MCP230XX peripheral with address "addr". This function currently
- * supports MCP23008 and MCP23017. You must only have one interface per device.
+ * supports MCP23008 and MCP23017. You must only have one handle per device.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)          - The I2C interface to access the peripheral.
+ *   i2c (const i2c_interface_t*)    - The I2C interface to access the
+ *                                     peripheral.
  *   addr (plc_i2c_addr_t)           - The I2C address of the peripheral.
  *   restart (bool)                  - true if you want to reset the peripheral
- *                                     (that is, set the registers to it's default
- *                                     values).
+ *                                     (that is, set the registers to their
+ *                                     default values).
  *   type (MCP230XX_TYPE)            - The chip's specific type.
  *   disable_slew_rate (bool)        - Set it to true if you want to disable the
  *                                     slew rate control of the SDA output.
- *   int_type (MCP230XX_INT_TYPE)    - Configure the interrupt pin of the MCP230XX
- *                                    either as an open-drain output, or an active
- *                                    driver output.
- *   int_pol (MCP230XX_INT_POLARITY) - The polarity of the interrupt output pin. It's
- *                                     only valid when the pin is configured as an
- *                                     active ouptut. If you want to configure it as
- *                                     an open-drain output, you must set this
- *                                     argument to MCP230XX_INT_POLARITY_NONE.
- *  mirror (MCP230XX_MIRROR_INT)     - Configure the behaviour of the two interrupt
- *                                     pins. If mirrored, INTA and INTB pins will
- *                                     be logically OR'ed together (both will
- *                                     activate when an interrupt occurs). Only
- *                                     useful on MCP23017. It must be
+ *   int_type (MCP230XX_INT_TYPE)    - Configure the interrupt pin of the
+ *                                     MCP230XX either as an open-drain output,
+ *                                     or an active driver output.
+ *   int_pol (MCP230XX_INT_POLARITY) - The polarity of the interrupt output pin.
+ *                                     It's only valid when the pin is
+ *                                     configured as an active output. If you
+ *                                     want to configure it as an open-drain
+ *                                     output, you must set this argument to
+ *                                     MCP230XX_INT_POLARITY_NONE.
+ *   mirror (MCP230XX_MIRROR_INT)    - Configure the behaviour of the two
+ *                                     interrupt pins. If mirrored, INTA and
+ *                                     INTB pins will be logically OR'ed
+ *                                     together (both will activate when an
+ *                                     interrupt occurs). Only useful on
+ *                                     MCP23017. It must be
  *                                     MCP230XX_NO_MIRRORED_INT in other chips.
- *
  *
  * Returns:
  *   mcp230xx_t* - Pointer to the initialized peripheral struct on success.
@@ -98,12 +105,15 @@ typedef enum {
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed i2c_interface is NULL, or address, or type, or
- *                int_type, or int_pol are invalid.
- *     - ENOMEM : Out of memory during allocation.
- *     - EIO    : Communication with the MCP230XX couldn't be established.
+ *     - EINVAL   : int_type is MCP230XX_OPEN_DRAIN_INT while int_pol is not
+ *                  MCP230XX_INT_POLARITY_NONE, or mirror is
+ *                  MCP230XX_MIRRORED_INT on a chip other than the MCP23017.
+ *     - ENOMEM   : Out of memory during allocation.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
+mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 			  plc_i2c_addr_t addr,
 			  bool restart,
 			  MCP230XX_TYPE type,
@@ -115,22 +125,27 @@ mcp230xx_t* mcp230xx_init(i2c_interface_t* i2c,
 /**
  * mcp230xx_deinit
  *
- * Initialize an MCP230XX peripheral. This function currently supports MCP23008
- * and MCP23017.
+ * Deinitialize an MCP230XX peripheral. This function currently supports
+ * MCP23008 and MCP23017.
  *
  * Parameters:
- *   ads (mcp230xx_t)        - The MCP230XX to interact with.
- *   restart (bool)          - true if you want to leave the peripheral in it's
- *                             initial state.
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
+ *   restart (bool)               - true if you want to reset the peripheral
+ *                                  (that is, set the registers to its default
+ *                                  values) before releasing it.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed mcp230xx_t is NULL, or address is invalid.
- *     - EIO    : Communication with the MCP230XX couldn't be established.
+ *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int mcp230xx_deinit(mcp230xx_t* mcp, bool restart);
+int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
 
 /**
  * mcp230xx_protect
@@ -138,7 +153,8 @@ int mcp230xx_deinit(mcp230xx_t* mcp, bool restart);
  * Protect the MCP230XX with a mutex.
  *
  * Parameters:
- *   mcp (mcp230xx_t)         - The MCP230XX to protect.
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t)             - The MCP230XX to protect.
  * Returns:
  *   int - 0 if successful, 1 if already protected, otherwise -1.
  *
@@ -151,7 +167,7 @@ int mcp230xx_deinit(mcp230xx_t* mcp, bool restart);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int mcp230xx_protect(mcp230xx_t* mcp);
+int mcp230xx_protect(const i2c_interface_t* i2c, mcp230xx_t* mcp);
 
 /**
  * mcp230xx_unprotect
@@ -179,8 +195,9 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  * Set a GPIO of the MCP230XX "mcp" as an input.
  *
  * Parameters:
+ *   i2c (const i2c_interface_t*)   - The I2C interface the MCP230XX is on.
  *   mcp (const mcp230xx_t*)        - The MCP230XX to interact with.
- *   index (uint8_t)                - The input you want to set as input.
+ *   index (uint8_t)                - The GPIO you want to set as input.
  *   config (MCP230XX_INPUT_CONFIG) - Used to enable/disable the pull-up of the
  *                                    input.
  *   timeout_ms (uint32_t)          - The maximum time to wait for a reading.
@@ -192,16 +209,16 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed mcp230xx_t is NULL, or address or
- *                             index are invalid.
- *     - EIO                 : Communication with the MCP230XX couldn't
- *                             be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout
- *                             given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EINVAL   : index is invalid for the chip, config is not an
+ *                  MCP230XX_INPUT_CONFIG value, or i2c is not on the bus the
+ *                  MCP230XX was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int mcp230xx_set_input(const mcp230xx_t* mcp,
+int mcp230xx_set_input(const i2c_interface_t* i2c,
+		       const mcp230xx_t* mcp,
 		       uint8_t index,
 		       MCP230XX_INPUT_CONFIG config,
 		       uint32_t timeout_ms);
@@ -209,30 +226,31 @@ int mcp230xx_set_input(const mcp230xx_t* mcp,
 /**
  * mcp230xx_read_gpio
  *
- * Read MCP230XX_HIGH/LOW from a GPIO of MCP230XX "mcp". It shoud be declared as
+ * Read MCP230XX_HIGH/LOW from a GPIO of MCP230XX "mcp". It should be declared as
  * input before calling this function.
  *
  * Parameters:
- *   mcp (const mcp230xx_t*) - The MCP230XX to interact with.
- *   index (uint8_t)         - The input you want to read from.
- *   return_value (uint8_t*) - The value in which the reading will be stored.
- *   timeout_ms (uint32_t)   - The maximum time to wait to read. Only
- *                             applicable when the MCP230XX is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (const mcp230xx_t*)      - The MCP230XX to interact with.
+ *   index (uint8_t)              - The GPIO you want to read from.
+ *   return_value (uint8_t*)      - The value in which the reading will be
+ *                                  stored.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *                                  applicable when the MCP230XX is protected.
  * Returns:
- *   int - 0 if successful, 1 if it was already set/cleared, otherwise -1.
+ *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed mcp230xx_t is NULL, or address or
- *                             index are invalid.
- *     - EIO                 : Communication with the MCP230XX couldn't
- *                             be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout
- *                             given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed mcp230xx_t or return_value is NULL.
+ *     - EINVAL   : index is invalid for the chip, or i2c is not on the bus the
+ *                  MCP230XX was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int mcp230xx_read_gpio(const mcp230xx_t* mcp,
+int mcp230xx_read_gpio(const i2c_interface_t* i2c,
+		       const mcp230xx_t* mcp,
 		       uint8_t index,
 		       uint8_t* return_value,
 		       uint32_t timeout_ms);
@@ -243,55 +261,56 @@ int mcp230xx_read_gpio(const mcp230xx_t* mcp,
  * Set a GPIO of the MCP230XX "mcp" as an output.
  *
  * Parameters:
- *   mcp (const mcp230xx_t*) - The MCP230XX to interact with.
- *   index (uint8_t)         - The output you want to set as output.
- *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
- *                             applicable when the MCP230XX is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (const mcp230xx_t*)      - The MCP230XX to interact with.
+ *   index (uint8_t)              - The GPIO you want to set as output.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already an output, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed mcp230xx_t is NULL, or address or
- *                             index are invalid.
- *     - EIO                 : Communication with the MCP230XX couldn't
- *                             be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout
- *                             given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EINVAL   : index is invalid for the chip, or i2c is not on the bus the
+ *                  MCP230XX was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int mcp230xx_set_output(const mcp230xx_t* mcp,
+int mcp230xx_set_output(const i2c_interface_t* i2c,
+			const mcp230xx_t* mcp,
 			uint8_t index,
 			uint32_t timeout_ms);
 
 /**
  * mcp230xx_write_gpio
  *
- * Set MCP230XX_HIGH/LOW to a GPIO of MCP230XX "mcp". It shoud be declared as
+ * Set MCP230XX_HIGH/LOW to a GPIO of MCP230XX "mcp". It should be declared as
  * output before calling this function.
  *
  * Parameters:
- *   mcp (const mcp230xx_t*) - The MCP230XX to interact with.
- *   index (uint8_t)         - The output you want to modify.
- *   to_write (uint8_t)      - The value to write.
- *   timeout_ms (uint32_t)   - The maximum time to wait to write. Only
- *                             applicable when the MCP230XX is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (const mcp230xx_t*)      - The MCP230XX to interact with.
+ *   index (uint8_t)              - The GPIO you want to modify.
+ *   to_write (uint8_t)           - The value to write. MCP230XX_LOW sets the
+ *                                  output low, any other value sets it high.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
+ *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already set/cleared, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed mcp230xx_t is NULL, or address or
- *                             index are invalid.
- *     - EIO                 : Communication with the MCP230XX couldn't
- *                             be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout
- *                             given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EINVAL   : index is invalid for the chip, or i2c is not on the bus the
+ *                  MCP230XX was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int mcp230xx_write_gpio(const mcp230xx_t* mcp,
+int mcp230xx_write_gpio(const i2c_interface_t* i2c,
+			const mcp230xx_t* mcp,
 			uint8_t index,
 			uint8_t to_write,
 			uint32_t timeout_ms);

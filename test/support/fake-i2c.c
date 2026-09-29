@@ -20,6 +20,7 @@
 #include "unity.h"
 
 #include <string.h>
+#include <errno.h>
 
 fake_i2c_write_t fake_i2c_write_op;
 fake_i2c_transfer_t fake_i2c_transfer_op;
@@ -34,12 +35,49 @@ static void check_addressed_device(plc_i2c_addr_t addr)
 		fake_i2c_expected_addr, addr, "addressed the wrong I2C device");
 }
 
+uint8_t fake_i2c_bus;
+int fake_i2c_bus_retval;
+int fake_i2c_bus_errno;
+
+int fake_i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus, int num_calls)
+{
+	(void)i2c;
+	(void)num_calls;
+
+	if (fake_i2c_bus_retval != 0) {
+		errno = fake_i2c_bus_errno;
+		return fake_i2c_bus_retval;
+	}
+
+	*bus = fake_i2c_bus;
+	return 0;
+}
+
+int fake_i2c_check_bus(const i2c_interface_t* i2c, uint8_t bus, int num_calls)
+{
+	uint8_t actual_bus;
+
+	if (fake_i2c_get_bus(i2c, &actual_bus, num_calls) != 0) {
+		return -1;
+	}
+
+	if (actual_bus != bus) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	return 0;
+}
+
 void fake_i2c_reset(void)
 {
 	memset(&fake_i2c_write_op, 0, sizeof(fake_i2c_write_op));
 	memset(&fake_i2c_transfer_op, 0, sizeof(fake_i2c_transfer_op));
 	memset(&fake_i2c_read_op, 0, sizeof(fake_i2c_read_op));
 	fake_i2c_expected_addr = 0;
+	fake_i2c_bus = 0;
+	fake_i2c_bus_retval = 0;
+	fake_i2c_bus_errno = EFAULT;
 }
 
 void fake_i2c_answers(const uint8_t* bytes, size_t len)

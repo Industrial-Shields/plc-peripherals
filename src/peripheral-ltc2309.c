@@ -24,8 +24,6 @@
 #include <errno.h>
 #include <unistd.h>
 
-#define PASS_LTC(ltc) ltc->i2c, ltc->addr
-
 // clang-format off
 static const uint8_t INITIAL_STATE   = 0b00000000;
 static const uint8_t SHUTDOWN        = 0b00000100;
@@ -42,8 +40,8 @@ static const uint8_t SHUTDOWN        = 0b00000100;
 #define LTC2309_IS_BIPOLAR(ltc) (!((ltc)->cmd & COMMAND_BYTE_UNI))
 
 struct _ltc2309_t {
-	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
+	uint8_t bus;
 	uint8_t cmd;
 };
 
@@ -51,21 +49,24 @@ struct _ltc2309_t {
 
 #define LTC2309_UNLOCK(ltc) ((void)(ltc))
 
-ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
+ltc2309_t*
+ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
 {
-	if (i2c == NULL) {
-		errno = EFAULT;
+	ltc2309_t* ret;
+	uint8_t bus;
+
+	if (i2c_get_bus(i2c, &bus) != 0) {
 		return NULL;
 	}
 
-	ltc2309_t* ret = malloc(sizeof(struct _ltc2309_t));
+	ret = malloc(sizeof(struct _ltc2309_t));
 	if (ret == NULL) {
 		errno = ENOMEM;
 		return NULL;
 	}
 
-	ret->i2c = i2c;
 	ret->addr = addr;
+	ret->bus = bus;
 	ret->cmd = INITIAL_STATE | (bip ? COMMAND_BYTE_BIP : COMMAND_BYTE_UNI);
 
 	if (i2c_write(i2c, addr, &INITIAL_STATE, sizeof(INITIAL_STATE)) != 1) {
@@ -87,15 +88,19 @@ ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip)
 	return ret;
 }
 
-int ltc2309_deinit(ltc2309_t* ltc, bool shutdown)
+int ltc2309_deinit(const i2c_interface_t* i2c, ltc2309_t* ltc, bool shutdown)
 {
-	if (ltc == NULL || ltc->i2c == NULL) {
+	if (ltc == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
+	if (i2c_check_bus(i2c, ltc->bus) != 0) {
+		return -1;
+	}
+
 	if (shutdown &&
-	    i2c_write(PASS_LTC(ltc), &SHUTDOWN, sizeof(SHUTDOWN)) != 1) {
+	    i2c_write(i2c, ltc->addr, &SHUTDOWN, sizeof(SHUTDOWN)) != 1) {
 		return -1;
 	}
 
@@ -104,8 +109,9 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown)
 	return 0;
 }
 
-int ltc2309_protect(ltc2309_t* ltc)
+int ltc2309_protect(const i2c_interface_t* i2c, ltc2309_t* ltc)
 {
+	(void)i2c;
 	(void)ltc;
 
 	errno = ENOTSUP;
@@ -123,14 +129,19 @@ int ltc2309_unprotect(ltc2309_t* ltc)
 static inline int16_t ltc2309_conversion_reg_to_value(uint16_t read_value)
 {
 	uint16_t shifted = read_value >> 4;
+
 	if (read_value & 0x8000) {
 		shifted |= 0xF000;
 	}
+
 	return (int16_t)shifted;
 }
 
-static int
-ltc2309_read(ltc2309_t* ltc, uint8_t mux_field, uint16_t* conversion, bool diff)
+static int ltc2309_read(const i2c_interface_t* i2c,
+			ltc2309_t* ltc,
+			uint8_t mux_field,
+			uint16_t* conversion,
+			bool diff)
 {
 	if (mux_field > 0b111) {
 		errno = EINVAL;
@@ -140,19 +151,19 @@ ltc2309_read(ltc2309_t* ltc, uint8_t mux_field, uint16_t* conversion, bool diff)
 	uint8_t diff_value = diff ? COMMAND_BYTE_DIFF : COMMAND_BYTE_SGL;
 	uint8_t new_mux = mux_field << COMMAND_BYTE_CHANNEL_SHIFT;
 	uint8_t new_cmd = ltc->cmd;
+	uint8_t buffer[2];
 
 	new_cmd &= (~COMMAND_BYTE_CHANNEL) & (~COMMAND_BYTE_SD);
 	new_cmd |= new_mux | diff_value;
 	if (new_cmd != ltc->cmd) {
-		if (i2c_write(PASS_LTC(ltc), &new_cmd, 1) != 1) {
+		if (i2c_write(i2c, ltc->addr, &new_cmd, 1) != 1) {
 			return -1;
 		}
 		ltc->cmd = new_cmd;
 		usleep(5); // It must wait 1.8 us minimum before reading
 	}
 
-	uint8_t buffer[2];
-	if (i2c_read(PASS_LTC(ltc), buffer, 2) != 2) {
+	if (i2c_read(i2c, ltc->addr, buffer, 2) != 2) {
 		return -1;
 	}
 
@@ -166,22 +177,26 @@ ltc2309_read(ltc2309_t* ltc, uint8_t mux_field, uint16_t* conversion, bool diff)
 	return 0;
 }
 
-int ltc2309_read_signed(ltc2309_t* ltc,
+int ltc2309_read_signed(const i2c_interface_t* i2c,
+			ltc2309_t* ltc,
 			LTC2309_DIFF_INPUT index,
 			int16_t* read_value,
 			uint32_t timeout_ms)
 {
-	if (read_value == NULL) {
+	uint16_t conversion;
+	int ret;
+
+	if (ltc == NULL || read_value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
-	uint16_t conversion;
-	int ret;
+	if (i2c_check_bus(i2c, ltc->bus) != 0) {
+		return -1;
+	}
 
 	LTC2309_LOCK(ltc, timeout_ms);
 
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (!LTC2309_IS_BIPOLAR(ltc)) {
 		/*
 		 * Per the datasheet's Output Data Format (p.15): the conversion
@@ -192,9 +207,8 @@ int ltc2309_read_signed(ltc2309_t* ltc,
 		ret = -1;
 		goto ltc2309_read_signed_exit;
 	}
-#endif
 
-	if (ltc2309_read(ltc, (uint8_t)index, &conversion, true) != 0) {
+	if (ltc2309_read(i2c, ltc, (uint8_t)index, &conversion, true) != 0) {
 		ret = -1;
 		goto ltc2309_read_signed_exit;
 	}
@@ -208,21 +222,25 @@ ltc2309_read_signed_exit:
 	return ret;
 }
 
-int ltc2309_read_unsigned(ltc2309_t* ltc,
+int ltc2309_read_unsigned(const i2c_interface_t* i2c,
+			  ltc2309_t* ltc,
 			  LTC2309_INPUT index,
 			  uint16_t* read_value,
 			  uint32_t timeout_ms)
 {
-	if (read_value == NULL) {
+	int ret;
+
+	if (ltc == NULL || read_value == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
-	int ret;
+	if (i2c_check_bus(i2c, ltc->bus) != 0) {
+		return -1;
+	}
 
 	LTC2309_LOCK(ltc, timeout_ms);
 
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
 	if (LTC2309_IS_BIPOLAR(ltc)) {
 		/*
 		 * Per the datasheet's Output Data Format (p.15): the conversion
@@ -233,9 +251,8 @@ int ltc2309_read_unsigned(ltc2309_t* ltc,
 		ret = -1;
 		goto ltc2309_read_unsigned_exit;
 	}
-#endif
 
-	if (ltc2309_read(ltc, (uint8_t)index, read_value, false) != 0) {
+	if (ltc2309_read(i2c, ltc, (uint8_t)index, read_value, false) != 0) {
 		ret = -1;
 		goto ltc2309_read_unsigned_exit;
 	}

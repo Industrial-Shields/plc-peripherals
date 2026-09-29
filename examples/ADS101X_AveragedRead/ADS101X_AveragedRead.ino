@@ -185,10 +185,10 @@ void loop()
 	uint8_t sampled_channel = current_channel;
 	uint16_t raw;
 #ifdef USE_SINGLE_SHOT_READ
-	int ret = ads101x_unsigned_single_read(
+	int ret = ads101x_unsigned_single_read(i2c,
 		ads, CHANNELS[sampled_channel], &raw, 0);
 #else
-	int ret = ads101x_unsigned_continuous_read(
+	int ret = ads101x_unsigned_continuous_read(i2c,
 		ads, CHANNELS[sampled_channel], &raw, 0);
 #endif
 	if (ret == 0) {
@@ -231,7 +231,7 @@ void loop()
 			channels_finished_this_round = 0;
 
 			data_rate_index = (data_rate_index + 1) % NUM_DATA_RATES;
-			if (ads101x_set_fs(ads, DATA_RATES[data_rate_index], 0) !=
+			if (ads101x_set_fs(i2c, ads, DATA_RATES[data_rate_index], 0) !=
 			    0) {
 				Serial.print(F("ads101x_set_fs failed, errno="));
 				Serial.println(errno);

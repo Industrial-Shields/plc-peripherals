@@ -29,6 +29,11 @@ extern "C" {
 #define LTC2309_NUM_INPUTS  8
 // clang-format on
 
+/*
+ * WARNING: Never copy a live ltc2309_t. Assigning an ltc2309_t, embedding one in a
+ * struct that is assigned or passed by value, memcpying it, or reallocating an
+ * array of them all do it. The backend does not necessarily support it!
+ */
 struct _ltc2309_t;
 typedef struct _ltc2309_t ltc2309_t;
 
@@ -67,16 +72,16 @@ typedef enum {
 /**
  * ltc2309_init
  *
- * Initialize an LTC2309 ADC with address "addr". This function ensures that the
- * ADC's is in it's initial state, then sleeps the required tREFWAKE time to
- * allow the reference buffer to wake up.
+ * Initialize an LTC2309 ADC with address "addr". This function writes the
+ * command byte's initial state (all bits 0) to the ADC, then sleeps the
+ * required tREFWAKE time (200ms) to allow the reference buffer to wake up.
  *
  * Parameters:
- *   i2c (i2c_interface_t*) - The I2C interface to access the peripheral.
- *   addr (plc_i2c_addr_t)  - The I2C address of the peripheral.
- *   bip (bool)             - Selects the input range. If false, the ADC will
- *                            operate in unipolar mode. If true, it will
- *                            operate in bipolar mode.
+ *   i2c (const i2c_interface_t*) - The I2C interface to access the peripheral.
+ *   addr (plc_i2c_addr_t)        - The I2C address of the peripheral.
+ *   bip (bool)                   - Selects the input range. If false, the ADC
+ *                                  will operate in unipolar mode. If true, it
+ *                                  will operate in bipolar mode.
  *
  * Returns:
  *   ltc2309_t* - Pointer to the initialized peripheral struct on success.
@@ -84,11 +89,14 @@ typedef enum {
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed i2c_interface is NULL.
- *     - ENOMEM : Out of memory during allocation.
- *     - EIO    : Communication with the LTC2309 couldn't be established.
+ *     - EFAULT   : Passed i2c_interface is NULL.
+ *     - ENOMEM   : Out of memory during allocation.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip);
+ltc2309_t*
+ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip);
 
 /**
  * ltc2309_deinit
@@ -97,18 +105,23 @@ ltc2309_t* ltc2309_init(i2c_interface_t* i2c, plc_i2c_addr_t addr, bool bip);
  * sleep mode before returning.
  *
  * Parameters:
- *   ltc (ltc2309_t*) - The LTC2309 to interact with.
- *   shutdown (bool)  - true if you want to place the LTC2309 in shutdown mode.
+ *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
+ *   ltc (ltc2309_t*)             - The LTC2309 to interact with.
+ *   shutdown (bool)              - true if you want to place the LTC2309 in
+ *                                  sleep mode.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed ltc2309_t or its I2C interface is NULL.
- *     - EIO    : Communication with the LTC2309 couldn't be established.
+ *     - EFAULT   : Passed ltc2309_t or i2c is NULL.
+ *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
+int ltc2309_deinit(const i2c_interface_t* i2c, ltc2309_t* ltc, bool shutdown);
 
 /**
  * ltc2309_protect
@@ -116,7 +129,8 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
  * Protect the LTC2309 with a mutex.
  *
  * Parameters:
- *   ltc (ltc2309_t*)        - The LTC2309 to protect.
+ *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
+ *   ltc (ltc2309_t*)             - The LTC2309 to protect.
  * Returns:
  *   int - 0 if successful, 1 if already protected, otherwise -1.
  *
@@ -129,7 +143,7 @@ int ltc2309_deinit(ltc2309_t* ltc, bool shutdown);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ltc2309_protect(ltc2309_t* ltc);
+int ltc2309_protect(const i2c_interface_t* i2c, ltc2309_t* ltc);
 
 /**
  * ltc2309_unprotect
@@ -159,29 +173,32 @@ int ltc2309_unprotect(ltc2309_t* ltc);
  * must have been initialized with bip=true (ltc2309_init).
  *
  * Parameters:
- *   ltc (ltc2309_t*)            - The LTC2309 to interact with.
- *   index (LTC2309_DIFF_INPUT)  - Differential input pair to read. See
- *                                 LTC2309_DIFF_INPUT: LTC2309_P<x>_N<y> reads
- *                                 channel x as positive and y as negative.
- *   read_value (int16_t*)       - The value in which the reading will be
- *                                 stored.
- *   timeout_ms (uint32_t)       - The maximum time to wait for a reading.
- *                                 Only applicable when the LTC2309 is
- *                                 protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
+ *   ltc (ltc2309_t*)             - The LTC2309 to interact with.
+ *   index (LTC2309_DIFF_INPUT)   - Differential input pair to read. See
+ *                                  LTC2309_DIFF_INPUT: LTC2309_P<x>_N<y> reads
+ *                                  channel x as positive and y as negative.
+ *   read_value (int16_t*)        - The value in which the reading will be
+ *                                  stored.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *                                  applicable when the LTC2309 is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EFAULT              : Passed ltc2309_t or the output pointer is NULL.
- *     - EINVAL              : The channel index is invalid.
- *     - EINVAL (if enabled) : The LTC2309 was initialized with bip=false.
- *     - EIO                 : Communication with the LTC2309 couldn't be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout given.
- *     - ERANGE              : The conversion result is invalid.
+ *     - EFAULT   : Passed ltc2309_t or read_value is NULL.
+ *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on, index
+ *                  is not a valid channel, or the LTC2309 was initialized with
+ *                  bip=false, so the result would not be 2's complement.
+ *     - ERANGE   : The conversion result is invalid.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ltc2309_read_signed(ltc2309_t* ltc,
+int ltc2309_read_signed(const i2c_interface_t* i2c,
+			ltc2309_t* ltc,
 			LTC2309_DIFF_INPUT index,
 			int16_t* read_value,
 			uint32_t timeout_ms);
@@ -196,25 +213,30 @@ int ltc2309_read_signed(ltc2309_t* ltc,
  * initialized with bip=false (ltc2309_init).
  *
  * Parameters:
- *   ltc (ltc2309_t*)        - The LTC2309 to interact with.
- *   index (LTC2309_INPUT)   - Input/channel to read single-ended.
- *   read_value (uint16_t*)  - The value in which the reading will be stored.
- *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
- *                             applicable when the LTC2309 is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
+ *   ltc (ltc2309_t*)             - The LTC2309 to interact with.
+ *   index (LTC2309_INPUT)        - Input/channel to read single-ended.
+ *   read_value (uint16_t*)       - The value in which the reading will be
+ *                                  stored.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *                                  applicable when the LTC2309 is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EFAULT              : Passed ltc2309_t or the output pointer is NULL.
- *     - EINVAL              : The channel index is invalid.
- *     - EINVAL (if enabled) : The LTC2309 was initialized with bip=true.
- *     - EIO                 : Communication with the LTC2309 couldn't be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout given.
- *     - ERANGE              : The conversion result is invalid.
+ *     - EFAULT   : Passed ltc2309_t or read_value is NULL.
+ *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on, index
+ *                  is not a valid channel, or the LTC2309 was initialized with
+ *                  bip=true, so the result would not be straight binary.
+ *     - ERANGE   : The conversion result is invalid.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ltc2309_read_unsigned(ltc2309_t* ltc,
+int ltc2309_read_unsigned(const i2c_interface_t* i2c,
+			  ltc2309_t* ltc,
 			  LTC2309_INPUT index,
 			  uint16_t* read_value,
 			  uint32_t timeout_ms);

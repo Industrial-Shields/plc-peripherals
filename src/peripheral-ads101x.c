@@ -48,15 +48,14 @@
 // clang-format on
 
 struct _ads101x_t {
-	i2c_interface_t* i2c;
 	plc_i2c_addr_t addr;
+	uint8_t bus;
 	uint16_t expected_cfg_reg;
 	uint16_t old_cfg_reg;
 };
 
 #define ADS101X_RESET_REG(i2c, addr, register_name) \
 	i2c_write8_16b(i2c, addr, register_name, register_name##_RESET_VALUE)
-#define PASS_ADS(ads) ads->i2c, ads->addr
 
 #define ADS101X_LOCK(ads, timeout_ms) ((void)(ads), (void)(timeout_ms))
 
@@ -133,7 +132,7 @@ static void ads101x_delay_until_conversion(ADS101X_DATA_RATE dr)
 		new_cfg |= channel_index << CONFIG_REG_MUX_SHIFT; \
 	} while (0)
 
-ads101x_t* ads101x_init(i2c_interface_t* i2c,
+ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
 			bool restart,
 			bool set_continuous_mode,
@@ -142,6 +141,11 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 {
 	uint16_t cfg_reg;
 	ads101x_t* ret;
+	uint8_t bus;
+
+	if (i2c_get_bus(i2c, &bus) != 0) {
+		return NULL;
+	}
 
 	ret = malloc(sizeof(struct _ads101x_t));
 	if (ret == NULL) {
@@ -190,8 +194,8 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
 		ads101x_delay_until_conversion(dr);
 	}
 
-	ret->i2c = i2c;
 	ret->addr = addr;
+	ret->bus = bus;
 	ret->expected_cfg_reg = cfg_reg;
 	ret->old_cfg_reg = cfg_reg;
 	return ret;
@@ -201,12 +205,22 @@ init_error_cleanup:
 	return NULL;
 }
 
-int ads101x_deinit(ads101x_t* ads, bool shutdown)
+int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown)
 {
+	if (ads == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, ads->bus) != 0) {
+		return -1;
+	}
+
 	if (shutdown) {
 		ads->expected_cfg_reg |= CONFIG_REG_MODE;
 
-		if (i2c_write8_16b(PASS_ADS(ads),
+		if (i2c_write8_16b(i2c,
+				   ads->addr,
 				   CONFIG_REG,
 				   ads->expected_cfg_reg) != 0) {
 			return -1;
@@ -217,8 +231,9 @@ int ads101x_deinit(ads101x_t* ads, bool shutdown)
 	return 0;
 }
 
-int ads101x_protect(ads101x_t* ads)
+int ads101x_protect(const i2c_interface_t* i2c, ads101x_t* ads)
 {
+	(void)i2c;
 	(void)ads;
 
 	errno = ENOTSUP;
@@ -233,25 +248,34 @@ int ads101x_unprotect(ads101x_t* ads)
 	return -1;
 }
 
-int ads101x_single_read(ads101x_t* ads,
+int ads101x_single_read(const i2c_interface_t* i2c,
+			ads101x_t* ads,
 			ADS101X_INPUT index,
 			int16_t* return_value,
 			uint32_t timeout_ms)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (return_value == NULL || ADS101X_IS_CONTINUOUS_MODE(ads)) {
+	uint16_t read_value;
+	int ret;
+
+	if (ads == NULL || return_value == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (ADS101X_IS_CONTINUOUS_MODE(ads)) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
-	uint16_t read_value;
-	int ret;
+
+	if (i2c_check_bus(i2c, ads->bus) != 0) {
+		return -1;
+	}
 
 	ADS101X_LOCK(ads, timeout_ms);
 
 	ADS101X_CHANGE_CHANNEL(ads->expected_cfg_reg, index);
 
-	if (i2c_write8_16b(PASS_ADS(ads), CONFIG_REG, ads->expected_cfg_reg) !=
+	if (i2c_write8_16b(i2c, ads->addr, CONFIG_REG, ads->expected_cfg_reg) !=
 	    0) {
 		ret = -1;
 		goto ads101x_single_read_exit;
@@ -260,7 +284,7 @@ int ads101x_single_read(ads101x_t* ads,
 	// Delay for the conversion
 	ads101x_delay_until_conversion(ADS101X_GET_DR(ads->expected_cfg_reg));
 
-	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
+	if (i2c_read8_16b(i2c, ads->addr, CONVERSION_REG, &read_value) != 0) {
 		ret = -1;
 		goto ads101x_single_read_exit;
 	}
@@ -274,7 +298,8 @@ ads101x_single_read_exit:
 	return ret;
 }
 
-int ads101x_unsigned_single_read(ads101x_t* ads,
+int ads101x_unsigned_single_read(const i2c_interface_t* i2c,
+				 ads101x_t* ads,
 				 ADS101X_INPUT index,
 				 uint16_t* return_value,
 				 uint32_t timeout_ms)
@@ -282,8 +307,13 @@ int ads101x_unsigned_single_read(ads101x_t* ads,
 {
 	int16_t signed_read_value;
 
-	if (ads101x_single_read(ads, index, &signed_read_value, timeout_ms) !=
-	    0) {
+	if (return_value == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (ads101x_single_read(
+		    i2c, ads, index, &signed_read_value, timeout_ms) != 0) {
 		return -1;
 	}
 
@@ -291,26 +321,36 @@ int ads101x_unsigned_single_read(ads101x_t* ads,
 						  return_value);
 }
 
-int ads101x_continuous_read(ads101x_t* ads,
+int ads101x_continuous_read(const i2c_interface_t* i2c,
+			    ads101x_t* ads,
 			    ADS101X_INPUT index,
 			    int16_t* return_value,
 			    uint32_t timeout_ms)
 {
-#if defined(PLC_PERIPHERALS_CHECK_ARGUMENTS)
-	if (return_value == NULL || !ADS101X_IS_CONTINUOUS_MODE(ads)) {
+	uint16_t read_value;
+	int ret;
+
+	if (ads == NULL || return_value == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (!ADS101X_IS_CONTINUOUS_MODE(ads)) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
-	uint16_t read_value;
-	int ret;
+
+	if (i2c_check_bus(i2c, ads->bus) != 0) {
+		return -1;
+	}
 
 	ADS101X_LOCK(ads, timeout_ms);
 
 	ADS101X_CHANGE_CHANNEL(ads->expected_cfg_reg, index);
 
 	if (ads->expected_cfg_reg != ads->old_cfg_reg) {
-		if (i2c_write8_16b(PASS_ADS(ads),
+		if (i2c_write8_16b(i2c,
+				   ads->addr,
 				   CONFIG_REG,
 				   ads->expected_cfg_reg) != 0) {
 			ret = -1;
@@ -320,10 +360,12 @@ int ads101x_continuous_read(ads101x_t* ads,
 		/*
 		 * Per the datasheet (SBAS473F 7.4.2.2), the conversion already
 		 * in flight completes with the PREVIOUS settings; only the one
-		 * after it uses the new ones. Nothing but this function writes
-		 * CONFIG_REG, so that in-flight conversion is necessarily
-		 * still running at old_cfg_reg's rate: wait it out, then wait
-		 * one full conversion at the new rate.
+		 * after it uses the new ones. In continuous mode, every
+		 * CONFIG_REG write (ads101x_init, ads101x_continuous_read and
+		 * ads101x_set_fs) also updates old_cfg_reg, so that in-flight
+		 * conversion is necessarily still running at old_cfg_reg's
+		 * rate Wait the old conversion time plus one full conversion at
+		 * the new rate.
 		 */
 		ads101x_delay_until_conversion(
 			ADS101X_GET_DR(ads->old_cfg_reg));
@@ -333,7 +375,7 @@ int ads101x_continuous_read(ads101x_t* ads,
 		ads->old_cfg_reg = ads->expected_cfg_reg;
 	}
 
-	if (i2c_read8_16b(PASS_ADS(ads), CONVERSION_REG, &read_value) != 0) {
+	if (i2c_read8_16b(i2c, ads->addr, CONVERSION_REG, &read_value) != 0) {
 		ret = -1;
 		goto ads101x_continuous_read_exit;
 	}
@@ -347,7 +389,8 @@ ads101x_continuous_read_exit:
 	return ret;
 }
 
-int ads101x_unsigned_continuous_read(ads101x_t* ads,
+int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
+				     ads101x_t* ads,
 				     ADS101X_INPUT index,
 				     uint16_t* return_value,
 				     uint32_t timeout_ms)
@@ -355,8 +398,13 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
 {
 	int16_t signed_read_value;
 
+	if (return_value == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
 	if (ads101x_continuous_read(
-		    ads, index, &signed_read_value, timeout_ms) != 0) {
+		    i2c, ads, index, &signed_read_value, timeout_ms) != 0) {
 		return -1;
 	}
 
@@ -368,9 +416,16 @@ int ads101x_get_fs(const ads101x_t* ads,
 		   ADS101X_DATA_RATE* dr,
 		   uint32_t timeout_ms)
 {
+	ADS101X_DATA_RATE local_dr;
+
+	if (ads == NULL || dr == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
 	ADS101X_LOCK(ads, timeout_ms);
 
-	ADS101X_DATA_RATE local_dr = ADS101X_GET_DR(ads->expected_cfg_reg);
+	local_dr = ADS101X_GET_DR(ads->expected_cfg_reg);
 	// Ensure we return a valid enum (0b111 is equivalent to 3300 SPS)
 	*dr = local_dr == 0b111 ? ADS101X_3300SPS : local_dr;
 
@@ -379,9 +434,21 @@ int ads101x_get_fs(const ads101x_t* ads,
 	return 0;
 }
 
-int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms)
+int ads101x_set_fs(const i2c_interface_t* i2c,
+		   ads101x_t* ads,
+		   ADS101X_DATA_RATE dr,
+		   uint32_t timeout_ms)
 {
 	int ret;
+
+	if (ads == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, ads->bus) != 0) {
+		return -1;
+	}
 
 	ADS101X_LOCK(ads, timeout_ms);
 
@@ -389,7 +456,8 @@ int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms)
 
 	if (ADS101X_IS_CONTINUOUS_MODE(ads) &&
 	    ads->expected_cfg_reg != ads->old_cfg_reg) {
-		if (i2c_write8_16b(PASS_ADS(ads),
+		if (i2c_write8_16b(i2c,
+				   ads->addr,
 				   CONFIG_REG,
 				   ads->expected_cfg_reg) != 0) {
 			ret = -1;
@@ -399,10 +467,12 @@ int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms)
 		/*
 		 * Per the datasheet (SBAS473F 7.4.2.2), the conversion already
 		 * in flight completes with the PREVIOUS settings; only the one
-		 * after it uses the new ones. Nothing but this function writes
-		 * CONFIG_REG, so that in-flight conversion is necessarily
-		 * still running at old_cfg_reg's rate: wait it out, then wait
-		 * one full conversion at the new rate.
+		 * after it uses the new ones. In continuous mode, every
+		 * CONFIG_REG write (ads101x_init, ads101x_continuous_read and
+		 * ads101x_set_fs) also updates old_cfg_reg, so that in-flight
+		 * conversion is necessarily still running at old_cfg_reg's
+		 * rate. Wait it out, then wait one full conversion at the new
+		 * rate.
 		 */
 		ads101x_delay_until_conversion(
 			ADS101X_GET_DR(ads->old_cfg_reg));

@@ -31,6 +31,26 @@ extern "C" {
 #endif
 
 /**
+ * i2c_check_bus
+ *
+ * Check that an I2C interface is the one for the given bus.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - I2C interface to check.
+ *   bus (uint8_t)                - The bus it is expected to be on.
+ *
+ * Returns:
+ *   int - 0 if the interface is on that bus, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EINVAL   : The interface is on a different bus than the given one.
+ *     - (others) : Whatever i2c_get_bus() reports (see
+ *                  plc-peripherals-i2c-hal.h).
+ */
+int i2c_check_bus(const i2c_interface_t* i2c, uint8_t bus);
+
+/**
  * i2c_write8_8b
  *
  * Write a byte to a register of the given I2C address.

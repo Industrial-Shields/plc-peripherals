@@ -117,7 +117,7 @@ int main()
 		// unsigned variant is the natural fit here.
 		uint8_t sampled_channel = current_channel;
 		uint16_t raw;
-		if (ltc2309_read_unsigned(
+		if (ltc2309_read_unsigned(i2c,
 			    ltc, CHANNELS[sampled_channel], &raw, 0) == 0) {
 			sample_sum[sampled_channel] += raw;
 			sample_count[sampled_channel]++;

@@ -37,6 +37,9 @@
 #include "mock_plc-peripherals-i2c.h"
 #include "peripheral-ads101x.h"
 
+// For the shared i2c_get_bus / i2c_check_bus stubs
+#include "fake-i2c.h"
+
 #include <errno.h>
 #include <stdlib.h>
 #include <time.h>
@@ -150,24 +153,28 @@ static ads101x_t* create_ads(bool continuous)
 
 static void destroy_ads(ads101x_t* ads)
 {
-	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, false));
 }
 
 static ads101x_t* create_protected_ads(bool continuous)
 {
 	ads101x_t* ads = create_ads(continuous);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(ads));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(TEST_I2C, ads));
 	return ads;
 }
 
 static void destroy_protected_ads(ads101x_t* ads)
 {
-	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, false));
 }
 
 void setUp(void)
 {
+	fake_i2c_bus = TEST_BUS;
+	fake_i2c_bus_retval = 0;
+	i2c_get_bus_Stub(fake_i2c_get_bus);
+	i2c_check_bus_Stub(fake_i2c_check_bus);
 }
 
 void tearDown(void)
@@ -376,10 +383,17 @@ void test_ads101x_init_fails_when_writing_the_config_reg_fails(void)
 
 /* --------------------------- ads101x_deinit ------------------------------- */
 
+void test_ads101x_deinit_fails_with_efault_for_null_ads(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(TEST_I2C, NULL, false));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
 void test_ads101x_deinit_without_shutdown_just_frees(void)
 {
 	ads101x_t* ads = create_ads(false);
-	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, false));
 }
 
 void test_ads101x_deinit_with_shutdown_sets_the_mode_bit_and_writes_it_back(void)
@@ -392,14 +406,14 @@ void test_ads101x_deinit_with_shutdown_sets_the_mode_bit_and_writes_it_back(void
 				       INIT_RESTART_CFG_CONTINUOUS | 0x100,
 				       0);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, true));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, true));
 }
 
 void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combination(
 	void)
 {
 	/*
-	 * ads101x_deinit(shutdown=true) only ORs MODE into expected_cfg_reg
+	 * ads101x_deinit(TEST_I2C, shutdown=true) only ORs MODE into expected_cfg_reg
 	 * and writes it back, untouched otherwise.
 	 *
 	 * Single mode: Sweeps every (MUX, PGA, DR, COMP) to prove every other
@@ -451,7 +465,9 @@ void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combinati
 						cfg,
 						0);
 					TEST_ASSERT_EQUAL_INT(
-						0, ads101x_deinit(ads, true));
+						0,
+						ads101x_deinit(
+							TEST_I2C, ads, true));
 				}
 			}
 		}
@@ -484,7 +500,8 @@ void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combinati
 						       CONFIG_REG,
 						       cfg | CONFIG_REG_MODE,
 						       0);
-			TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, true));
+			TEST_ASSERT_EQUAL_INT(
+				0, ads101x_deinit(TEST_I2C, ads, true));
 		}
 	}
 }
@@ -496,11 +513,38 @@ void test_ads101x_deinit_fails_when_writing_the_config_reg_fails(void)
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, -1);
 
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(ads, true));
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(TEST_I2C, ads, true));
 	free(ads); // deinit bailed out before freeing it
 }
 
 /* --------------------------- ads101x_protect ------------------------------ */
+
+void test_ads101x_rejects_an_interface_for_another_bus(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	fake_i2c_bus = TEST_BUS + 1;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(
+			TEST_I2C, ads, ADS101X_P0_GND, &(int16_t){ 0 }, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_set_fs(TEST_I2C, ads, ADS101X_1600SPS, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(TEST_I2C, ads, false));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	// Back on the right bus, the same handle still works.
+	fake_i2c_bus = TEST_BUS;
+	destroy_ads(ads);
+}
 
 /* -------------------------- ads101x_unprotect ------------------------------ */
 
@@ -518,7 +562,8 @@ void test_ads101x_single_read_returns_a_positive_reading(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT16(0x0FF, value);
 
 	destroy_ads(ads);
@@ -538,7 +583,8 @@ void test_ads101x_single_read_selects_the_requested_channel(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_single_read(ads, ADS101X_P1_N3, &value, 1000));
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -557,7 +603,8 @@ void test_ads101x_single_read_switches_correctly_between_two_nonzero_channels(
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_single_read(ads, ADS101X_P1_N3, &value, 1000));
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
 
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
@@ -567,7 +614,8 @@ void test_ads101x_single_read_switches_correctly_between_two_nonzero_channels(
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_single_read(ads, ADS101X_P2_N3, &value, 1000));
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P2_N3, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -581,7 +629,8 @@ void test_ads101x_single_read_fails_when_writing_the_config_reg_fails(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -596,7 +645,8 @@ void test_ads101x_single_read_fails_when_reading_the_conversion_reg_fails(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -614,8 +664,34 @@ void test_ads101x_single_read_handles_the_maximally_negative_reading(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT16(-2048, value);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_single_read_fails_with_efault_for_null_ads(void)
+{
+	int16_t value;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(
+			TEST_I2C, NULL, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_single_read_fails_with_efault_for_null_return_value(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	destroy_ads(ads);
 }
@@ -628,13 +704,41 @@ void test_ads101x_single_read_fails_with_einval_when_device_is_continuous_mode(
 	errno = 0;
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_ads(ads);
 }
 
 /* --------------------- ads101x_unsigned_single_read ------------------------ */
+
+void test_ads101x_unsigned_single_read_fails_with_efault_for_null_ads(void)
+{
+	uint16_t value;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_unsigned_single_read(
+			TEST_I2C, NULL, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_unsigned_single_read_fails_with_efault_for_null_return_value(
+	void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_unsigned_single_read(
+			TEST_I2C, ads, ADS101X_P0_N1, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	destroy_ads(ads);
+}
 
 void test_ads101x_unsigned_single_read_passes_through_a_positive_reading(void)
 {
@@ -647,7 +751,8 @@ void test_ads101x_unsigned_single_read_passes_through_a_positive_reading(void)
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		ads101x_unsigned_single_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(255, value);
 
 	destroy_ads(ads);
@@ -664,7 +769,8 @@ void test_ads101x_unsigned_single_read_clamps_a_small_negative_reading_to_0(void
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		ads101x_unsigned_single_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(0, value);
 
 	destroy_ads(ads);
@@ -682,7 +788,8 @@ void test_ads101x_unsigned_single_read_clamps_exactly_minus_8_to_0(void)
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		ads101x_unsigned_single_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(0, value);
 
 	destroy_ads(ads);
@@ -701,7 +808,8 @@ void test_ads101x_unsigned_single_read_fails_with_erange_at_minus_9(void)
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		ads101x_unsigned_single_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
 
 	destroy_ads(ads);
@@ -719,7 +827,8 @@ void test_ads101x_unsigned_single_read_fails_with_erange_below_minus_8(void)
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		ads101x_unsigned_single_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
 
 	destroy_ads(ads);
@@ -735,7 +844,8 @@ void test_ads101x_unsigned_single_read_propagates_a_single_read_failure(void)
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		ads101x_unsigned_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		ads101x_unsigned_single_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -751,7 +861,9 @@ void test_ads101x_continuous_read_skips_the_write_on_the_same_channel(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT16(0x0FF, value);
 
 	destroy_ads(ads);
@@ -770,7 +882,9 @@ void test_ads101x_continuous_read_writes_on_a_channel_change(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -795,7 +909,9 @@ void test_ads101x_continuous_read_writes_again_after_returning_to_a_previous_cha
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
 
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
@@ -805,7 +921,9 @@ void test_ads101x_continuous_read_writes_again_after_returning_to_a_previous_cha
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -827,13 +945,16 @@ void test_ads101x_continuous_read_reads_directly_after_set_fs_already_settled_th
 				       (INIT_RESTART_CFG_CONTINUOUS & ~0xE0) |
 					       0x60,
 				       0);
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_set_fs(TEST_I2C, ads, ADS101X_920SPS, 1000));
 
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -850,7 +971,9 @@ void test_ads101x_continuous_read_fails_when_writing_the_config_reg_fails(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_continuous_read(ads, ADS101X_P1_N3, &value, 1000));
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -864,7 +987,35 @@ void test_ads101x_continuous_read_fails_when_reading_the_conversion_reg_fails(
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_continuous_read_fails_with_efault_for_null_ads(void)
+{
+	int16_t value;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, NULL, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_continuous_read_fails_with_efault_for_null_return_value(void)
+{
+	ads101x_t* ads = create_ads(true);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	destroy_ads(ads);
 }
@@ -877,13 +1028,42 @@ void test_ads101x_continuous_read_fails_with_einval_when_device_is_single_mode(
 	errno = 0;
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_ads(ads);
 }
 
 /* -------------------- ads101x_unsigned_continuous_read ---------------------- */
+
+void test_ads101x_unsigned_continuous_read_fails_with_efault_for_null_ads(void)
+{
+	uint16_t value;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_unsigned_continuous_read(
+			TEST_I2C, NULL, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_unsigned_continuous_read_fails_with_efault_for_null_return_value(
+	void)
+{
+	ads101x_t* ads = create_ads(true);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_unsigned_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	destroy_ads(ads);
+}
 
 void test_ads101x_unsigned_continuous_read_passes_through_a_positive_reading(
 	void)
@@ -893,9 +1073,10 @@ void test_ads101x_unsigned_continuous_read_passes_through_a_positive_reading(
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
 	uint16_t value;
-	TEST_ASSERT_EQUAL_INT(0,
-			      ads101x_unsigned_continuous_read(
-				      ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_unsigned_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT16(255, value);
 
 	destroy_ads(ads);
@@ -909,9 +1090,10 @@ void test_ads101x_unsigned_continuous_read_fails_with_erange_below_minus_8(void)
 
 	uint16_t value;
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1,
-			      ads101x_unsigned_continuous_read(
-				      ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_unsigned_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
 
 	destroy_ads(ads);
@@ -925,14 +1107,35 @@ void test_ads101x_unsigned_continuous_read_propagates_a_continuous_read_failure(
 	expect_i2c_read8_16b(CONVERSION_REG, 0, -1);
 
 	uint16_t value;
-	TEST_ASSERT_EQUAL_INT(-1,
-			      ads101x_unsigned_continuous_read(
-				      ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_unsigned_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
 
 /* --------------------------- ads101x_get_fs -------------------------------- */
+
+void test_ads101x_get_fs_fails_with_efault_for_null_ads(void)
+{
+	ADS101X_DATA_RATE dr;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_fs(NULL, &dr, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_get_fs_fails_with_efault_for_null_dr(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_fs(ads, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	destroy_ads(ads);
+}
 
 void test_ads101x_get_fs_returns_the_current_data_rate(void)
 {
@@ -952,7 +1155,8 @@ void test_ads101x_get_fs_maps_the_0b111_encoding_to_3300sps(void)
 	// 3300SPS encoding, not one of the named enumerators), but the field
 	// is only 3 bits wide and set_fs doesn't validate its input.
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_set_fs(ads, (ADS101X_DATA_RATE)0b111, 1000));
+		0,
+		ads101x_set_fs(TEST_I2C, ads, (ADS101X_DATA_RATE)0b111, 1000));
 
 	ADS101X_DATA_RATE dr;
 	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
@@ -963,11 +1167,20 @@ void test_ads101x_get_fs_maps_the_0b111_encoding_to_3300sps(void)
 
 /* --------------------------- ads101x_set_fs -------------------------------- */
 
+void test_ads101x_set_fs_fails_with_efault_for_null_ads(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ads101x_set_fs(TEST_I2C, NULL, FAST_DR, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
 void test_ads101x_set_fs_patches_only_the_dr_bits(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_set_fs(TEST_I2C, ads, ADS101X_920SPS, 1000));
 
 	/*
 	 * Observe the effect through single_read's CONFIG_REG write: only the
@@ -983,7 +1196,8 @@ void test_ads101x_set_fs_patches_only_the_dr_bits(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -1001,7 +1215,8 @@ void test_ads101x_set_fs_writes_and_waits_when_the_rate_actually_changes_in_cont
 					       0x60,
 				       0);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_set_fs(TEST_I2C, ads, ADS101X_920SPS, 1000));
 
 	destroy_ads(ads);
 }
@@ -1018,7 +1233,8 @@ void test_ads101x_set_fs_fails_when_writing_the_config_reg_fails_in_continuous_m
 					       0x60,
 				       -1);
 
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_set_fs(TEST_I2C, ads, ADS101X_920SPS, 1000));
 
 	destroy_ads(ads);
 }
@@ -1028,7 +1244,7 @@ void test_ads101x_set_fs_skips_the_write_when_the_rate_is_unchanged(void)
 	ads101x_t* ads = create_ads(true); // continuous, starts at FAST_DR
 
 	// No i2c_write8_16b expectation queued: any write here is a bug.
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, FAST_DR, 1000));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
 
 	destroy_ads(ads);
 }
@@ -1040,7 +1256,8 @@ void test_ads101x_set_fs_only_writes_in_single_mode_when_read_next(void)
 	 */
 	ads101x_t* ads = create_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_set_fs(TEST_I2C, ads, ADS101X_920SPS, 1000));
 
 	destroy_ads(ads);
 }
@@ -1063,7 +1280,7 @@ void test_ads101x_set_fs_waits_for_both_the_old_and_new_conversion_rate(void)
 	struct timespec start, end;
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, FAST_DR, 1000));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
 
 	clock_gettime(CLOCK_MONOTONIC, &end);
 	long ms = elapsed_ms(start, end);
@@ -1109,8 +1326,8 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
-		TEST_ASSERT_EQUAL_INT(0,
-				      ads101x_set_fs(ads, cases[i].dr, 1000));
+		TEST_ASSERT_EQUAL_INT(
+			0, ads101x_set_fs(TEST_I2C, ads, cases[i].dr, 1000));
 		i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 					       TEST_ADDR,
 					       CONFIG_REG,
@@ -1124,7 +1341,8 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 		int16_t value;
 		TEST_ASSERT_EQUAL_INT(
 			0,
-			ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+			ads101x_single_read(
+				TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		long us = elapsed_us(start, end);
@@ -1141,14 +1359,14 @@ void test_ads101x_deinit_also_unprotects_when_protected(void)
 {
 	ads101x_t* ads = create_protected_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(ads, false));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, false));
 }
 
 void test_ads101x_deinit_fails_when_the_unprotect_fails(void)
 {
 	ads101x_t* ads = create_protected_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(ads, false));
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(TEST_I2C, ads, false));
 
 	free(ads); // deinit bailed out before freeing it
 }
@@ -1156,7 +1374,7 @@ void test_ads101x_deinit_fails_when_the_unprotect_fails(void)
 void test_ads101x_protect_fails_with_einval_for_null(void)
 {
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(NULL));
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(TEST_I2C, NULL));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 }
 
@@ -1164,7 +1382,7 @@ void test_ads101x_protect_adds_the_resource_for_its_bus_and_address(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(ads));
+	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(TEST_I2C, ads));
 
 	destroy_protected_ads(ads);
 }
@@ -1173,7 +1391,7 @@ void test_ads101x_protect_fails_when_the_bus_cant_be_read(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(ads));
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(TEST_I2C, ads));
 
 	destroy_ads(ads);
 }
@@ -1182,7 +1400,7 @@ void test_ads101x_protect_returns_1_if_already_protected(void)
 {
 	ads101x_t* ads = create_protected_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(1, ads101x_protect(ads));
+	TEST_ASSERT_EQUAL_INT(1, ads101x_protect(TEST_I2C, ads));
 
 	destroy_protected_ads(ads);
 }
@@ -1235,7 +1453,8 @@ void test_ads101x_single_read_when_protected_locks_and_unlocks(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_single_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_protected_ads(ads);
 }
@@ -1252,7 +1471,9 @@ void test_ads101x_continuous_read_when_protected_locks_and_unlocks(void)
 
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_continuous_read(ads, ADS101X_P0_N1, &value, 1000));
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_protected_ads(ads);
 }
@@ -1282,7 +1503,8 @@ void test_ads101x_set_fs_when_protected_locks_and_unlocks(void)
 	plc_mutex_release_ExpectAndReturn(NULL, 0);
 	plc_mutex_release_IgnoreArg_mutex();
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(ads, ADS101X_920SPS, 1000));
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_set_fs(TEST_I2C, ads, ADS101X_920SPS, 1000));
 
 	destroy_protected_ads(ads);
 }

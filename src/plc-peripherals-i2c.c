@@ -23,6 +23,22 @@
 #include <errno.h>
 #include <arpa/inet.h>
 
+int i2c_check_bus(const i2c_interface_t* i2c, uint8_t bus)
+{
+	uint8_t actual_bus;
+
+	if (i2c_get_bus(i2c, &actual_bus) != 0) {
+		return -1;
+	}
+
+	if (actual_bus != bus) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	return 0;
+}
+
 int i2c_write8_8b(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
 		  uint8_t reg,

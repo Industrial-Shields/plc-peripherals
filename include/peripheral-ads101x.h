@@ -25,6 +25,11 @@
 extern "C" {
 #endif
 
+/*
+ * WARNING: Never copy a live ads101x_t. Assigning an ads101x_t, embedding one in a
+ * struct that is assigned or passed by value, memcpying it, or reallocating an
+ * array of them all do it. The backend does not necessarily support it!
+ */
 struct _ads101x_t;
 typedef struct _ads101x_t ads101x_t;
 
@@ -68,19 +73,24 @@ typedef enum {
  * ads101x_init
  *
  * Initialize an ADS101X peripheral with address "addr". This function currently
- * supports ADS1015 only. You must only have one interface per device.
+ * supports ADS1015 only. You must only have one handle per device.
  *
  * Parameters:
- *   i2c (i2c_interface_t*)       - The I2C interface to access the peripheral.
+ *   i2c (const i2c_interface_t*) - The I2C interface to access the peripheral.
  *   addr (plc_i2c_addr_t)        - The I2C address of the peripheral.
  *   restart (bool)               - true if you want to reset the peripheral
- *                                  (that is, set the registers to it's default
- *                                  values).
+ *                                  (that is, set the registers to their
+ *                                  default values).
+ *   set_continuous_mode (bool)   - true to put the ADS101X in continuous
+ *                                  conversion mode, false to put it in
+ *                                  single-shot mode. This setting will apply
+ *                                  regardless of whether the restart is true or
+ *                                  false.
  *   fsr (ADS101X_GAIN_AMPLIFIER) - The programmable gain amplifier
  *                                  configuration. This setting will apply
  *                                  regardless of whether the restart is true or
  *                                  false.
- *   dr (ADS101X_DATA_RATE)         - The number of samples per second that will
+ *   dr (ADS101X_DATA_RATE)       - The number of samples per second that will
  *                                  be picked up. This setting will apply
  *                                  regardless of whether the restart is true or
  *                                  false.
@@ -91,11 +101,12 @@ typedef enum {
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed i2c_interface is NULL, or address is invalid.
- *     - ENOMEM : Out of memory during allocation.
- *     - EIO    : Communication with the ADS101X couldn't be established.
+ *     - ENOMEM   : Out of memory during allocation.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-ads101x_t* ads101x_init(i2c_interface_t* i2c,
+ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
 			bool restart,
 			bool set_continuous_mode,
@@ -109,19 +120,22 @@ ads101x_t* ads101x_init(i2c_interface_t* i2c,
  * only.
  *
  * Parameters:
- *   ads (ads101x_t)         - The ADS101X to interact with.
- *   shutdown (bool)         - true if you want to leave the peripheral in a
- *                             powered-down state.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to interact with.
+ *   shutdown (bool)              - true if you want to leave the peripheral in
+ *                                  a powered-down state.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed ads101x_t is NULL, or address is invalid.
- *     - EIO    : Communication with the ADS101X couldn't be established.
- *     - EBUSY  : Hash mutex couldn't be taken.
+ *     - EFAULT   : Passed ads101x_t is NULL.
+ *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ads101x_deinit(ads101x_t* ads, bool shutdown);
+int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
 
 /**
  * ads101x_protect
@@ -129,7 +143,8 @@ int ads101x_deinit(ads101x_t* ads, bool shutdown);
  * Protect the ADS101X with a mutex.
  *
  * Parameters:
- *   ads (ads101x_t)         - The ADS101X to protect.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to protect.
  * Returns:
  *   int - 0 if successful, 1 if already protected, otherwise -1.
  *
@@ -142,7 +157,7 @@ int ads101x_deinit(ads101x_t* ads, bool shutdown);
  *     - Linux specific:
  *       - EINVAL: The monotonic clock isn't available.
  */
-int ads101x_protect(ads101x_t* ads);
+int ads101x_protect(const i2c_interface_t* i2c, ads101x_t* ads);
 
 /**
  * ads101x_unprotect
@@ -167,41 +182,43 @@ int ads101x_unprotect(ads101x_t* ads);
 /**
  * ads101x_single_read
  *
- * Retrieve the reading from an ADS101X channel. This function will block until
- * a valid reading is available. To use it, the ADS101X must be in single mode
- * (ads101x_init must have been called with set_continuous_mode=false).
+ * Trigger a single-shot conversion of an ADS101X channel, and retrieve its
+ * reading. This function blocks for one conversion time at the current data
+ * rate before reading the result. To use it, the ADS101X must be in single-shot
+ * mode (ads101x_init must have been called with set_continuous_mode=false). It
+ * returns the reading as a signed number.
  *
  * Per the ADS1015 datasheet (SBAS473F, section 7.4.2.1 and the OS bit's entry
  * in Table 8-4), the OS bit "can only be written when in power-down state and
- * has no effect when a conversion is ongoing". Single mode returns the device
- * to power-down between conversions, so this trigger normally works as
- * intended. But in continuous mode the device is, by definition, always either
- * converting or immediately starting its next conversion, so the OS bit this
- * function writes is silently ignored.  Calling this function while the device
- * is actually in continuous mode does NOT trigger a new conversion of the
- * requested channel: it just reads back whatever value the free-running
- * continuous conversion happens to hold at that instant, which may belong to a
- * different channel or be stale relative to the one requested here.
+ * has no effect when a conversion is ongoing". Single-shot mode returns the
+ * device to power-down between conversions, so writing the OS bit starts a new
+ * conversion. In continuous mode the device is always converting, so the OS
+ * bit would be silently ignored, and the value read back could belong to a
+ * different channel or be stale.
  *
  * Parameters:
- *   ads (ads101x_t*)        - The ADS101X to interact with.
- *   index (ADS101x_INPUT)   - The input to single_read from the ADS101X.
- *   return_value (int16_t*) - The value in which the reading will be stored.
- *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
- *                             applicable when the ADS101X is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to interact with.
+ *   index (ADS101X_INPUT)        - The input to read from the ADS101X.
+ *   return_value (int16_t*)      - The value in which the reading will be
+ *                                  stored.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *                                  applicable when the ADS101X is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
- *     - EIO                 : Communication with the ADS101X couldn't be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ads101x_t or return_value is NULL.
+ *     - EINVAL   : The ADS101X was initialized in continuous mode, or i2c is
+ *                  not on the bus the ADS101X was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ads101x_single_read(ads101x_t* ads,
+int ads101x_single_read(const i2c_interface_t* i2c,
+			ads101x_t* ads,
 			ADS101X_INPUT index,
 			int16_t* return_value,
 			uint32_t timeout_ms);
@@ -209,35 +226,40 @@ int ads101x_single_read(ads101x_t* ads,
 /**
  * ads101x_unsigned_single_read
  *
- * Retrieve the reading from an ADS101X channel. This function will block until
- * a valid reading is available. To use it, the ADS101X must be in single
- * mode (ads101x_init must have been called with set_continuous_mode=false).
- * See ads101x_single_read's doc comment above for exactly why this
- * precondition matters.
+ * Trigger a single-shot conversion of an ADS101X channel, and retrieve its
+ * reading. This function blocks for one conversion time at the current data
+ * rate before reading the result. To use it, the ADS101X must be in single-shot
+ * mode (ads101x_init must have been called with set_continuous_mode=false). It
+ * returns the reading as a signed number.
  *
- * This function will return an error if the reading is 3 bits negative (less
- * than -8, triple the datasheet offset), and will set errno to ERANGE.
+ * Because of the device offset, a single-ended input close to 0V can still read
+ * slightly negative (SBAS473F, section 7.5.4). Readings from -8 to -1 are
+ * returned as 0. Readings below -8 are an error.
  *
  * Parameters:
- *   ads (ads101x_t*)         - The ADS101X to interact with.
- *   index (ADS101x_INPUT)    - The input to single_read from the ADS101X.
- *   return_value (uint16_t*) - The value in which the reading will be stored.
- *   timeout_ms (uint32_t)    - The maximum time to wait for a reading. Only
- *                              applicable when the ADS101X is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to interact with.
+ *   index (ADS101X_INPUT)        - The input to read from the ADS101X.
+ *   return_value (uint16_t*)     - The value in which the reading will be
+ *                                  stored.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *                                  applicable when the ADS101X is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
- *     - EIO                 : Communication with the ADS101X couldn't be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout given.
- *     - ERANGE              : Reading value is less than -8.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ads101x_t or return_value is NULL.
+ *     - EINVAL   : The ADS101X was initialized in continuous mode, or i2c is
+ *                  not on the bus the ADS101X was initialized on.
+ *     - ERANGE   : Reading value is less than -8.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ads101x_unsigned_single_read(ads101x_t* ads,
+int ads101x_unsigned_single_read(const i2c_interface_t* i2c,
+				 ads101x_t* ads,
 				 ADS101X_INPUT index,
 				 uint16_t* return_value,
 				 uint32_t timeout_ms);
@@ -245,40 +267,40 @@ int ads101x_unsigned_single_read(ads101x_t* ads,
 /**
  * ads101x_continuous_read
  *
- * Retrieve the reading from an ADS101X channel. If the asked channel is not the
- * one being mesured, this function will block until a valid reading is
- * available. To use it, the ADS101X must be in continuous mode (ads101x_init
- * must have been called with set_continuous_mode=true).
+ * Retrieve the latest reading of an ADS101X channel. To use it, the ADS101X
+ * must be in continuous mode (ads101x_init must have been called with
+ * set_continuous_mode=true).
  *
- * This function never touches the CONFIG register's OS bit -- it relies
- * entirely on continuous mode's free-running conversions, only writing new MUX
- * bits when the requested channel changes. If the device is actually in single
- * mode instead (idle, powered down between conversions), this function has no
- * way to trigger a fresh conversion of the requested channel (although
- * depending on the OS bit's state at the moment of the write, it may
- * coincidentally trigger one anyway). Don't mix ads101x_continuous_read with a
- * device initialized via set_continuous_mode=false; use ads101x_single_read for
- * that device instead.
+ * This function never triggers a conversion: it relies on continuous mode's
+ * free-running conversions. If the requested channel is the one being
+ * converted, it reads the result right away. Otherwise it writes the new MUX
+ * bits, and blocks until the conversion in flight (with the previous
+ * settings) and one full conversion with the new ones have completed
+ * (SBAS473F, section 7.4.2.2).
  *
  * Parameters:
- *   ads (ads101x_t*)        - The ADS101X to interact with.
- *   index (ADS101x_INPUT)   - The input to continuous_read from the ADS101X.
- *   return_value (int16_t*) - The value in which the reading will be stored.
- *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
- *                             applicable when the ADS101X is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to interact with.
+ *   index (ADS101X_INPUT)        - The input to read from the ADS101X.
+ *   return_value (int16_t*)      - The value in which the reading will be
+ *                                  stored.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *                                  applicable when the ADS101X is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
- *     - EIO                 : Communication with the ADS101X couldn't be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ads101x_t or return_value is NULL.
+ *     - EINVAL   : The ADS101X was initialized in single-shot mode, or i2c is
+ *                  not on the bus the ADS101X was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ads101x_continuous_read(ads101x_t* ads,
+int ads101x_continuous_read(const i2c_interface_t* i2c,
+			    ads101x_t* ads,
 			    ADS101X_INPUT index,
 			    int16_t* return_value,
 			    uint32_t timeout_ms);
@@ -286,36 +308,38 @@ int ads101x_continuous_read(ads101x_t* ads,
 /**
  * ads101x_unsigned_continuous_read
  *
- * Retrieve the reading from an ADS101X channel. If the asked channel is not the
- * one being mesured, this function will block until a valid reading is
- * available. To use it, the ADS101X must be in continuous mode
- * (ads101x_init must have been called with set_continuous_mode=true). See
- * ads101x_continuous_read's doc comment above for exactly why this
- * precondition matters.
+ * Retrieve the latest reading of an ADS101X channel. To use it, the ADS101X
+ * must be in continuous mode (ads101x_init must have been called with
+ * set_continuous_mode=true).
  *
- * This function will return an error if the reading is 3 bits negative (less
- * than -8, triple the datasheet offset), and will set errno to ERANGE.
+ * Because of the device offset, a single-ended input close to 0V can still read
+ * slightly negative (SBAS473F, section 7.5.4). Readings from -8 to -1 are
+ * stored as 0. Readings below -8 are an error.
  *
  * Parameters:
- *   ads (ads101x_t*)         - The ADS101X to interact with.
- *   index (ADS101x_INPUT)    - The input to continuous_read from the ADS101X.
- *   return_value (uint16_t*) - The value in which the reading will be stored.
- *   timeout_ms (uint32_t)    - The maximum time to wait for a reading. Only
- *                              applicable when the ADS101X is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to interact with.
+ *   index (ADS101X_INPUT)        - The input to read from the ADS101X.
+ *   return_value (uint16_t*)     - The value in which the reading will be
+ *                                  stored.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *                                  applicable when the ADS101X is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
- *     - EIO                 : Communication with the ADS101X couldn't be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout given.
- *     - ERANGE              : Reading value is less than -8.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ads101x_t or return_value is NULL.
+ *     - EINVAL   : The ADS101X was initialized in single-shot mode, or i2c is
+ *                  not on the bus the ADS101X was initialized on.
+ *     - ERANGE   : Reading value is less than -8.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ads101x_unsigned_continuous_read(ads101x_t* ads,
+int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
+				     ads101x_t* ads,
 				     ADS101X_INPUT index,
 				     uint16_t* return_value,
 				     uint32_t timeout_ms);
@@ -337,11 +361,7 @@ int ads101x_unsigned_continuous_read(ads101x_t* ads,
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
- *     - EIO                 : Communication with the ADS101X couldn't be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT : Passed ads101x_t or dr is NULL.
  */
 int ads101x_get_fs(const ads101x_t* ads,
 		   ADS101X_DATA_RATE* dr,
@@ -352,24 +372,34 @@ int ads101x_get_fs(const ads101x_t* ads,
  *
  * Set a new sampling frequency for the ADS101X.
  *
+ * In continuous mode, if the rate changed, it writes it to the device, and
+ * blocks until the conversion in flight (at the previous rate) and one full
+ * conversion at the new rate have completed (SBAS473F, section 7.4.2.2). In
+ * single-shot mode, it doesn't access the I2C bus: the new rate is written with
+ * the next ads101x_single_read.
+ *
  * Parameters:
- *   ads (ads101x_t*)        - The ADS101X to interact with.
- *   dr (ADS101X_DATA_RATE)  - Sampling frequency to set.
- *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
- *                             applicable when the ADS101X is protected.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to interact with.
+ *   dr (ADS101X_DATA_RATE)       - Sampling frequency to set.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *                                  applicable when the ADS101X is protected.
  *
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL (if enabled) : Passed ads101x_t is NULL, or address is invalid.
- *     - EIO                 : Communication with the ADS101X couldn't be established.
- *     - EBUSY               : Mutex couldn't be taken within the timeout given.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ads101x_t is NULL.
+ *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
  */
-int ads101x_set_fs(ads101x_t* ads, ADS101X_DATA_RATE dr, uint32_t timeout_ms);
+int ads101x_set_fs(const i2c_interface_t* i2c,
+		   ads101x_t* ads,
+		   ADS101X_DATA_RATE dr,
+		   uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

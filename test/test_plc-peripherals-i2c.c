@@ -28,7 +28,10 @@
 #include "mock_plc-peripherals-i2c-hal.h"
 #include "plc-peripherals-i2c.h"
 
+#include <errno.h>
+
 #define TEST_ADDR ((plc_i2c_addr_t)0x48)
+#define TEST_BUS ((uint8_t)3)
 
 void setUp(void)
 {
@@ -40,6 +43,46 @@ void setUp(void)
 
 void tearDown(void)
 {
+}
+
+/* ----------------------------- i2c_check_bus ----------------------------- */
+
+void test_i2c_check_bus_accepts_an_interface_on_the_given_bus(void)
+{
+	fake_i2c_bus = TEST_BUS;
+	i2c_get_bus_Stub(fake_i2c_get_bus);
+
+	TEST_ASSERT_EQUAL_INT(0, i2c_check_bus(FAKE_I2C_IFACE, TEST_BUS));
+}
+
+void test_i2c_check_bus_rejects_an_interface_on_another_bus(void)
+{
+	fake_i2c_bus = TEST_BUS;
+	i2c_get_bus_Stub(fake_i2c_get_bus);
+
+	TEST_ASSERT_EQUAL_INT(-1, i2c_check_bus(FAKE_I2C_IFACE, TEST_BUS + 1));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_i2c_check_bus_keeps_the_errno_when_the_bus_lookup_fails(void)
+{
+	fake_i2c_bus = TEST_BUS;
+	fake_i2c_bus_retval = -1; // As a NULL interface makes it fail
+	fake_i2c_bus_errno = ENODEV; // Not the EFAULT a NULL interface gets
+	i2c_get_bus_Stub(fake_i2c_get_bus);
+
+	TEST_ASSERT_EQUAL_INT(-1, i2c_check_bus(FAKE_I2C_IFACE, TEST_BUS));
+	TEST_ASSERT_EQUAL_INT(ENODEV, errno);
+}
+
+void test_i2c_check_bus_reports_a_null_interface_as_a_fault(void)
+{
+	fake_i2c_bus = TEST_BUS;
+	fake_i2c_bus_retval = -1; // What i2c_get_bus does with a NULL interface
+	i2c_get_bus_Stub(fake_i2c_get_bus);
+
+	TEST_ASSERT_EQUAL_INT(-1, i2c_check_bus(NULL, TEST_BUS));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
 /* ----------------------------- i2c_write8_8b ----------------------------- */
