@@ -27,6 +27,7 @@
 
 #include <malloc.h>
 #include <errno.h>
+#include <stdint.h>
 
 // clang-format off
 #define IODIR_REG                                      0x00
@@ -51,11 +52,20 @@
 #define OLAT_REG                                       0x0A
 // clang-format on
 
-struct _mcp230xx_t {
+typedef struct {
 	plc_i2c_addr_t addr;
 	uint8_t bus;
-	MCP230XX_TYPE type;
-};
+	uint8_t type;
+} mcp230xx_internal_t;
+
+_Static_assert(sizeof(mcp230xx_t) == sizeof(mcp230xx_internal_t),
+	       "Not exactly an mcp230xx_internal_t");
+_Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(mcp230xx_t) ==
+		       PLC_PERIPHERAL_INTERNAL_ALIGNOF(mcp230xx_internal_t),
+	       "Not aligned exactly as an mcp230xx_internal_t");
+
+#define MCP(m) ((mcp230xx_internal_t*)(m))
+#define MCP_TYPE(m) ((MCP230XX_TYPE)MCP(m)->type)
 
 #define MCP230XX_RESET_REG(i2c, addr, register_name) \
 	i2c_write8_8b(i2c, addr, register_name, register_name##_RESET_VALUE)
@@ -115,47 +125,43 @@ static bool mcp230xx_int_config_is_valid(MCP230XX_INT_TYPE int_type,
 	}
 }
 
-mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
-			  plc_i2c_addr_t addr,
-			  bool restart,
-			  const mcp230xx_config_t* cfg)
+int mcp230xx_static_init(const i2c_interface_t* i2c,
+			 mcp230xx_t* mcp,
+			 plc_i2c_addr_t addr,
+			 bool restart,
+			 const mcp230xx_config_t* cfg)
 {
-	mcp230xx_t* ret;
 	uint8_t cfg_reg;
 	uint8_t bus;
 
-	if (cfg == NULL) {
+	if (mcp == NULL || ((uintptr_t)mcp % MCP230XX_ALIGN) != 0 ||
+	    cfg == NULL) {
 		errno = EFAULT;
-		return NULL;
+		return -1;
 	}
 
 	if (!mcp230xx_int_config_is_valid(cfg->int_type, cfg->int_pol) ||
 	    (cfg->type != MCP230XX_017 &&
 	     cfg->mirror == MCP230XX_MIRRORED_INT)) {
 		errno = EINVAL;
-		return NULL;
+		return -1;
 	}
 
 	const uint8_t iocon_reg = REG_A(IOCON_REG, cfg->type);
 
 	if (i2c_get_bus(i2c, &bus) != 0) {
-		return NULL;
-	}
-
-	ret = malloc(sizeof(struct _mcp230xx_t));
-	if (ret == NULL) {
-		return NULL;
+		return -1;
 	}
 
 	if (restart) {
 		int result = mcp230xx_reset(i2c, addr, cfg->type);
 		if (result != 0) {
-			goto init_error_cleanup;
+			return -1;
 		}
 		cfg_reg = IOCON_REG_RESET_VALUE;
 	} else {
 		if (i2c_read8_8b(i2c, addr, iocon_reg, &cfg_reg) != 0) {
-			goto init_error_cleanup;
+			return -1;
 		}
 	}
 
@@ -178,35 +184,62 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 	cfg_reg |= cfg->mirror << IOCON_REG_MIRROR_SHIFT;
 
 	if (i2c_write8_8b(i2c, addr, iocon_reg, cfg_reg) != 0) {
-		goto init_error_cleanup;
+		return -1;
 	}
 
-	ret->addr = addr;
-	ret->bus = bus;
-	ret->type = cfg->type;
-	return ret;
-
-init_error_cleanup:
-	free(ret);
-	return NULL;
+	MCP(mcp)->addr = addr;
+	MCP(mcp)->bus = bus;
+	MCP(mcp)->type = (uint8_t)cfg->type;
+	return 0;
 }
 
-int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart)
+mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
+			  plc_i2c_addr_t addr,
+			  bool restart,
+			  const mcp230xx_config_t* cfg)
+{
+	mcp230xx_t* ret = malloc(sizeof(mcp230xx_t));
+
+	if (ret == NULL) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	if (mcp230xx_static_init(i2c, ret, addr, restart, cfg) != 0) {
+		free(ret);
+		return NULL;
+	}
+
+	return ret;
+}
+
+int mcp230xx_static_deinit(const i2c_interface_t* i2c,
+			   mcp230xx_t* mcp,
+			   bool restart)
 {
 	if (mcp == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, mcp->bus) != 0) {
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
 		return -1;
 	}
 
 	if (restart) {
-		int result = mcp230xx_reset(i2c, mcp->addr, mcp->type);
+		int result = mcp230xx_reset(i2c, MCP(mcp)->addr, MCP_TYPE(mcp));
 		if (result != 0) {
 			return result;
 		}
+	}
+
+	return 0;
+}
+
+int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart)
+{
+	if (mcp230xx_static_deinit(i2c, mcp, restart) != 0) {
+		return -1;
 	}
 
 	free(mcp);
@@ -245,30 +278,30 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if ((mcp->type == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
-	    (mcp->type == MCP230XX_017 && index >= MCP23017_MAX_GPIOS) ||
+	if ((MCP_TYPE(mcp) == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
+	    (MCP_TYPE(mcp) == MCP230XX_017 && index >= MCP23017_MAX_GPIOS) ||
 	    (config != MCP230XX_NO_PULLUP && config != MCP230XX_PULLUP)) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, mcp->bus) != 0) {
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
 		return -1;
 	}
 
 	const uint8_t normalized_index = index % MCP23008_MAX_GPIOS;
 	const uint8_t pin_mask = 1 << normalized_index;
 	const uint8_t iodir_addr = index < MCP23008_MAX_GPIOS ?
-					   REG_A(IODIR_REG, mcp->type) :
-					   REG_B(IODIR_REG, mcp->type);
+					   REG_A(IODIR_REG, MCP_TYPE(mcp)) :
+					   REG_B(IODIR_REG, MCP_TYPE(mcp));
 	const uint8_t gppu_addr = index < MCP23008_MAX_GPIOS ?
-					  REG_A(GPPU_REG, mcp->type) :
-					  REG_B(GPPU_REG, mcp->type);
+					  REG_A(GPPU_REG, MCP_TYPE(mcp)) :
+					  REG_B(GPPU_REG, MCP_TYPE(mcp));
 
 	MCP230XX_LOCK(mcp, timeout_ms);
 
-	if (i2c_read8_8b(i2c, mcp->addr, iodir_addr, &iodir_reg) != 0 ||
-	    i2c_read8_8b(i2c, mcp->addr, gppu_addr, &gppu_reg) != 0) {
+	if (i2c_read8_8b(i2c, MCP(mcp)->addr, iodir_addr, &iodir_reg) != 0 ||
+	    i2c_read8_8b(i2c, MCP(mcp)->addr, gppu_addr, &gppu_reg) != 0) {
 		result = -1;
 		goto set_input_error_cleanup;
 	}
@@ -296,12 +329,14 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
 		 * accidental pull-ups.
 		 */
 		if (change_gppu &&
-		    i2c_write8_8b(i2c, mcp->addr, gppu_addr, gppu_reg) != 0) {
+		    i2c_write8_8b(i2c, MCP(mcp)->addr, gppu_addr, gppu_reg) !=
+			    0) {
 			result = -1;
 			goto set_input_error_cleanup;
 		}
 		if (change_iodir &&
-		    i2c_write8_8b(i2c, mcp->addr, iodir_addr, iodir_reg) != 0) {
+		    i2c_write8_8b(i2c, MCP(mcp)->addr, iodir_addr, iodir_reg) !=
+			    0) {
 			result = -1;
 			goto set_input_error_cleanup;
 		}
@@ -327,23 +362,23 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if ((mcp->type == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
-	    (mcp->type == MCP230XX_017 && index >= MCP23017_MAX_GPIOS)) {
+	if ((MCP_TYPE(mcp) == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
+	    (MCP_TYPE(mcp) == MCP230XX_017 && index >= MCP23017_MAX_GPIOS)) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, mcp->bus) != 0) {
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
 		return -1;
 	}
 
 	const uint8_t gpio_addr = index < MCP23008_MAX_GPIOS ?
-					  REG_A(GPIO_REG, mcp->type) :
-					  REG_B(GPIO_REG, mcp->type);
+					  REG_A(GPIO_REG, MCP_TYPE(mcp)) :
+					  REG_B(GPIO_REG, MCP_TYPE(mcp));
 	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
 
 	MCP230XX_LOCK(mcp, timeout_ms);
-	result = i2c_read8_8b(i2c, mcp->addr, gpio_addr, &gpio_reg);
+	result = i2c_read8_8b(i2c, MCP(mcp)->addr, gpio_addr, &gpio_reg);
 	MCP230XX_UNLOCK(mcp);
 
 	if (result != 0) {
@@ -368,24 +403,24 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if ((mcp->type == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
-	    (mcp->type == MCP230XX_017 && index >= MCP23017_MAX_GPIOS)) {
+	if ((MCP_TYPE(mcp) == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
+	    (MCP_TYPE(mcp) == MCP230XX_017 && index >= MCP23017_MAX_GPIOS)) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, mcp->bus) != 0) {
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
 		return -1;
 	}
 
 	const uint8_t iodir_addr = index < MCP23008_MAX_GPIOS ?
-					   REG_A(IODIR_REG, mcp->type) :
-					   REG_B(IODIR_REG, mcp->type);
+					   REG_A(IODIR_REG, MCP_TYPE(mcp)) :
+					   REG_B(IODIR_REG, MCP_TYPE(mcp));
 	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
 
 	MCP230XX_LOCK(mcp, timeout_ms);
 
-	if (i2c_read8_8b(i2c, mcp->addr, iodir_addr, &iodir_reg) != 0) {
+	if (i2c_read8_8b(i2c, MCP(mcp)->addr, iodir_addr, &iodir_reg) != 0) {
 		result = -1;
 		goto set_output_error_cleanup;
 	}
@@ -398,7 +433,7 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
 
 	iodir_reg &= ~pin_mask;
 
-	result = i2c_write8_8b(i2c, mcp->addr, iodir_addr, iodir_reg);
+	result = i2c_write8_8b(i2c, MCP(mcp)->addr, iodir_addr, iodir_reg);
 
 set_output_error_cleanup:
 	MCP230XX_UNLOCK(mcp);
@@ -419,24 +454,24 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if ((mcp->type == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
-	    (mcp->type == MCP230XX_017 && index >= MCP23017_MAX_GPIOS)) {
+	if ((MCP_TYPE(mcp) == MCP230XX_008 && index >= MCP23008_MAX_GPIOS) ||
+	    (MCP_TYPE(mcp) == MCP230XX_017 && index >= MCP23017_MAX_GPIOS)) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, mcp->bus) != 0) {
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
 		return -1;
 	}
 
 	const uint8_t olat_addr = index < MCP23008_MAX_GPIOS ?
-					  REG_A(OLAT_REG, mcp->type) :
-					  REG_B(OLAT_REG, mcp->type);
+					  REG_A(OLAT_REG, MCP_TYPE(mcp)) :
+					  REG_B(OLAT_REG, MCP_TYPE(mcp));
 	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
 
 	MCP230XX_LOCK(mcp, timeout_ms);
 
-	if (i2c_read8_8b(i2c, mcp->addr, olat_addr, &old_olat_reg) != 0) {
+	if (i2c_read8_8b(i2c, MCP(mcp)->addr, olat_addr, &old_olat_reg) != 0) {
 		result = -1;
 		goto write_gpio_error_cleanup;
 	}
@@ -448,7 +483,8 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 	}
 
 	if (old_olat_reg != new_olat_reg) {
-		result = i2c_write8_8b(i2c, mcp->addr, olat_addr, new_olat_reg);
+		result = i2c_write8_8b(
+			i2c, MCP(mcp)->addr, olat_addr, new_olat_reg);
 	} else {
 		// The output is already set
 		result = 1;

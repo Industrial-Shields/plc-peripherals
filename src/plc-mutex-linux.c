@@ -72,8 +72,8 @@
 
 _Static_assert(sizeof(plc_mutex_t) == sizeof(pthread_mutex_t),
 	       "Not exactly a pthread_mutex_t");
-_Static_assert(PLC_MUTEX_INTERNAL_ALIGNOF(plc_mutex_t) ==
-		       PLC_MUTEX_INTERNAL_ALIGNOF(pthread_mutex_t),
+_Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(plc_mutex_t) ==
+		       PLC_PERIPHERAL_INTERNAL_ALIGNOF(pthread_mutex_t),
 	       "Not aligned exactly as a pthread_mutex_t");
 
 #define PTHREAD(m) ((pthread_mutex_t*)(m))

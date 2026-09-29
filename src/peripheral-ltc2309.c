@@ -22,6 +22,7 @@
 
 #include <malloc.h>
 #include <errno.h>
+#include <stdint.h>
 #include <unistd.h>
 
 // clang-format off
@@ -37,39 +38,46 @@ static const uint8_t SHUTDOWN        = 0b00000100;
 #define COMMAND_BYTE_BIP                                                    0x00
 // clang-format on
 
-struct _ltc2309_t {
+typedef struct {
 	plc_i2c_addr_t addr;
 	uint8_t bus;
 	uint8_t cmd;
-};
+} ltc2309_internal_t;
+
+_Static_assert(sizeof(ltc2309_t) == sizeof(ltc2309_internal_t),
+	       "Not exactly an ltc2309_internal_t");
+_Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(ltc2309_t) ==
+		       PLC_PERIPHERAL_INTERNAL_ALIGNOF(ltc2309_internal_t),
+	       "Not aligned exactly as an ltc2309_internal_t");
+
+#define LTC(l) ((ltc2309_internal_t*)(l))
 
 #define LTC2309_LOCK(ltc, timeout_ms) ((void)(ltc), (void)(timeout_ms))
 
 #define LTC2309_UNLOCK(ltc) ((void)(ltc))
 
-ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr)
+int ltc2309_static_init(const i2c_interface_t* i2c,
+			ltc2309_t* ltc,
+			plc_i2c_addr_t addr)
 {
-	ltc2309_t* ret;
 	uint8_t bus;
 
+	if (ltc == NULL || ((uintptr_t)ltc % LTC2309_ALIGN) != 0) {
+		errno = EFAULT;
+		return -1;
+	}
+
 	if (i2c_get_bus(i2c, &bus) != 0) {
-		return NULL;
+		return -1;
 	}
-
-	ret = malloc(sizeof(struct _ltc2309_t));
-	if (ret == NULL) {
-		errno = ENOMEM;
-		return NULL;
-	}
-
-	ret->addr = addr;
-	ret->bus = bus;
-	ret->cmd = INITIAL_STATE;
 
 	if (i2c_write(i2c, addr, &INITIAL_STATE, sizeof(INITIAL_STATE)) != 1) {
-		free(ret);
-		return NULL;
+		return -1;
 	}
+
+	LTC(ltc)->addr = addr;
+	LTC(ltc)->bus = bus;
+	LTC(ltc)->cmd = INITIAL_STATE;
 
 	/*
 	 * According to the datasheet: When the LTC2309 is properly addressed,
@@ -82,27 +90,54 @@ ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr)
 	 */
 	usleep(200 * 1000);
 
+	return 0;
+}
+
+ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr)
+{
+	ltc2309_t* ret = malloc(sizeof(ltc2309_t));
+
+	if (ret == NULL) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	if (ltc2309_static_init(i2c, ret, addr) != 0) {
+		free(ret);
+		return NULL;
+	}
+
 	return ret;
 }
 
-int ltc2309_deinit(const i2c_interface_t* i2c, ltc2309_t* ltc, bool shutdown)
+int ltc2309_static_deinit(const i2c_interface_t* i2c,
+			  ltc2309_t* ltc,
+			  bool shutdown)
 {
 	if (ltc == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, ltc->bus) != 0) {
+	if (i2c_check_bus(i2c, LTC(ltc)->bus) != 0) {
 		return -1;
 	}
 
 	if (shutdown &&
-	    i2c_write(i2c, ltc->addr, &SHUTDOWN, sizeof(SHUTDOWN)) != 1) {
+	    i2c_write(i2c, LTC(ltc)->addr, &SHUTDOWN, sizeof(SHUTDOWN)) != 1) {
+		return -1;
+	}
+
+	return 0;
+}
+
+int ltc2309_deinit(const i2c_interface_t* i2c, ltc2309_t* ltc, bool shutdown)
+{
+	if (ltc2309_static_deinit(i2c, ltc, shutdown) != 0) {
 		return -1;
 	}
 
 	free(ltc);
-
 	return 0;
 }
 
@@ -155,7 +190,7 @@ static int ltc2309_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, ltc->bus) != 0) {
+	if (i2c_check_bus(i2c, LTC(ltc)->bus) != 0) {
 		return -1;
 	}
 
@@ -165,7 +200,7 @@ static int ltc2309_read(const i2c_interface_t* i2c,
 	 * complement when bipolar. It is sent with each command, so every read
 	 * can pick its own.
 	 */
-	uint8_t new_cmd = ltc->cmd;
+	uint8_t new_cmd = LTC(ltc)->cmd;
 	new_cmd &= ~(COMMAND_BYTE_CHANNEL | COMMAND_BYTE_SD | COMMAND_BYTE_UNI);
 	new_cmd |= mux_field << COMMAND_BYTE_CHANNEL_SHIFT;
 	new_cmd |= diff ? COMMAND_BYTE_DIFF : COMMAND_BYTE_SGL;
@@ -173,16 +208,16 @@ static int ltc2309_read(const i2c_interface_t* i2c,
 
 	LTC2309_LOCK(ltc, timeout_ms);
 
-	if (new_cmd != ltc->cmd) {
-		if (i2c_write(i2c, ltc->addr, &new_cmd, 1) != 1) {
+	if (new_cmd != LTC(ltc)->cmd) {
+		if (i2c_write(i2c, LTC(ltc)->addr, &new_cmd, 1) != 1) {
 			ret = -1;
 			goto ltc2309_read_exit;
 		}
-		ltc->cmd = new_cmd;
+		LTC(ltc)->cmd = new_cmd;
 		usleep(5); // It must wait 1.8 us minimum before reading
 	}
 
-	if (i2c_read(i2c, ltc->addr, buffer, 2) != 2) {
+	if (i2c_read(i2c, LTC(ltc)->addr, buffer, 2) != 2) {
 		ret = -1;
 		goto ltc2309_read_exit;
 	}

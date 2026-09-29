@@ -201,6 +201,115 @@ void test_ltc2309_deinit_fails_with_efault_for_null(void)
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
+/* ------------------ ltc2309_static_init / static_deinit ------------------- */
+
+// Rounds arena up to the next LTC2309_ALIGN boundary.
+static unsigned char* align_up(unsigned char* arena)
+{
+	uintptr_t base = (uintptr_t)arena;
+
+	return (unsigned char*)((base + LTC2309_ALIGN - 1) &
+				~(uintptr_t)(LTC2309_ALIGN - 1));
+}
+
+void test_ltc2309_static_init_and_static_deinit_use_the_callers_storage(void)
+{
+	// Static storage: if static_deinit tried to free it, glibc would abort.
+	static ltc2309_t storage;
+	fake_i2c_write_op.retval = 1;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, ltc2309_static_init(TEST_I2C, &storage, TEST_ADDR));
+	assert_last_write_was(INITIAL_STATE);
+
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+	fake_i2c_read_answers(reading, 2);
+	uint16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_single_ended_unsigned(
+			TEST_I2C, &storage, LTC2309_CH0, &value, 0));
+	TEST_ASSERT_EQUAL_UINT16(255, value);
+
+	TEST_ASSERT_EQUAL_INT(0,
+			      ltc2309_static_deinit(TEST_I2C, &storage, true));
+	assert_last_write_was(SHUTDOWN);
+}
+
+void test_ltc2309_static_init_accepts_an_aligned_address_in_a_buffer(void)
+{
+	// The embedded case: a handle carved out of a region the caller owns.
+	static unsigned char arena[sizeof(ltc2309_t) + LTC2309_ALIGN];
+	ltc2309_t* aligned = (ltc2309_t*)align_up(arena);
+	fake_i2c_write_op.retval = 1;
+
+	TEST_ASSERT_EQUAL_INT(0, (uintptr_t)aligned % LTC2309_ALIGN);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, ltc2309_static_init(TEST_I2C, aligned, TEST_ADDR));
+	TEST_ASSERT_EQUAL_INT(0,
+			      ltc2309_static_deinit(TEST_I2C, aligned, false));
+}
+
+void test_ltc2309_static_init_fails_with_efault_for_misaligned_storage(void)
+{
+	// One byte past an aligned address is never aligned (LTC2309_ALIGN > 1).
+	static unsigned char arena[sizeof(ltc2309_t) + 2 * LTC2309_ALIGN];
+	ltc2309_t* misaligned = (ltc2309_t*)(align_up(arena) + 1);
+
+	TEST_ASSERT_NOT_EQUAL_INT(0, (uintptr_t)misaligned % LTC2309_ALIGN);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ltc2309_static_init(TEST_I2C, misaligned, TEST_ADDR));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_ltc2309_static_init_fails_with_efault_for_null_storage(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ltc2309_static_init(TEST_I2C, NULL, TEST_ADDR));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_ltc2309_static_init_fails_when_the_initial_write_fails(void)
+{
+	static ltc2309_t storage;
+	fake_i2c_write_op.retval = -1;
+
+	TEST_ASSERT_EQUAL_INT(
+		-1, ltc2309_static_init(TEST_I2C, &storage, TEST_ADDR));
+}
+
+void test_ltc2309_static_deinit_fails_with_efault_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_static_deinit(TEST_I2C, NULL, false));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ltc2309_static_deinit_fails_with_einval_for_another_bus(void)
+{
+	static ltc2309_t storage;
+	fake_i2c_write_op.retval = 1;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, ltc2309_static_init(TEST_I2C, &storage, TEST_ADDR));
+
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ltc2309_static_deinit(TEST_I2C, &storage, false));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	fake_i2c_bus = TEST_BUS;
+	TEST_ASSERT_EQUAL_INT(0,
+			      ltc2309_static_deinit(TEST_I2C, &storage, false));
+}
+
 /* --------------------------- ltc2309_protect ------------------------------ */
 
 void test_ltc2309_rejects_an_interface_for_another_bus(void)

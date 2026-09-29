@@ -21,6 +21,7 @@
 #define PLC_PERIPHERAL_MCP230XX_I2C_H_
 
 #include "plc-peripherals-i2c.h"
+#include "plc-peripherals-platform.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,12 +34,33 @@ extern "C" {
 // clang-format on
 
 /*
+ * Sized for the private handle in peripheral-mcp230xx.c: the I2C address, the
+ * bus number and the chip type.
+ */
+#define MCP230XX_INTERNAL_ALIGN PLC_PERIPHERAL_INTERNAL_ALIGNOF(plc_i2c_addr_t)
+#define MCP230XX_INTERNAL_SIZE                                   \
+	PLC_PERIPHERAL_INTERNAL_PAD(sizeof(plc_i2c_addr_t) +     \
+					    2 * sizeof(uint8_t), \
+				    MCP230XX_INTERNAL_ALIGN)
+
+/*
+ * Storage for one MCP230XX handle. Useful to statically allocate, without
+ * malloc.
+ *
+ * A region handed to mcp230xx_static_init must be at least MCP230XX_SIZE bytes
+ * and at least MCP230XX_ALIGN aligned.
+ *
  * WARNING: Never copy a live mcp230xx_t. Assigning a mcp230xx_t, embedding one in a
  * struct that is assigned or passed by value, memcpying it, or reallocating an
  * array of them all do it. The backend does not necessarily support it!
  */
-struct _mcp230xx_t;
-typedef struct _mcp230xx_t mcp230xx_t;
+#define MCP230XX_SIZE MCP230XX_INTERNAL_SIZE
+#define MCP230XX_ALIGN MCP230XX_INTERNAL_ALIGN
+
+typedef struct {
+	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_i2c_addr_t)
+	unsigned char opaque[MCP230XX_SIZE];
+} mcp230xx_t;
 
 typedef enum {
 	MCP230XX_008, // MCP23008
@@ -103,8 +125,14 @@ typedef struct {
 /**
  * mcp230xx_init
  *
- * Initialize an MCP230XX peripheral with address "addr". This function currently
- * supports MCP23008 and MCP23017. You must only have one handle per device.
+ * Allocate and initialize an MCP230XX peripheral with address "addr". This
+ * function currently supports MCP23008 and MCP23017. You must only have one
+ * handle per device.
+ *
+ * Use mcp230xx_static_init instead to initialize a handle in storage you
+ * provide, without malloc.
+ *
+ * WARNING: Tear down with mcp230xx_deinit, never with mcp230xx_static_deinit.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*)   - The I2C interface to access the
@@ -142,6 +170,8 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
  * Deinitialize an MCP230XX peripheral. This function currently supports
  * MCP23008 and MCP23017.
  *
+ * WARNING: Never use this on an mcp230xx_static_init handle.
+ *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
@@ -160,6 +190,79 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
  *                  plc-peripherals-i2c-hal.h).
  */
 int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
+
+/**
+ * mcp230xx_static_init
+ *
+ * Initialize an MCP230XX peripheral with address "addr" in the storage passed
+ * by argument, like mcp230xx_init but without malloc. You must ensure that this
+ * region is at least MCP230XX_SIZE bytes, and at least MCP230XX_ALIGN aligned.
+ * This function currently supports MCP23008 and MCP23017. You must only have
+ * one handle per device.
+ *
+ * The storage must not already hold a live handle.
+ *
+ * WARNING: Tear down with mcp230xx_static_deinit, never with mcp230xx_deinit.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*)   - The I2C interface to access the
+ *                                    peripheral.
+ *   mcp (mcp230xx_t*)              - Storage to make a handle out of.
+ *   addr (plc_i2c_addr_t)          - The I2C address of the peripheral.
+ *   restart (bool)                 - true if you want to reset the peripheral
+ *                                    (that is, set the registers to their
+ *                                    default values) before applying cfg.
+ *   cfg (const mcp230xx_config_t*) - The configuration to apply. It is only
+ *                                    read during the call.
+ *
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed storage is NULL, or not MCP230XX_ALIGN aligned, or
+ *                  cfg is NULL.
+ *     - EINVAL   : int_type is not an MCP230XX_INT_TYPE value, int_pol doesn't
+ *                  match int_type (see mcp230xx_config_t), or mirror is
+ *                  MCP230XX_MIRRORED_INT on a chip other than the MCP23017.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
+ */
+int mcp230xx_static_init(const i2c_interface_t* i2c,
+			 mcp230xx_t* mcp,
+			 plc_i2c_addr_t addr,
+			 bool restart,
+			 const mcp230xx_config_t* cfg);
+
+/**
+ * mcp230xx_static_deinit
+ *
+ * Deinitialize an MCP230XX peripheral made by mcp230xx_static_init. The storage
+ * is never freed. This function currently supports MCP23008 and MCP23017.
+ *
+ * WARNING: Never use this on an mcp230xx_init handle.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
+ *   restart (bool)               - true if you want to reset the peripheral
+ *                                  (that is, set the registers to its default
+ *                                  values) before releasing it.
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
+ */
+int mcp230xx_static_deinit(const i2c_interface_t* i2c,
+			   mcp230xx_t* mcp,
+			   bool restart);
 
 /**
  * mcp230xx_protect

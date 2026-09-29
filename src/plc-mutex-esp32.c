@@ -36,8 +36,8 @@ typedef struct {
 
 _Static_assert(sizeof(plc_mutex_t) == sizeof(error_checker_mutex_t),
 	       "Not exactly an error_checker_mutex_t");
-_Static_assert(PLC_MUTEX_INTERNAL_ALIGNOF(plc_mutex_t) ==
-		       PLC_MUTEX_INTERNAL_ALIGNOF(error_checker_mutex_t),
+_Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(plc_mutex_t) ==
+		       PLC_PERIPHERAL_INTERNAL_ALIGNOF(error_checker_mutex_t),
 	       "Not aligned exactly as an error_checker_mutex_t");
 
 #define ECM(m) ((error_checker_mutex_t*)m)

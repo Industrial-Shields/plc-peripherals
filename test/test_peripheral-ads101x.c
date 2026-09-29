@@ -513,6 +513,180 @@ void test_ads101x_deinit_fails_when_writing_the_config_reg_fails(void)
 
 /* --------------------------- ads101x_protect ------------------------------ */
 
+/* ------------------ ads101x_static_init / static_deinit ------------------- */
+
+// The same configuration create_ads uses, in single-shot mode.
+static void fill_single_shot_cfg(ads101x_config_t* cfg)
+{
+	cfg->continuous_mode = false;
+	cfg->fsr = ADS101X_FSR_4_096V;
+	cfg->dr = FAST_DR;
+}
+
+// Rounds arena up to the next ADS101X_ALIGN boundary.
+static unsigned char* align_up(unsigned char* arena)
+{
+	uintptr_t base = (uintptr_t)arena;
+
+	return (unsigned char*)((base + ADS101X_ALIGN - 1) &
+				~(uintptr_t)(ADS101X_ALIGN - 1));
+}
+
+void test_ads101x_static_init_and_static_deinit_use_the_callers_storage(void)
+{
+	// Static storage: if static_deinit tried to free it, glibc would abort.
+	static ads101x_t storage;
+	ads101x_config_t cfg;
+	fill_single_shot_cfg(&cfg);
+
+	expect_ads101x_reset_writes();
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+
+	ADS101X_DATA_RATE dr;
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(&storage, &dr, 0));
+	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
+
+	// Single-shot mode already has MODE set, so shutdown rewrites the same.
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	TEST_ASSERT_EQUAL_INT(0,
+			      ads101x_static_deinit(TEST_I2C, &storage, true));
+}
+
+void test_ads101x_static_init_can_reuse_the_storage_after_static_deinit(void)
+{
+	static ads101x_t storage;
+	ads101x_config_t cfg;
+	fill_single_shot_cfg(&cfg);
+
+	for (int round = 0; round < 2; round++) {
+		expect_ads101x_reset_writes();
+		i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+					       TEST_ADDR,
+					       CONFIG_REG,
+					       INIT_RESTART_CFG_SINGLE,
+					       0);
+		TEST_ASSERT_EQUAL_INT(
+			0,
+			ads101x_static_init(
+				TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+		TEST_ASSERT_EQUAL_INT(
+			0, ads101x_static_deinit(TEST_I2C, &storage, false));
+	}
+}
+
+void test_ads101x_static_init_accepts_an_aligned_address_in_a_buffer(void)
+{
+	// The embedded case: a handle carved out of a region the caller owns.
+	static unsigned char arena[sizeof(ads101x_t) + ADS101X_ALIGN];
+	ads101x_t* aligned = (ads101x_t*)align_up(arena);
+	ads101x_config_t cfg;
+	fill_single_shot_cfg(&cfg);
+
+	TEST_ASSERT_EQUAL_INT(0, (uintptr_t)aligned % ADS101X_ALIGN);
+
+	expect_ads101x_reset_writes();
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_static_init(TEST_I2C, aligned, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(0,
+			      ads101x_static_deinit(TEST_I2C, aligned, false));
+}
+
+void test_ads101x_static_init_fails_with_efault_for_misaligned_storage(void)
+{
+	// One byte past an aligned address is never aligned (ADS101X_ALIGN > 1).
+	static unsigned char arena[sizeof(ads101x_t) + 2 * ADS101X_ALIGN];
+	ads101x_t* misaligned = (ads101x_t*)(align_up(arena) + 1);
+	ads101x_config_t cfg;
+	fill_single_shot_cfg(&cfg);
+
+	TEST_ASSERT_NOT_EQUAL_INT(0, (uintptr_t)misaligned % ADS101X_ALIGN);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_static_init(
+			TEST_I2C, misaligned, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_static_init_fails_with_efault_for_null_storage(void)
+{
+	ads101x_config_t cfg;
+	fill_single_shot_cfg(&cfg);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_static_init(TEST_I2C, NULL, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_static_init_fails_with_efault_for_a_null_config(void)
+{
+	static ads101x_t storage;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_static_init(TEST_I2C, &storage, TEST_ADDR, true, NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_static_init_fails_when_the_i2c_transfer_fails(void)
+{
+	static ads101x_t storage;
+	ads101x_config_t cfg;
+	fill_single_shot_cfg(&cfg);
+
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       HIGH_THRESHOLD_REG,
+				       HIGH_THRESHOLD_REG_RESET_VALUE,
+				       -1);
+
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+}
+
+void test_ads101x_static_deinit_fails_with_efault_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_static_deinit(TEST_I2C, NULL, false));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_static_deinit_fails_with_einval_for_another_bus(void)
+{
+	static ads101x_t storage;
+	ads101x_config_t cfg;
+	fill_single_shot_cfg(&cfg);
+
+	expect_ads101x_reset_writes();
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ads101x_static_deinit(TEST_I2C, &storage, false));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	fake_i2c_bus = TEST_BUS;
+	TEST_ASSERT_EQUAL_INT(0,
+			      ads101x_static_deinit(TEST_I2C, &storage, false));
+}
+
 void test_ads101x_rejects_an_interface_for_another_bus(void)
 {
 	ads101x_t* ads = create_ads(false);

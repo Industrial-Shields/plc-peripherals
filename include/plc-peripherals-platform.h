@@ -46,4 +46,17 @@
 #error "Unknown environment detected"
 #endif
 
+/*
+ * Helpers to size and align the opaque storage of a handle, in both C and C++.
+ */
+#if defined(__cplusplus)
+#define PLC_PERIPHERAL_INTERNAL_ALIGNOF(t) alignof(t)
+#define PLC_PERIPHERAL_INTERNAL_ALIGNAS(t) alignas(t)
+#else
+#define PLC_PERIPHERAL_INTERNAL_ALIGNOF(t) _Alignof(t)
+#define PLC_PERIPHERAL_INTERNAL_ALIGNAS(t) _Alignas(t)
+#endif
+
+#define PLC_PERIPHERAL_INTERNAL_PAD(n, a) ((((n) + (a) - 1) / (a)) * (a))
+
 #endif // PLC_PERIPHERALS_PLATFORMS_H_

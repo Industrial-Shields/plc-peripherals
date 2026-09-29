@@ -652,6 +652,222 @@ void test_mcp230xx_rejects_an_interface_for_another_bus(void)
 
 /* ------------------------- mcp230xx_unprotect ------------------------------ */
 
+/* ------------------ mcp230xx_static_init / static_deinit ------------------ */
+
+// The same configuration create_mcp uses: IOCON bits all clear.
+static void fill_default_cfg(mcp230xx_config_t* cfg, MCP230XX_TYPE type)
+{
+	cfg->type = type;
+	cfg->disable_slew_rate = false;
+	cfg->int_type = MCP230XX_ACTIVE_DRIVER_INT;
+	cfg->int_pol = MCP230XX_INT_ACTIVE_LOW;
+	cfg->mirror = MCP230XX_NO_MIRRORED_INT;
+}
+
+// Rounds arena up to the next MCP230XX_ALIGN boundary.
+static unsigned char* align_up(unsigned char* arena)
+{
+	uintptr_t base = (uintptr_t)arena;
+
+	return (unsigned char*)((base + MCP230XX_ALIGN - 1) &
+				~(uintptr_t)(MCP230XX_ALIGN - 1));
+}
+
+// Expects the reset and IOCON write of a restart=true static_init.
+static void expect_static_init_writes(MCP230XX_TYPE type)
+{
+	fake_i2c_write_op.retval = (ssize_t)reset_len_of(type);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C,
+				      TEST_ADDR,
+				      iocon_addr_of(type),
+				      INIT_RESTART_IOCON,
+				      0);
+}
+
+void test_mcp230xx_static_init_and_static_deinit_use_the_callers_storage(void)
+{
+	// Static storage: if static_deinit tried to free it, glibc would abort.
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+
+	expect_static_init_writes(MCP230XX_008);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+
+	expect_i2c_read8_8b(GPIO_008, 0x01, 0);
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_read_gpio(TEST_I2C, &storage, 0, &value, 0));
+	TEST_ASSERT_EQUAL_UINT8(MCP230XX_HIGH, value);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_static_deinit(TEST_I2C, &storage, false));
+}
+
+void test_mcp230xx_static_init_keeps_the_chip_type_of_an_mcp23017(void)
+{
+	// The type is stored in a single byte: B-side registers must still work.
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_017);
+
+	expect_static_init_writes(MCP230XX_017);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+
+	// Pin 12 is bit 4 of port B.
+	expect_i2c_read8_8b(GPIO_B_017, 0x10, 0);
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_read_gpio(TEST_I2C, &storage, 12, &value, 0));
+	TEST_ASSERT_EQUAL_UINT8(MCP230XX_HIGH, value);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_static_deinit(TEST_I2C, &storage, false));
+}
+
+void test_mcp230xx_static_deinit_with_restart_resets_the_chip(void)
+{
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+
+	expect_static_init_writes(MCP230XX_008);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+
+	uint32_t writes_before = fake_i2c_write_op.calls;
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_static_deinit(TEST_I2C, &storage, true));
+	TEST_ASSERT_EQUAL_UINT32(writes_before + 1, fake_i2c_write_op.calls);
+	assert_last_write_was_a_reset_block(MCP230XX_008);
+}
+
+void test_mcp230xx_static_init_accepts_an_aligned_address_in_a_buffer(void)
+{
+	// The embedded case: a handle carved out of a region the caller owns.
+	static unsigned char arena[sizeof(mcp230xx_t) + MCP230XX_ALIGN];
+	mcp230xx_t* aligned = (mcp230xx_t*)align_up(arena);
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+
+	TEST_ASSERT_EQUAL_INT(0, (uintptr_t)aligned % MCP230XX_ALIGN);
+
+	expect_static_init_writes(MCP230XX_008);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_static_init(TEST_I2C, aligned, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_static_deinit(TEST_I2C, aligned, false));
+}
+
+void test_mcp230xx_static_init_fails_with_efault_for_misaligned_storage(void)
+{
+	// One byte past an aligned address is never aligned (MCP230XX_ALIGN > 1).
+	static unsigned char arena[sizeof(mcp230xx_t) + 2 * MCP230XX_ALIGN];
+	mcp230xx_t* misaligned = (mcp230xx_t*)(align_up(arena) + 1);
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+
+	TEST_ASSERT_NOT_EQUAL_INT(0, (uintptr_t)misaligned % MCP230XX_ALIGN);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_static_init(
+			TEST_I2C, misaligned, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_static_init_fails_with_efault_for_null_storage(void)
+{
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_static_init(TEST_I2C, NULL, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_static_init_fails_with_efault_for_a_null_config(void)
+{
+	static mcp230xx_t storage;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_static_init_fails_with_einval_for_an_active_driver_without_polarity(
+	void)
+{
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+	cfg.int_pol = MCP230XX_INT_POLARITY_NONE;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_static_init_fails_when_the_reset_write_fails(void)
+{
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+
+	fake_i2c_write_op.retval = -1;
+
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+}
+
+void test_mcp230xx_static_deinit_fails_with_efault_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      mcp230xx_static_deinit(TEST_I2C, NULL, false));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_mcp230xx_static_deinit_fails_with_einval_for_another_bus(void)
+{
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+
+	expect_static_init_writes(MCP230XX_008);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_static_deinit(TEST_I2C, &storage, false));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	fake_i2c_bus = TEST_BUS;
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_static_deinit(TEST_I2C, &storage, false));
+}
+
 /* ------------------------- mcp230xx_set_input ------------------------------ */
 
 void test_mcp230xx_set_input_fails_with_efault_for_null_mcp(void)

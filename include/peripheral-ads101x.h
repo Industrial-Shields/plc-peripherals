@@ -21,17 +21,40 @@
 #define PLC_PERIPHERAL_ADS101X_I2C_H_
 
 #include "plc-peripherals-i2c.h"
+#include "plc-peripherals-platform.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
+ * Sized for the private handle in peripheral-ads101x.c: the I2C address, two
+ * copies of the CONFIG register and the bus number.
+ */
+#define ADS101X_INTERNAL_ALIGN PLC_PERIPHERAL_INTERNAL_ALIGNOF(plc_i2c_addr_t)
+#define ADS101X_INTERNAL_SIZE                                      \
+	PLC_PERIPHERAL_INTERNAL_PAD(sizeof(plc_i2c_addr_t) +       \
+					    2 * sizeof(uint16_t) + \
+					    sizeof(uint8_t),       \
+				    ADS101X_INTERNAL_ALIGN)
+
+/*
+ * Storage for one ADS101X handle. Useful to statically allocate, without
+ * malloc.
+ *
+ * A region handed to ads101x_static_init must be at least ADS101X_SIZE bytes
+ * and at least ADS101X_ALIGN aligned.
+ *
  * WARNING: Never copy a live ads101x_t. Assigning an ads101x_t, embedding one in a
  * struct that is assigned or passed by value, memcpying it, or reallocating an
  * array of them all do it. The backend does not necessarily support it!
  */
-struct _ads101x_t;
-typedef struct _ads101x_t ads101x_t;
+#define ADS101X_SIZE ADS101X_INTERNAL_SIZE
+#define ADS101X_ALIGN ADS101X_INTERNAL_ALIGN
+
+typedef struct {
+	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_i2c_addr_t)
+	unsigned char opaque[ADS101X_SIZE];
+} ads101x_t;
 
 typedef enum {
 	// clang-format off
@@ -97,8 +120,14 @@ typedef struct {
 /**
  * ads101x_init
  *
- * Initialize an ADS101X peripheral with address "addr". This function currently
- * supports ADS1015 only. You must only have one handle per device.
+ * Allocate and initialize an ADS101X peripheral with address "addr". This
+ * function currently supports ADS1015 only. You must only have one handle per
+ * device.
+ *
+ * Use ads101x_static_init instead to initialize a handle in storage you
+ * provide, without malloc.
+ *
+ * WARNING: Tear down with ads101x_deinit, never with ads101x_static_deinit.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*)  - The I2C interface to access the
@@ -133,6 +162,8 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
  * Deinitialize an ADS101X peripheral "ads". This function currently supports ADS1015
  * only.
  *
+ * WARNING: Never use this on an ads101x_static_init handle.
+ *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
  *   ads (ads101x_t*)             - The ADS101X to interact with.
@@ -150,6 +181,75 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
  *                  plc-peripherals-i2c-hal.h).
  */
 int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
+
+/**
+ * ads101x_static_init
+ *
+ * Initialize an ADS101X peripheral with address "addr" in the storage passed by
+ * argument, like ads101x_init but without malloc. You must ensure that this
+ * region is at least ADS101X_SIZE bytes, and at least ADS101X_ALIGN aligned.
+ * This function currently supports ADS1015 only. You must only have one handle
+ * per device.
+ *
+ * The storage must not already hold a live handle.
+ *
+ * WARNING: Tear down with ads101x_static_deinit, never with ads101x_deinit.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*)  - The I2C interface to access the
+ *                                   peripheral.
+ *   ads (ads101x_t*)              - Storage to make a handle out of.
+ *   addr (plc_i2c_addr_t)         - The I2C address of the peripheral.
+ *   restart (bool)                - true if you want to reset the peripheral
+ *                                   (that is, set the registers to their
+ *                                   default values) before applying cfg.
+ *   cfg (const ads101x_config_t*) - The configuration to apply. It is only
+ *                                   read during the call.
+ *
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed storage is NULL, or not ADS101X_ALIGN aligned, or cfg
+ *                  is NULL.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
+ */
+int ads101x_static_init(const i2c_interface_t* i2c,
+			ads101x_t* ads,
+			plc_i2c_addr_t addr,
+			bool restart,
+			const ads101x_config_t* cfg);
+
+/**
+ * ads101x_static_deinit
+ *
+ * Deinitialize an ADS101X peripheral "ads" made by ads101x_static_init. The
+ * storage is never freed. This function currently supports ADS1015 only.
+ *
+ * WARNING: Never use this on an ads101x_init handle.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to interact with.
+ *   shutdown (bool)              - true if you want to leave the peripheral in
+ *                                  a powered-down state (single-shot mode).
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed ads101x_t is NULL.
+ *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h).
+ */
+int ads101x_static_deinit(const i2c_interface_t* i2c,
+			  ads101x_t* ads,
+			  bool shutdown);
 
 /**
  * ads101x_protect

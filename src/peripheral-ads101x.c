@@ -23,6 +23,7 @@
 #include <malloc.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdint.h>
 
 // clang-format off
 #define CONVERSION_REG                                                         0x00
@@ -47,12 +48,20 @@
 #define   HIGH_THRESHOLD_REG_RESET_VALUE                                     0x7FFF
 // clang-format on
 
-struct _ads101x_t {
+typedef struct {
 	plc_i2c_addr_t addr;
-	uint8_t bus;
 	uint16_t expected_cfg_reg;
 	uint16_t old_cfg_reg;
-};
+	uint8_t bus;
+} ads101x_internal_t;
+
+_Static_assert(sizeof(ads101x_t) == sizeof(ads101x_internal_t),
+	       "Not exactly an ads101x_internal_t");
+_Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(ads101x_t) ==
+		       PLC_PERIPHERAL_INTERNAL_ALIGNOF(ads101x_internal_t),
+	       "Not aligned exactly as an ads101x_internal_t");
+
+#define ADS(a) ((ads101x_internal_t*)(a))
 
 #define ADS101X_RESET_REG(i2c, addr, register_name) \
 	i2c_write8_16b(i2c, addr, register_name, register_name##_RESET_VALUE)
@@ -113,7 +122,7 @@ static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 }
 
 #define ADS101X_IS_CONTINUOUS_MODE(ads) \
-	(!((ads)->expected_cfg_reg & CONFIG_REG_MODE))
+	(!(ADS(ads)->expected_cfg_reg & CONFIG_REG_MODE))
 
 #define ADS101X_GET_DR(cfg) ((cfg & CONFIG_REG_DR) >> CONFIG_REG_DR_SHIFT)
 #define ADS101X_SET_DR(cfg, dr)                   \
@@ -132,38 +141,34 @@ static void ads101x_delay_until_conversion(ADS101X_DATA_RATE dr)
 		new_cfg |= channel_index << CONFIG_REG_MUX_SHIFT; \
 	} while (0)
 
-ads101x_t* ads101x_init(const i2c_interface_t* i2c,
+int ads101x_static_init(const i2c_interface_t* i2c,
+			ads101x_t* ads,
 			plc_i2c_addr_t addr,
 			bool restart,
 			const ads101x_config_t* cfg)
 {
 	uint16_t cfg_reg;
-	ads101x_t* ret;
 	uint8_t bus;
 
-	if (cfg == NULL) {
+	if (ads == NULL || ((uintptr_t)ads % ADS101X_ALIGN) != 0 ||
+	    cfg == NULL) {
 		errno = EFAULT;
-		return NULL;
+		return -1;
 	}
 
 	if (i2c_get_bus(i2c, &bus) != 0) {
-		return NULL;
-	}
-
-	ret = malloc(sizeof(struct _ads101x_t));
-	if (ret == NULL) {
-		return NULL;
+		return -1;
 	}
 
 	if (restart) {
 		if (ADS101X_RESET_REG(i2c, addr, HIGH_THRESHOLD_REG) != 0 ||
 		    ADS101X_RESET_REG(i2c, addr, LOW_THRESHOLD_REG) != 0) {
-			goto init_error_cleanup;
+			return -1;
 		}
 		cfg_reg = CONFIG_REG_RESET_VALUE;
 	} else {
 		if (i2c_read8_16b(i2c, addr, CONFIG_REG, &cfg_reg) != 0) {
-			goto init_error_cleanup;
+			return -1;
 		}
 	}
 
@@ -185,7 +190,7 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 	cfg_reg |= cfg->dr << CONFIG_REG_DR_SHIFT;
 
 	if (i2c_write8_16b(i2c, addr, CONFIG_REG, cfg_reg) != 0) {
-		goto init_error_cleanup;
+		return -1;
 	}
 
 	if (cfg->continuous_mode) {
@@ -197,37 +202,64 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 		ads101x_delay_until_conversion(cfg->dr);
 	}
 
-	ret->addr = addr;
-	ret->bus = bus;
-	ret->expected_cfg_reg = cfg_reg;
-	ret->old_cfg_reg = cfg_reg;
-	return ret;
-
-init_error_cleanup:
-	free(ret);
-	return NULL;
+	ADS(ads)->addr = addr;
+	ADS(ads)->bus = bus;
+	ADS(ads)->expected_cfg_reg = cfg_reg;
+	ADS(ads)->old_cfg_reg = cfg_reg;
+	return 0;
 }
 
-int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown)
+ads101x_t* ads101x_init(const i2c_interface_t* i2c,
+			plc_i2c_addr_t addr,
+			bool restart,
+			const ads101x_config_t* cfg)
+{
+	ads101x_t* ret = malloc(sizeof(ads101x_t));
+
+	if (ret == NULL) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	if (ads101x_static_init(i2c, ret, addr, restart, cfg) != 0) {
+		free(ret);
+		return NULL;
+	}
+
+	return ret;
+}
+
+int ads101x_static_deinit(const i2c_interface_t* i2c,
+			  ads101x_t* ads,
+			  bool shutdown)
 {
 	if (ads == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, ads->bus) != 0) {
+	if (i2c_check_bus(i2c, ADS(ads)->bus) != 0) {
 		return -1;
 	}
 
 	if (shutdown) {
-		ads->expected_cfg_reg |= CONFIG_REG_MODE;
+		ADS(ads)->expected_cfg_reg |= CONFIG_REG_MODE;
 
 		if (i2c_write8_16b(i2c,
-				   ads->addr,
+				   ADS(ads)->addr,
 				   CONFIG_REG,
-				   ads->expected_cfg_reg) != 0) {
+				   ADS(ads)->expected_cfg_reg) != 0) {
 			return -1;
 		}
+	}
+
+	return 0;
+}
+
+int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown)
+{
+	if (ads101x_static_deinit(i2c, ads, shutdown) != 0) {
+		return -1;
 	}
 
 	free(ads);
@@ -270,24 +302,28 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, ads->bus) != 0) {
+	if (i2c_check_bus(i2c, ADS(ads)->bus) != 0) {
 		return -1;
 	}
 
 	ADS101X_LOCK(ads, timeout_ms);
 
-	ADS101X_CHANGE_CHANNEL(ads->expected_cfg_reg, index);
+	ADS101X_CHANGE_CHANNEL(ADS(ads)->expected_cfg_reg, index);
 
-	if (i2c_write8_16b(i2c, ads->addr, CONFIG_REG, ads->expected_cfg_reg) !=
-	    0) {
+	if (i2c_write8_16b(i2c,
+			   ADS(ads)->addr,
+			   CONFIG_REG,
+			   ADS(ads)->expected_cfg_reg) != 0) {
 		ret = -1;
 		goto ads101x_single_read_exit;
 	}
 
 	// Delay for the conversion
-	ads101x_delay_until_conversion(ADS101X_GET_DR(ads->expected_cfg_reg));
+	ads101x_delay_until_conversion(
+		ADS101X_GET_DR(ADS(ads)->expected_cfg_reg));
 
-	if (i2c_read8_16b(i2c, ads->addr, CONVERSION_REG, &read_value) != 0) {
+	if (i2c_read8_16b(i2c, ADS(ads)->addr, CONVERSION_REG, &read_value) !=
+	    0) {
 		ret = -1;
 		goto ads101x_single_read_exit;
 	}
@@ -343,19 +379,19 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, ads->bus) != 0) {
+	if (i2c_check_bus(i2c, ADS(ads)->bus) != 0) {
 		return -1;
 	}
 
 	ADS101X_LOCK(ads, timeout_ms);
 
-	ADS101X_CHANGE_CHANNEL(ads->expected_cfg_reg, index);
+	ADS101X_CHANGE_CHANNEL(ADS(ads)->expected_cfg_reg, index);
 
-	if (ads->expected_cfg_reg != ads->old_cfg_reg) {
+	if (ADS(ads)->expected_cfg_reg != ADS(ads)->old_cfg_reg) {
 		if (i2c_write8_16b(i2c,
-				   ads->addr,
+				   ADS(ads)->addr,
 				   CONFIG_REG,
-				   ads->expected_cfg_reg) != 0) {
+				   ADS(ads)->expected_cfg_reg) != 0) {
 			ret = -1;
 			goto ads101x_continuous_read_exit;
 		}
@@ -371,14 +407,15 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 		 * the new rate.
 		 */
 		ads101x_delay_until_conversion(
-			ADS101X_GET_DR(ads->old_cfg_reg));
+			ADS101X_GET_DR(ADS(ads)->old_cfg_reg));
 		ads101x_delay_until_conversion(
-			ADS101X_GET_DR(ads->expected_cfg_reg));
+			ADS101X_GET_DR(ADS(ads)->expected_cfg_reg));
 
-		ads->old_cfg_reg = ads->expected_cfg_reg;
+		ADS(ads)->old_cfg_reg = ADS(ads)->expected_cfg_reg;
 	}
 
-	if (i2c_read8_16b(i2c, ads->addr, CONVERSION_REG, &read_value) != 0) {
+	if (i2c_read8_16b(i2c, ADS(ads)->addr, CONVERSION_REG, &read_value) !=
+	    0) {
 		ret = -1;
 		goto ads101x_continuous_read_exit;
 	}
@@ -428,7 +465,7 @@ int ads101x_get_fs(const ads101x_t* ads,
 
 	ADS101X_LOCK(ads, timeout_ms);
 
-	local_dr = ADS101X_GET_DR(ads->expected_cfg_reg);
+	local_dr = ADS101X_GET_DR(ADS(ads)->expected_cfg_reg);
 	// Ensure we return a valid enum (0b111 is equivalent to 3300 SPS)
 	*dr = local_dr == 0b111 ? ADS101X_3300SPS : local_dr;
 
@@ -449,20 +486,20 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (i2c_check_bus(i2c, ads->bus) != 0) {
+	if (i2c_check_bus(i2c, ADS(ads)->bus) != 0) {
 		return -1;
 	}
 
 	ADS101X_LOCK(ads, timeout_ms);
 
-	ADS101X_SET_DR(ads->expected_cfg_reg, dr);
+	ADS101X_SET_DR(ADS(ads)->expected_cfg_reg, dr);
 
 	if (ADS101X_IS_CONTINUOUS_MODE(ads) &&
-	    ads->expected_cfg_reg != ads->old_cfg_reg) {
+	    ADS(ads)->expected_cfg_reg != ADS(ads)->old_cfg_reg) {
 		if (i2c_write8_16b(i2c,
-				   ads->addr,
+				   ADS(ads)->addr,
 				   CONFIG_REG,
-				   ads->expected_cfg_reg) != 0) {
+				   ADS(ads)->expected_cfg_reg) != 0) {
 			ret = -1;
 			goto ads101x_set_fs_exit;
 		}
@@ -478,11 +515,11 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 		 * rate.
 		 */
 		ads101x_delay_until_conversion(
-			ADS101X_GET_DR(ads->old_cfg_reg));
+			ADS101X_GET_DR(ADS(ads)->old_cfg_reg));
 		ads101x_delay_until_conversion(
-			ADS101X_GET_DR(ads->expected_cfg_reg));
+			ADS101X_GET_DR(ADS(ads)->expected_cfg_reg));
 
-		ads->old_cfg_reg = ads->expected_cfg_reg;
+		ADS(ads)->old_cfg_reg = ADS(ads)->expected_cfg_reg;
 	}
 
 	ret = 0;

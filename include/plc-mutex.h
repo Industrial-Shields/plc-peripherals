@@ -41,16 +41,6 @@
 extern "C" {
 #endif
 
-#if defined(__cplusplus)
-#define PLC_MUTEX_INTERNAL_ALIGNOF(t) alignof(t)
-#define PLC_MUTEX_INTERNAL_ALIGNAS(t) alignas(t)
-#else
-#define PLC_MUTEX_INTERNAL_ALIGNOF(t) _Alignof(t)
-#define PLC_MUTEX_INTERNAL_ALIGNAS(t) _Alignas(t)
-#endif
-
-#define PLC_MUTEX_INTERNAL_PAD(n, a) ((((n) + (a) - 1) / (a)) * (a))
-
 #if PLC_ENVIRONMENT == PLC_LINUX
 #define PLC_MUTEX_INTERNAL_NATIVE pthread_mutex_t
 #define PLC_MUTEX_INTERNAL_SIZE (sizeof(pthread_mutex_t))
@@ -61,10 +51,10 @@ extern "C" {
  * compiled as C++, where atomic_bool is only usable from <stdatomic.h> since
  * C++23.
  */
-#define PLC_MUTEX_INTERNAL_SIZE                                       \
-	PLC_MUTEX_INTERNAL_PAD(sizeof(StaticSemaphore_t) +            \
-				       sizeof(SemaphoreHandle_t) + 1, \
-			       PLC_MUTEX_INTERNAL_ALIGNOF(StaticSemaphore_t))
+#define PLC_MUTEX_INTERNAL_SIZE                                            \
+	PLC_PERIPHERAL_INTERNAL_PAD(                                       \
+		sizeof(StaticSemaphore_t) + sizeof(SemaphoreHandle_t) + 1, \
+		PLC_PERIPHERAL_INTERNAL_ALIGNOF(StaticSemaphore_t))
 #endif
 
 /*
@@ -78,10 +68,11 @@ extern "C" {
  * array of them all do it. The backend does not necessarily support it!
  */
 #define PLC_MUTEX_SIZE PLC_MUTEX_INTERNAL_SIZE
-#define PLC_MUTEX_ALIGN PLC_MUTEX_INTERNAL_ALIGNOF(PLC_MUTEX_INTERNAL_NATIVE)
+#define PLC_MUTEX_ALIGN \
+	PLC_PERIPHERAL_INTERNAL_ALIGNOF(PLC_MUTEX_INTERNAL_NATIVE)
 
 typedef struct {
-	PLC_MUTEX_INTERNAL_ALIGNAS(PLC_MUTEX_INTERNAL_NATIVE)
+	PLC_PERIPHERAL_INTERNAL_ALIGNAS(PLC_MUTEX_INTERNAL_NATIVE)
 	unsigned char opaque[PLC_MUTEX_SIZE];
 } plc_mutex_t;
 
