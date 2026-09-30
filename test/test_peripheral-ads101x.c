@@ -1001,6 +1001,25 @@ void test_ads101x_single_read_fails_when_reading_the_conversion_reg_fails(void)
 	destroy_ads(ads);
 }
 
+void test_ads101x_single_read_fails_with_erange_for_a_bad_low_nibble(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF1, 0); // low nibble != 0
+
+	errno = 0;
+	int16_t value = 0x5A5A;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
+	TEST_ASSERT_EQUAL_INT16(0x5A5A, value);
+
+	destroy_ads(ads);
+}
+
 void test_ads101x_single_read_handles_the_maximally_negative_reading(void)
 {
 	// Regression test for avoiding an implementation-defined right shift
@@ -1340,6 +1359,24 @@ void test_ads101x_continuous_read_fails_when_reading_the_conversion_reg_fails(
 		-1,
 		ads101x_continuous_read(
 			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_continuous_read_fails_with_erange_for_a_bad_low_nibble(void)
+{
+	ads101x_t* ads = create_ads(true);
+
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF8, 0); // low nibble != 0
+
+	errno = 0;
+	int16_t value = 0x5A5A;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(ERANGE, errno);
+	TEST_ASSERT_EQUAL_INT16(0x5A5A, value);
 
 	destroy_ads(ads);
 }

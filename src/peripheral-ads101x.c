@@ -27,6 +27,7 @@
 
 // clang-format off
 #define CONVERSION_REG                                                         0x00
+#define   CONVERSION_REG_RESERVED                                               0xF
 #define CONFIG_REG                                                             0x01
 #define   CONFIG_REG_OS                                                      0x8000
 #define   CONFIG_REG_MUX                                                     0x7000
@@ -498,6 +499,16 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 		goto ads101x_single_read_exit;
 	}
 
+	/*
+	 * The low 4 bits are reserved and always read back 0 (SBAS473F, Table
+	 * 8-3). Anything else is a corrupted transfer.
+	 */
+	if ((read_value & CONVERSION_REG_RESERVED) != 0) {
+		errno = ERANGE;
+		ret = -1;
+		goto ads101x_single_read_exit;
+	}
+
 	*return_value = ads101x_conversion_reg_to_value(read_value);
 	ret = 0;
 
@@ -599,6 +610,16 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 
 	if (i2c_read8_16b(i2c, ADS(ads)->addr, CONVERSION_REG, &read_value) !=
 	    0) {
+		ret = -1;
+		goto ads101x_continuous_read_exit;
+	}
+
+	/*
+	 * The low 4 bits are reserved and always read back 0 (SBAS473F, Table
+	 * 8-3). Anything else is a corrupted transfer.
+	 */
+	if ((read_value & CONVERSION_REG_RESERVED) != 0) {
+		errno = ERANGE;
 		ret = -1;
 		goto ads101x_continuous_read_exit;
 	}
