@@ -143,6 +143,7 @@ static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 
 #define ADS101X_IS_CONTINUOUS_MODE(ads) \
 	(!(ADS(ads)->expected_cfg_reg & CONFIG_REG_MODE))
+#define ADS101X_IS_CONTINUOUS_MODE_REG(reg) (!((reg) & CONFIG_REG_MODE))
 
 #define ADS101X_GET_DR(cfg) ((cfg & CONFIG_REG_DR) >> CONFIG_REG_DR_SHIFT)
 #define ADS101X_SET_DR(cfg, dr)                   \
@@ -207,6 +208,8 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 			bool restart,
 			const ads101x_config_t* cfg)
 {
+	ADS101X_DATA_RATE in_flight_dr;
+	bool may_be_converting;
 	uint16_t cfg_reg;
 	uint8_t bus;
 
@@ -220,16 +223,28 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 		return -1;
 	}
 
+	if (i2c_read8_16b(i2c, addr, CONFIG_REG, &cfg_reg) != 0) {
+		return -1;
+	}
+
+	may_be_converting = !(cfg_reg & CONFIG_REG_OS);
+	if (ADS101X_IS_CONTINUOUS_MODE_REG(cfg_reg)) {
+		/*
+		 * Since we cannot correctly determine the sampling frequency of
+		 * the continuous mode, assume the in-flight frequency sampling
+		 * is the slowest available (biggest wait time)
+		 */
+		in_flight_dr = ADS101X_128SPS;
+	} else {
+		in_flight_dr = ADS101X_GET_DR(cfg_reg);
+	}
+
 	if (restart) {
 		if (ADS101X_RESET_REG(i2c, addr, HIGH_THRESHOLD_REG) != 0 ||
 		    ADS101X_RESET_REG(i2c, addr, LOW_THRESHOLD_REG) != 0) {
 			return -1;
 		}
 		cfg_reg = CONFIG_REG_RESET_VALUE;
-	} else {
-		if (i2c_read8_16b(i2c, addr, CONFIG_REG, &cfg_reg) != 0) {
-			return -1;
-		}
 	}
 
 	if (cfg->continuous_mode) {
@@ -249,8 +264,27 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 	cfg_reg &= ~CONFIG_REG_DR;
 	cfg_reg |= cfg->dr << CONFIG_REG_DR_SHIFT;
 
-	if (i2c_write8_16b(i2c, addr, CONFIG_REG, cfg_reg) != 0) {
+	/*
+	 * In single-shot mode the cache keeps OS set, so every
+	 * ads101x_single_read starts a conversion, but init must not start one:
+	 * an OS write has no effect while a conversion runs (SBAS473F, section
+	 * 7.4.2.1), so a read right after init would get init's conversion, on
+	 * whatever MUX CONFIG_REG had, instead of its own.
+	 */
+	const uint16_t init_cfg_reg =
+		cfg->continuous_mode ? cfg_reg : (cfg_reg & ~CONFIG_REG_OS);
+
+	if (i2c_write8_16b(i2c, addr, CONFIG_REG, init_cfg_reg) != 0) {
 		return -1;
+	}
+
+	/*
+	 * A conversion already running finishes with the previous settings
+	 * (SBAS473F, sections 7.4.2.1 and 7.4.2.2): wait it out, so that a read
+	 * right after init doesn't get its result.
+	 */
+	if (may_be_converting) {
+		ads101x_delay_until_conversion(in_flight_dr);
 	}
 
 	if (cfg->continuous_mode) {

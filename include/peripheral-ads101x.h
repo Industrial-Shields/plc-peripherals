@@ -126,6 +126,12 @@ typedef struct {
  * function currently supports ADS1015 only. You must only have one handle per
  * device.
  *
+ * If a conversion was going on, it can block until that conversion is over. One
+ * conversion time at the rate read back in single-shot mode, or at the slowest
+ * rate (128 SPS) in continuous mode. In continuous mode, it then also blocks for
+ * the first conversion with cfg. At worst, it will block up to ~9ms in single
+ * mode, and up to ~18ms in continuous mode.
+ *
  * Use ads101x_static_init instead to initialize a handle in storage you
  * provide, without malloc.
  *
@@ -198,6 +204,12 @@ int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
  * region is at least ADS101X_SIZE bytes, and at least ADS101X_ALIGN aligned.
  * This function currently supports ADS1015 only. You must only have one handle
  * per device.
+ *
+ * If a conversion was going on, it can block until that conversion is over. One
+ * conversion time at the rate read back in single-shot mode, or at the slowest
+ * rate (128 SPS) in continuous mode. In continuous mode, it then also blocks for
+ * the first conversion with cfg. At worst, it will block up to ~9ms in single
+ * mode, and up to ~18ms in continuous mode.
  *
  * The storage must not already hold a live handle.
  *

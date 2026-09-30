@@ -85,6 +85,9 @@
  */
 #define INIT_RESTART_CFG_SINGLE 0x83A3 // 0x8000 | 0x200 | 0x100 | 0xA0 | 3
 
+// ADS101x init methods write the single CFG as RESTART minus OS bit
+#define INIT_NO_RESTART_CFG_SINGLE (INIT_RESTART_CFG_SINGLE & ~CONFIG_REG_OS)
+
 /*
  * Continuous mode additionally clears OS (0x8000) on top of MODE (0x100),
  * unlike single mode's cfg above: 0x83A3 & ~0x100 & ~0x8000.
@@ -120,8 +123,14 @@ static long elapsed_us(struct timespec start, struct timespec end)
 	       (end.tv_nsec - start.tv_nsec) / 1000L;
 }
 
-static void expect_ads101x_reset_writes(void)
+static void expect_init_config_read(void)
 {
+	expect_i2c_read8_16b(CONFIG_REG, CONFIG_REG_RESET_VALUE, 0);
+}
+
+static void expect_ads101x_restart(void)
+{
+	expect_init_config_read();
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
 				       HIGH_THRESHOLD_REG,
@@ -151,13 +160,13 @@ static ads101x_t* init_ads(bool restart,
 // Creates and initializes an ads101x_t via restart=true, fsr=4.096V, dr=fast.
 static ads101x_t* create_ads(bool continuous)
 {
-	expect_ads101x_reset_writes();
+	expect_ads101x_restart();
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
 				       CONFIG_REG,
 				       continuous ?
 					       INIT_RESTART_CFG_CONTINUOUS :
-					       INIT_RESTART_CFG_SINGLE,
+					       INIT_NO_RESTART_CFG_SINGLE,
 				       0);
 
 	ads101x_t* ads =
@@ -243,9 +252,9 @@ void tearDown(void)
 
 void test_ads101x_init_with_restart_packs_config_reg_in_single_mode(void)
 {
-	expect_ads101x_reset_writes();
+	expect_ads101x_restart();
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_NO_RESTART_CFG_SINGLE, 0);
 
 	ads101x_t* ads = init_ads(true, false, ADS101X_FSR_4_096V, FAST_DR);
 
@@ -255,7 +264,7 @@ void test_ads101x_init_with_restart_packs_config_reg_in_single_mode(void)
 
 void test_ads101x_init_with_restart_packs_config_reg_in_continuous_mode(void)
 {
-	expect_ads101x_reset_writes();
+	expect_ads101x_restart();
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
 				       CONFIG_REG,
@@ -272,10 +281,10 @@ void test_ads101x_init_without_restart_reads_then_patches_config_reg(void)
 {
 	// Device already has some COMP bits set; they must survive untouched.
 	expect_i2c_read8_16b(CONFIG_REG, 0x0003, 0);
-	// OS(0x8000) | MODE(0x100) | PGA(3<<9=0x600) | DR(FAST_DR=5<<5=0xA0) |
-	// preserved COMP(0x3)
+	// MODE(0x100) | PGA(3<<9=0x600) | DR(FAST_DR=5<<5=0xA0) | preserved
+	// COMP(0x3).
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x87A3, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x07A3, 0);
 
 	ads101x_t* ads = init_ads(false, false, ADS101X_FSR_1_024V, FAST_DR);
 
@@ -317,7 +326,7 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 	for (int continuous = 0; continuous <= 1; continuous++) {
 		for (uint16_t fsr = 0; fsr <= 0b111; fsr++) {
 			for (uint16_t dr = 0; dr <= 0b111; dr++) {
-				expect_ads101x_reset_writes();
+				expect_ads101x_restart();
 
 				uint16_t cfg = CONFIG_REG_RESET_VALUE;
 				if (continuous) {
@@ -330,6 +339,10 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 						 (fsr << CONFIG_REG_PGA_SHIFT));
 				cfg = (uint16_t)((cfg & ~CONFIG_REG_DR) |
 						 (dr << CONFIG_REG_DR_SHIFT));
+				// Init never starts a single-shot conversion.
+				if (!continuous) {
+					cfg &= (uint16_t)~CONFIG_REG_OS;
+				}
 
 				i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 							       TEST_ADDR,
@@ -358,10 +371,10 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 					   CONFIG_REG_DR);
 			expect_i2c_read8_16b(CONFIG_REG, initial, 0);
 
+			// Single mode, written without OS
 			uint16_t cfg =
 				(uint16_t)((mux << CONFIG_REG_MUX_SHIFT) |
-					   comp | CONFIG_REG_OS |
-					   CONFIG_REG_MODE);
+					   comp | CONFIG_REG_MODE);
 			cfg = (uint16_t)((cfg & ~CONFIG_REG_PGA) |
 					 (ADS101X_FSR_4_096V
 					  << CONFIG_REG_PGA_SHIFT));
@@ -388,6 +401,7 @@ void test_ads101x_init_fails_with_efault_for_a_null_config(void)
 
 void test_ads101x_init_fails_when_the_high_threshold_reset_fails(void)
 {
+	expect_init_config_read();
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
 				       HIGH_THRESHOLD_REG,
@@ -399,6 +413,7 @@ void test_ads101x_init_fails_when_the_high_threshold_reset_fails(void)
 
 void test_ads101x_init_fails_when_the_low_threshold_reset_fails(void)
 {
+	expect_init_config_read();
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
 				       HIGH_THRESHOLD_REG,
@@ -422,9 +437,12 @@ void test_ads101x_init_fails_when_reading_the_config_reg_fails(void)
 
 void test_ads101x_init_fails_when_writing_the_config_reg_fails(void)
 {
-	expect_ads101x_reset_writes();
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, -1);
+	expect_ads101x_restart();
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_NO_RESTART_CFG_SINGLE,
+				       -1);
 
 	TEST_ASSERT_NULL(init_ads(true, false, ADS101X_FSR_4_096V, FAST_DR));
 }
@@ -490,11 +508,12 @@ void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combinati
 					expect_i2c_read8_16b(
 						CONFIG_REG, cfg, 0);
 
+					// Init writes it without OS.
 					i2c_write8_16b_ExpectAndReturn(
 						TEST_I2C,
 						TEST_ADDR,
 						CONFIG_REG,
-						cfg,
+						cfg & (uint16_t)~CONFIG_REG_OS,
 						0);
 
 					ads101x_t* ads = init_ads(
@@ -587,9 +606,9 @@ void test_ads101x_static_init_and_static_deinit_use_the_callers_storage(void)
 	ads101x_config_t cfg;
 	fill_single_shot_cfg(&cfg);
 
-	expect_ads101x_reset_writes();
+	expect_ads101x_restart();
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_NO_RESTART_CFG_SINGLE, 0);
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
@@ -612,11 +631,11 @@ void test_ads101x_static_init_can_reuse_the_storage_after_static_deinit(void)
 	fill_single_shot_cfg(&cfg);
 
 	for (int round = 0; round < 2; round++) {
-		expect_ads101x_reset_writes();
+		expect_ads101x_restart();
 		i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 					       TEST_ADDR,
 					       CONFIG_REG,
-					       INIT_RESTART_CFG_SINGLE,
+					       INIT_NO_RESTART_CFG_SINGLE,
 					       0);
 		TEST_ASSERT_EQUAL_INT(
 			0,
@@ -637,9 +656,9 @@ void test_ads101x_static_init_accepts_an_aligned_address_in_a_buffer(void)
 
 	TEST_ASSERT_EQUAL_INT(0, (uintptr_t)aligned % ADS101X_ALIGN);
 
-	expect_ads101x_reset_writes();
+	expect_ads101x_restart();
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_NO_RESTART_CFG_SINGLE, 0);
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_static_init(TEST_I2C, aligned, TEST_ADDR, true, &cfg));
@@ -693,6 +712,7 @@ void test_ads101x_static_init_fails_when_the_i2c_transfer_fails(void)
 	ads101x_config_t cfg;
 	fill_single_shot_cfg(&cfg);
 
+	expect_init_config_read();
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
 				       HIGH_THRESHOLD_REG,
@@ -717,9 +737,9 @@ void test_ads101x_static_deinit_fails_with_einval_for_another_bus(void)
 	ads101x_config_t cfg;
 	fill_single_shot_cfg(&cfg);
 
-	expect_ads101x_reset_writes();
+	expect_ads101x_restart();
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_NO_RESTART_CFG_SINGLE, 0);
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
@@ -1479,7 +1499,7 @@ void test_ads101x_set_fs_only_writes_in_single_mode_when_read_next(void)
 void test_ads101x_set_fs_waits_for_both_the_old_and_new_conversion_rate(void)
 {
 	// Ensure we wait up to two cycles when changing sampling frequency
-	expect_ads101x_reset_writes();
+	expect_ads101x_restart();
 
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x0203, 0);
