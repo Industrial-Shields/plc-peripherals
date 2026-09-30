@@ -104,7 +104,7 @@ void fake_i2c_read_answers(const uint8_t* bytes, size_t len)
 ssize_t fake_i2c_write(const i2c_interface_t* i2c,
 		       plc_i2c_addr_t addr,
 		       const uint8_t* to_write,
-		       size_t to_write_len,
+		       uint16_t to_write_len,
 		       int num_calls)
 {
 	(void)num_calls;
@@ -125,7 +125,7 @@ ssize_t fake_i2c_write(const i2c_interface_t* i2c,
 ssize_t fake_i2c_read(const i2c_interface_t* i2c,
 		      plc_i2c_addr_t addr,
 		      uint8_t* to_read,
-		      size_t to_read_len,
+		      uint16_t to_read_len,
 		      int num_calls)
 {
 	(void)num_calls;
@@ -148,10 +148,10 @@ ssize_t fake_i2c_read(const i2c_interface_t* i2c,
 ssize_t fake_i2c_write_then_read(const i2c_interface_t* i2c,
 				 plc_i2c_addr_t addr,
 				 const uint8_t* to_write,
-				 size_t to_write_len,
+				 uint16_t to_write_len,
 				 uint8_t* to_read,
-				 size_t to_read_len,
-				 size_t* read_bytes,
+				 uint16_t to_read_len,
+				 uint16_t* read_bytes,
 				 int num_calls)
 {
 	(void)num_calls;

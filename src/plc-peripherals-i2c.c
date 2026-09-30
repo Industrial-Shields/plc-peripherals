@@ -71,7 +71,7 @@ int i2c_read8_8b(const i2c_interface_t* i2c,
 		 uint8_t reg,
 		 uint8_t* to_read)
 {
-	size_t bytes_read;
+	uint16_t bytes_read;
 	ssize_t i2c_write_then_read_result = i2c_write_then_read(
 		i2c, addr, &reg, 1, to_read, 1, &bytes_read);
 
@@ -96,7 +96,7 @@ int i2c_read8_16b(const i2c_interface_t* i2c,
 		  uint8_t reg,
 		  uint16_t* to_read)
 {
-	size_t bytes_read;
+	uint16_t bytes_read;
 	ssize_t i2c_write_then_read_result = i2c_write_then_read(
 		i2c, addr, &reg, 1, (uint8_t*)to_read, 2, &bytes_read);
 

@@ -119,7 +119,7 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 ssize_t i2c_write(const i2c_interface_t* i2c,
 		  plc_i2c_addr_t addr,
 		  const uint8_t* to_write,
-		  size_t to_write_len)
+		  uint16_t to_write_len)
 {
 	if (i2c == NULL || to_write == NULL) {
 		errno = EFAULT;
@@ -156,7 +156,7 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 ssize_t i2c_read(const i2c_interface_t* i2c,
 		 plc_i2c_addr_t addr,
 		 uint8_t* to_read,
-		 size_t to_read_len)
+		 uint16_t to_read_len)
 {
 	if (i2c == NULL || to_read == NULL) {
 		errno = EFAULT;
@@ -195,12 +195,13 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 			    plc_i2c_addr_t addr,
 			    const uint8_t* to_write,
-			    size_t to_write_len,
+			    uint16_t to_write_len,
 			    uint8_t* to_read,
-			    size_t to_read_len,
-			    size_t* read_bytes)
+			    uint16_t to_read_len,
+			    uint16_t* read_bytes)
 {
-	if (i2c == NULL || to_write == NULL || to_read == NULL) {
+	if (i2c == NULL || to_write == NULL || to_read == NULL ||
+	    read_bytes == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
@@ -209,6 +210,7 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
+	size_t read_count = 0;
 	int write_read_result = i2cWriteReadNonStop(i2c->bus_number,
 						    addr,
 						    to_write,
@@ -216,7 +218,9 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 						    to_read,
 						    to_read_len,
 						    MAXIMUM_I2C_TIMEOUT,
-						    read_bytes);
+						    &read_count);
+	// Never more than to_read_len, so it always fits
+	*read_bytes = (uint16_t)read_count;
 	switch (write_read_result) {
 	case ESP_OK:
 		return to_write_len;
