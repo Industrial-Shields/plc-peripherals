@@ -16,11 +16,11 @@
  */
 
 /*
- * Tests for src/peripheral-mcp230xx.c. Its dependencies are mocked:
+ * Tests for src/peripheral-mcp230xx.c. All of its dependencies are mocked:
  * plc-peripherals-i2c.h (the register-level i2c_write8_8b/i2c_read8_8b calls)
- * plc-peripherals-i2c-hal.h is mocked too, one layer below
- * plc-peripherals-i2c.h: mcp230xx_protect calls i2c_get_bus directly, and the
- * reset writes the whole register block in a single i2c_write.
+ * and plc-peripherals-i2c-hal.h (the bus lookups, and the reset, which writes
+ * the whole register block in a single i2c_write, are stubbed by fake-i2c),
+ * and plc-mutex.h (the mutex mcp230xx_protect embeds in the handle).
  */
 
 #include "unity.h"
@@ -182,17 +182,65 @@ static void destroy_mcp(mcp230xx_t* mcp)
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_deinit(TEST_I2C, mcp, false));
 }
 
+#define TEST_SCOPE PLC_MUTEX_SCOPE_PRIVATE
+
 static mcp230xx_t* create_protected_mcp(MCP230XX_TYPE type)
 {
 	mcp230xx_t* mcp = create_mcp(type);
 
-	TEST_ASSERT_EQUAL_INT(0, mcp230xx_protect(TEST_I2C, mcp));
+	plc_mutex_static_create_ExpectAndReturn(NULL, TEST_SCOPE, 0);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(0, mcp230xx_protect(TEST_I2C, mcp, TEST_SCOPE));
 	return mcp;
+}
+
+static void expect_mutex_destroyed(int retval)
+{
+	plc_mutex_static_destroy_ExpectAndReturn(NULL, retval);
+	plc_mutex_static_destroy_IgnoreArg_mutex();
 }
 
 static void destroy_protected_mcp(mcp230xx_t* mcp)
 {
+	expect_mutex_destroyed(0);
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_deinit(TEST_I2C, mcp, false));
+}
+
+static void expect_mutex_acquired(void)
+{
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+}
+
+static void expect_mutex_released(void)
+{
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+}
+
+static int acquire_after_owner_died(plc_mutex_t* mutex,
+				    uint32_t timeout_ms,
+				    int cmock_num_calls)
+{
+	(void)mutex;
+	(void)timeout_ms;
+
+	if (cmock_num_calls == 0) {
+		errno = EOWNERDEAD;
+		return -1;
+	}
+	return 0;
+}
+
+static int
+acquire_times_out(plc_mutex_t* mutex, uint32_t timeout_ms, int cmock_num_calls)
+{
+	(void)mutex;
+	(void)timeout_ms;
+	(void)cmock_num_calls;
+
+	errno = EBUSY;
+	return -1;
 }
 
 void setUp(void)
@@ -617,7 +665,7 @@ void test_mcp230xx_deinit_fails_when_the_reset_fails(void)
 	free(mcp); // deinit bailed out before freeing it
 }
 
-/* -------------------------- mcp230xx_protect ------------------------------- */
+/* ------------------------------ bus checks -------------------------------- */
 
 void test_mcp230xx_rejects_an_interface_for_another_bus(void)
 {
@@ -653,8 +701,6 @@ void test_mcp230xx_rejects_an_interface_for_another_bus(void)
 	fake_i2c_bus = TEST_BUS;
 	destroy_mcp(mcp);
 }
-
-/* ------------------------- mcp230xx_unprotect ------------------------------ */
 
 /* ------------------ mcp230xx_static_init / static_deinit ------------------ */
 
@@ -1512,96 +1558,270 @@ void test_mcp230xx_fuzzes_every_gpio_index_to_its_register_and_bit(void)
 	}
 }
 
-void test_mcp230xx_deinit_also_unprotects_when_protected(void)
-{
-	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+/* ----------------------- mcp230xx_protect / unprotect --------------------- */
 
-	TEST_ASSERT_EQUAL_INT(0, mcp230xx_deinit(TEST_I2C, mcp, false));
-}
-
-void test_mcp230xx_deinit_fails_when_the_unprotect_fails(void)
-{
-	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
-
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_deinit(TEST_I2C, mcp, false));
-
-	free(mcp); // deinit bailed out before freeing it
-}
-
-void test_mcp230xx_protect_fails_with_einval_for_null(void)
+void test_mcp230xx_protect_fails_with_efault_for_null(void)
 {
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(TEST_I2C, NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(TEST_I2C, NULL, TEST_SCOPE));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_mcp230xx_protect_adds_the_resource_for_its_bus_and_address(void)
+void test_mcp230xx_protect_fails_with_einval_for_another_bus(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
-	TEST_ASSERT_EQUAL_INT(0, mcp230xx_protect(TEST_I2C, mcp));
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(TEST_I2C, mcp, TEST_SCOPE));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
-	destroy_protected_mcp(mcp);
+	fake_i2c_bus = TEST_BUS;
+	destroy_mcp(mcp);
 }
 
 void test_mcp230xx_protect_fails_when_the_bus_cant_be_read(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(TEST_I2C, mcp));
+	fake_i2c_bus_retval = -1;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(TEST_I2C, mcp, TEST_SCOPE));
 
+	fake_i2c_bus_retval = 0;
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_protect_fails_when_the_resource_cant_be_added(void)
+void test_mcp230xx_protect_creates_the_mutex_with_the_given_scope(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(TEST_I2C, mcp));
+	plc_mutex_static_create_ExpectAndReturn(
+		NULL, PLC_MUTEX_SCOPE_SHARED, 0);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_protect(TEST_I2C, mcp, PLC_MUTEX_SCOPE_SHARED));
 
-	destroy_mcp(mcp);
+	destroy_protected_mcp(mcp);
 }
 
 void test_mcp230xx_protect_returns_1_if_already_protected(void)
 {
 	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
 
-	TEST_ASSERT_EQUAL_INT(1, mcp230xx_protect(TEST_I2C, mcp));
+	// No second plc_mutex_static_create is expected.
+	TEST_ASSERT_EQUAL_INT(1, mcp230xx_protect(TEST_I2C, mcp, TEST_SCOPE));
 
 	destroy_protected_mcp(mcp);
 }
 
-void test_mcp230xx_unprotect_fails_with_einval_for_null(void)
+void test_mcp230xx_protect_leaves_the_handle_unprotected_when_it_fails(void)
 {
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_unprotect(NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-}
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
-void test_mcp230xx_unprotect_removes_the_resource(void)
-{
-	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+	plc_mutex_static_create_ExpectAndReturn(NULL, TEST_SCOPE, -1);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_protect(TEST_I2C, mcp, TEST_SCOPE));
 
-	TEST_ASSERT_EQUAL_INT(0, mcp230xx_unprotect(mcp));
+	// No plc_mutex_acquire/release is expected: the handle isn't protected.
+	expect_i2c_read8_8b(GPIO_008, 0x01, 0);
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_read_gpio(TEST_I2C, mcp, 0, &value, 1000));
 
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_unprotect_returns_1_if_already_unprotected(void)
+void test_mcp230xx_unprotect_fails_with_efault_for_null(void)
 {
-	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_unprotect(NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_mcp230xx_unprotect_returns_1_if_not_protected(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
 	TEST_ASSERT_EQUAL_INT(1, mcp230xx_unprotect(mcp));
 
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_unprotect_fails_when_the_resource_cant_be_removed(void)
+void test_mcp230xx_unprotect_destroys_the_mutex(void)
 {
 	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
 
+	expect_mutex_destroyed(0);
+	TEST_ASSERT_EQUAL_INT(0, mcp230xx_unprotect(mcp));
+
+	// No plc_mutex_acquire/release is expected anymore.
+	expect_i2c_read8_8b(GPIO_008, 0x01, 0);
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_read_gpio(TEST_I2C, mcp, 0, &value, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_unprotect_keeps_the_handle_protected_when_it_fails(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+
+	expect_mutex_destroyed(-1);
 	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_unprotect(mcp));
 
+	expect_mutex_acquired();
+	expect_i2c_read8_8b(GPIO_008, 0x01, 0);
+	expect_mutex_released();
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_read_gpio(TEST_I2C, mcp, 0, &value, 1000));
+
+	destroy_protected_mcp(mcp);
+}
+
+void test_mcp230xx_deinit_destroys_the_mutex_when_protected(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+
+	expect_mutex_destroyed(0);
+	TEST_ASSERT_EQUAL_INT(0, mcp230xx_deinit(TEST_I2C, mcp, false));
+}
+
+void test_mcp230xx_deinit_keeps_the_handle_when_the_mutex_cant_be_destroyed(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+
+	uint32_t writes_before = fake_i2c_write_op.calls;
+	expect_mutex_destroyed(-1);
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_deinit(TEST_I2C, mcp, true));
+	TEST_ASSERT_EQUAL_UINT32(writes_before, fake_i2c_write_op.calls);
+
+	destroy_protected_mcp(mcp);
+}
+
+void test_mcp230xx_static_deinit_destroys_the_mutex_when_protected(void)
+{
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+
+	expect_static_init_writes(MCP230XX_008);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+
+	plc_mutex_static_create_ExpectAndReturn(NULL, TEST_SCOPE, 0);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_protect(TEST_I2C, &storage, TEST_SCOPE));
+
+	expect_mutex_destroyed(0);
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_static_deinit(TEST_I2C, &storage, false));
+}
+
+void test_mcp230xx_fails_when_the_mutex_cant_be_taken(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_017);
+
+	// No I2C transfer and no release are expected.
+	plc_mutex_acquire_Stub(acquire_times_out);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_input(TEST_I2C, mcp, 9, MCP230XX_PULLUP, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	errno = 0;
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_read_gpio(TEST_I2C, mcp, 9, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_set_output(TEST_I2C, mcp, 9, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_write_gpio(TEST_I2C, mcp, 9, MCP230XX_HIGH, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	destroy_protected_mcp(mcp);
+}
+
+void test_mcp230xx_goes_on_after_an_owner_died(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+	expect_i2c_read8_8b(OLAT_008, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, OLAT_008, 0x04, 0);
+	expect_mutex_released();
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_write_gpio(TEST_I2C, mcp, 2, MCP230XX_HIGH, 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
+
+	destroy_protected_mcp(mcp);
+}
+
+void test_mcp230xx_releases_the_mutex_when_the_transfer_fails(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+
+	expect_mutex_acquired();
+	expect_i2c_read8_8b(IODIR_008, 0, -1);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_input(TEST_I2C, mcp, 0, MCP230XX_PULLUP, 1000));
+
+	expect_mutex_acquired();
+	expect_i2c_read8_8b(GPIO_008, 0, -1);
+	expect_mutex_released();
+	uint8_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_read_gpio(TEST_I2C, mcp, 0, &value, 1000));
+
+	expect_mutex_acquired();
+	expect_i2c_read8_8b(IODIR_008, 0xFF, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0xFE, -1);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_set_output(TEST_I2C, mcp, 0, 1000));
+
+	expect_mutex_acquired();
+	expect_i2c_read8_8b(OLAT_008, 0, -1);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_write_gpio(TEST_I2C, mcp, 0, MCP230XX_HIGH, 1000));
+
+	destroy_protected_mcp(mcp);
+}
+
+void test_mcp230xx_rejects_bad_arguments_without_taking_the_mutex(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+
+	// No plc_mutex_acquire/release is expected.
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      mcp230xx_set_input(TEST_I2C,
+						 mcp,
+						 MCP23008_MAX_GPIOS,
+						 MCP230XX_PULLUP,
+						 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_set_output(TEST_I2C, mcp, 0, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	fake_i2c_bus = TEST_BUS;
 	destroy_protected_mcp(mcp);
 }
 

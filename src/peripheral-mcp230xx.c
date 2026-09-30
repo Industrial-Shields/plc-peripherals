@@ -53,9 +53,11 @@
 // clang-format on
 
 typedef struct {
+	plc_mutex_t mutex;
 	plc_i2c_addr_t addr;
 	uint8_t bus;
 	uint8_t type;
+	bool is_protected;
 } mcp230xx_internal_t;
 
 _Static_assert(sizeof(mcp230xx_t) == sizeof(mcp230xx_internal_t),
@@ -71,12 +73,32 @@ _Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(mcp230xx_t) ==
 	i2c_write8_8b(i2c, addr, register_name, register_name##_RESET_VALUE)
 #define UINT8T_ARR(arr) arr, sizeof(arr)
 
-#define REG_A(reg, type) type == MCP230XX_017 ? reg << 1 : reg
-#define REG_B(reg, type) type == MCP230XX_017 ? (reg << 1) + 1 : reg + 1
+#define REG_A(reg, type) ((type) == MCP230XX_017 ? (reg) << 1 : (reg))
+#define REG_B(reg, type) ((type) == MCP230XX_017 ? ((reg) << 1) + 1 : (reg) + 1)
 
-#define MCP230XX_LOCK(mcp, timeout_ms) ((void)(mcp), (void)(timeout_ms))
+static int mcp230xx_lock(mcp230xx_internal_t* mcp, uint32_t timeout_ms)
+{
+	int saved_errno = errno;
 
-#define MCP230XX_UNLOCK(mcp) ((void)(mcp))
+	if (mcp->is_protected &&
+	    plc_mutex_acquire(&mcp->mutex, timeout_ms) != 0) {
+		if (errno != EOWNERDEAD) {
+			return -1;
+		}
+
+		// The mutex is held, and there is nothing to recover.
+		errno = saved_errno;
+	}
+
+	return 0;
+}
+
+static void mcp230xx_unlock(mcp230xx_internal_t* mcp)
+{
+	if (mcp->is_protected) {
+		plc_mutex_release(&mcp->mutex);
+	}
+}
 
 static int mcp230xx_reset(const i2c_interface_t* i2c,
 			  plc_i2c_addr_t addr,
@@ -154,8 +176,7 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
 	}
 
 	if (restart) {
-		int result = mcp230xx_reset(i2c, addr, cfg->type);
-		if (result != 0) {
+		if (mcp230xx_reset(i2c, addr, cfg->type) != 0) {
 			return -1;
 		}
 		cfg_reg = IOCON_REG_RESET_VALUE;
@@ -190,6 +211,7 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
 	MCP(mcp)->addr = addr;
 	MCP(mcp)->bus = bus;
 	MCP(mcp)->type = (uint8_t)cfg->type;
+	MCP(mcp)->is_protected = false;
 	return 0;
 }
 
@@ -226,11 +248,13 @@ int mcp230xx_static_deinit(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (restart) {
-		int result = mcp230xx_reset(i2c, MCP(mcp)->addr, MCP_TYPE(mcp));
-		if (result != 0) {
-			return result;
-		}
+	if (mcp230xx_unprotect(mcp) < 0) {
+		return -1;
+	}
+
+	if (restart &&
+	    mcp230xx_reset(i2c, MCP(mcp)->addr, MCP_TYPE(mcp)) != 0) {
+		return -1;
 	}
 
 	return 0;
@@ -246,25 +270,52 @@ int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart)
 	return 0;
 }
 
-int mcp230xx_protect(const i2c_interface_t* i2c, mcp230xx_t* mcp)
+int mcp230xx_protect(const i2c_interface_t* i2c,
+		     mcp230xx_t* mcp,
+		     plc_mutex_scope_t scope)
 {
-	(void)i2c;
-	(void)mcp;
+	if (mcp == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
 
-	errno = ENOTSUP;
-	return -1;
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
+		return -1;
+	}
+
+	if (MCP(mcp)->is_protected) {
+		return 1;
+	}
+
+	if (plc_mutex_static_create(&MCP(mcp)->mutex, scope) != 0) {
+		return -1;
+	}
+
+	MCP(mcp)->is_protected = true;
+	return 0;
 }
 
 int mcp230xx_unprotect(mcp230xx_t* mcp)
 {
-	(void)mcp;
+	if (mcp == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
 
-	errno = ENOTSUP;
-	return -1;
+	if (!MCP(mcp)->is_protected) {
+		return 1;
+	}
+
+	if (plc_mutex_static_destroy(&MCP(mcp)->mutex) != 0) {
+		return -1;
+	}
+
+	MCP(mcp)->is_protected = false;
+	return 0;
 }
 
 int mcp230xx_set_input(const i2c_interface_t* i2c,
-		       const mcp230xx_t* mcp,
+		       mcp230xx_t* mcp,
 		       uint8_t index,
 		       MCP230XX_INPUT_CONFIG config,
 		       uint32_t timeout_ms)
@@ -298,7 +349,9 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
 					  REG_A(GPPU_REG, MCP_TYPE(mcp)) :
 					  REG_B(GPPU_REG, MCP_TYPE(mcp));
 
-	MCP230XX_LOCK(mcp, timeout_ms);
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
 
 	if (i2c_read8_8b(i2c, MCP(mcp)->addr, iodir_addr, &iodir_reg) != 0 ||
 	    i2c_read8_8b(i2c, MCP(mcp)->addr, gppu_addr, &gppu_reg) != 0) {
@@ -344,12 +397,12 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
 	}
 
 set_input_error_cleanup:
-	MCP230XX_UNLOCK(mcp);
+	mcp230xx_unlock(MCP(mcp));
 	return result;
 }
 
 int mcp230xx_read_gpio(const i2c_interface_t* i2c,
-		       const mcp230xx_t* mcp,
+		       mcp230xx_t* mcp,
 		       uint8_t index,
 		       uint8_t* return_value,
 		       uint32_t timeout_ms)
@@ -377,9 +430,11 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 					  REG_B(GPIO_REG, MCP_TYPE(mcp));
 	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
 
-	MCP230XX_LOCK(mcp, timeout_ms);
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
 	result = i2c_read8_8b(i2c, MCP(mcp)->addr, gpio_addr, &gpio_reg);
-	MCP230XX_UNLOCK(mcp);
+	mcp230xx_unlock(MCP(mcp));
 
 	if (result != 0) {
 		return result;
@@ -391,7 +446,7 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 }
 
 int mcp230xx_set_output(const i2c_interface_t* i2c,
-			const mcp230xx_t* mcp,
+			mcp230xx_t* mcp,
 			uint8_t index,
 			uint32_t timeout_ms)
 {
@@ -418,7 +473,9 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
 					   REG_B(IODIR_REG, MCP_TYPE(mcp));
 	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
 
-	MCP230XX_LOCK(mcp, timeout_ms);
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
 
 	if (i2c_read8_8b(i2c, MCP(mcp)->addr, iodir_addr, &iodir_reg) != 0) {
 		result = -1;
@@ -436,12 +493,12 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
 	result = i2c_write8_8b(i2c, MCP(mcp)->addr, iodir_addr, iodir_reg);
 
 set_output_error_cleanup:
-	MCP230XX_UNLOCK(mcp);
+	mcp230xx_unlock(MCP(mcp));
 	return result;
 }
 
 int mcp230xx_write_gpio(const i2c_interface_t* i2c,
-			const mcp230xx_t* mcp,
+			mcp230xx_t* mcp,
 			uint8_t index,
 			uint8_t to_write,
 			uint32_t timeout_ms)
@@ -469,7 +526,9 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 					  REG_B(OLAT_REG, MCP_TYPE(mcp));
 	const uint8_t pin_mask = 1 << (index % MCP23008_MAX_GPIOS);
 
-	MCP230XX_LOCK(mcp, timeout_ms);
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
 
 	if (i2c_read8_8b(i2c, MCP(mcp)->addr, olat_addr, &old_olat_reg) != 0) {
 		result = -1;
@@ -492,6 +551,6 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 	}
 
 write_gpio_error_cleanup:
-	MCP230XX_UNLOCK(mcp);
+	mcp230xx_unlock(MCP(mcp));
 	return result;
 }

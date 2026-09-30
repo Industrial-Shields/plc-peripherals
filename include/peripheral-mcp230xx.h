@@ -20,6 +20,7 @@
 #ifndef PLC_PERIPHERAL_MCP230XX_I2C_H_
 #define PLC_PERIPHERAL_MCP230XX_I2C_H_
 
+#include "plc-mutex.h"
 #include "plc-peripherals-i2c.h"
 #include "plc-peripherals-platform.h"
 #ifdef __cplusplus
@@ -34,13 +35,14 @@ extern "C" {
 // clang-format on
 
 /*
- * Sized for the private handle in peripheral-mcp230xx.c: the I2C address, the
- * bus number and the chip type.
+ * Sized for the private handle in peripheral-mcp230xx.c: its mutex, the I2C
+ * address, the bus number, the chip type and a flag.
  */
-#define MCP230XX_INTERNAL_ALIGN PLC_PERIPHERAL_INTERNAL_ALIGNOF(plc_i2c_addr_t)
-#define MCP230XX_INTERNAL_SIZE                                   \
-	PLC_PERIPHERAL_INTERNAL_PAD(sizeof(plc_i2c_addr_t) +     \
-					    2 * sizeof(uint8_t), \
+#define MCP230XX_INTERNAL_ALIGN PLC_MUTEX_ALIGN
+#define MCP230XX_INTERNAL_SIZE                                                \
+	PLC_PERIPHERAL_INTERNAL_PAD(PLC_MUTEX_SIZE + sizeof(plc_i2c_addr_t) + \
+					    2 * sizeof(uint8_t) +             \
+					    sizeof(bool),                     \
 				    MCP230XX_INTERNAL_ALIGN)
 
 /*
@@ -58,7 +60,7 @@ extern "C" {
 #define MCP230XX_ALIGN MCP230XX_INTERNAL_ALIGN
 
 typedef struct {
-	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_i2c_addr_t)
+	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_mutex_t)
 	unsigned char opaque[MCP230XX_SIZE];
 } mcp230xx_t;
 
@@ -150,7 +152,7 @@ typedef struct {
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed cfg is NULL.
+ *     - EFAULT   : Passed cfg or i2c is NULL.
  *     - EINVAL   : int_type is not an MCP230XX_INT_TYPE value, int_pol doesn't
  *                  match int_type (see mcp230xx_config_t), or mirror is
  *                  MCP230XX_MIRRORED_INT on a chip other than the MCP23017.
@@ -170,7 +172,11 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
  * Deinitialize an MCP230XX peripheral. This function currently supports
  * MCP23008 and MCP23017.
  *
- * WARNING: Never use this on an mcp230xx_static_init handle.
+ * WARNINGS:
+ *   - Never use this on an mcp230xx_static_init handle.
+ *   - If the handle is protected, its mutex is destroyed first. If the reset
+ *     write fails after that, the handle is not freed, but it is no longer
+ *     protected.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
@@ -183,11 +189,13 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_static_destroy reports while protected
+ *                  (see plc-mutex.h). The handle is then left as it was.
  */
 int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
 
@@ -220,8 +228,8 @@ int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed storage is NULL, or not MCP230XX_ALIGN aligned, or
- *                  cfg is NULL.
+ *     - EFAULT   : Passed storage is NULL or not MCP230XX_ALIGN aligned, or
+ *                  cfg or i2c is NULL.
  *     - EINVAL   : int_type is not an MCP230XX_INT_TYPE value, int_pol doesn't
  *                  match int_type (see mcp230xx_config_t), or mirror is
  *                  MCP230XX_MIRRORED_INT on a chip other than the MCP23017.
@@ -241,7 +249,11 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
  * Deinitialize an MCP230XX peripheral made by mcp230xx_static_init. The storage
  * is never freed. This function currently supports MCP23008 and MCP23017.
  *
- * WARNING: Never use this on an mcp230xx_init handle.
+ * WARNINGS:
+ *   - Never use this on an mcp230xx_init handle.
+ *   - If the handle is protected, its mutex is destroyed first. If the reset
+ *     write fails after that, the handle is still initialized, but it is no
+ *     longer protected.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
@@ -254,11 +266,13 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_static_destroy reports while protected
+ *                  (see plc-mutex.h). The handle is then left as it was.
  */
 int mcp230xx_static_deinit(const i2c_interface_t* i2c,
 			   mcp230xx_t* mcp,
@@ -267,42 +281,49 @@ int mcp230xx_static_deinit(const i2c_interface_t* i2c,
 /**
  * mcp230xx_protect
  *
- * Protect the MCP230XX with a mutex.
+ * Protect the MCP230XX with a mutex embedded in its handle. Every GPIO call on
+ * the handle then holds it, waiting up to its timeout_ms for it.
+ *
+ * WARNING: Never call it while another thread or process uses the handle.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
- *   mcp (mcp230xx_t)             - The MCP230XX to protect.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to protect.
+ *   scope (plc_mutex_scope_t)    - Who the mutex has to exclude. Use
+ *                                  PLC_MUTEX_SCOPE_SHARED if the handle is in
+ *                                  memory shared with other processes (see
+ *                                  plc_mutex_scope_t).
  * Returns:
  *   int - 0 if successful, 1 if already protected, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - ENOMEM : Out of memory during allocation.
- *     - EINVAL : Passed mcp230xx_t is NULL, or address is invalid.
- *     - EEXIST : The resource was already added.
- *     - EBUSY  : Hutex couldn't be taken.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
+ *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
+ *     - (others) : Whatever plc_mutex_static_create reports (see
+ *                  plc-mutex.h).
  */
-int mcp230xx_protect(const i2c_interface_t* i2c, mcp230xx_t* mcp);
+int mcp230xx_protect(const i2c_interface_t* i2c,
+		     mcp230xx_t* mcp,
+		     plc_mutex_scope_t scope);
 
 /**
  * mcp230xx_unprotect
  *
- * Remove the mutex associated with the MCP230XX.
+ * Destroy the mutex embedded in the MCP230XX handle.
+ *
+ * WARNING: Never call it while another thread or process uses the handle.
  *
  * Parameters:
- *   mcp (mcp230xx_t)         - The MCP230XX to unprotect.
+ *   mcp (mcp230xx_t*) - The MCP230XX to unprotect.
  * Returns:
  *   int - 0 if successful, 1 if already unprotected, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed mcp230xx_t is NULL, or address is invalid.
- *     - ENODEV : The resource is not present.
- *     - EBUSY  : Hash mutex couldn't be taken.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - (others) : Whatever plc_mutex_static_destroy reports (see
+ *                  plc-mutex.h).
  */
 int mcp230xx_unprotect(mcp230xx_t* mcp);
 
@@ -313,7 +334,7 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *
  * Parameters:
  *   i2c (const i2c_interface_t*)   - The I2C interface the MCP230XX is on.
- *   mcp (const mcp230xx_t*)        - The MCP230XX to interact with.
+ *   mcp (mcp230xx_t*)              - The MCP230XX to interact with.
  *   index (uint8_t)                - The GPIO you want to set as input.
  *   config (MCP230XX_INPUT_CONFIG) - Used to enable/disable the pull-up of the
  *                                    input.
@@ -326,16 +347,19 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
  *     - EINVAL   : index is invalid for the chip, config is not an
  *                  MCP230XX_INPUT_CONFIG value, or i2c is not on the bus the
  *                  MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int mcp230xx_set_input(const i2c_interface_t* i2c,
-		       const mcp230xx_t* mcp,
+		       mcp230xx_t* mcp,
 		       uint8_t index,
 		       MCP230XX_INPUT_CONFIG config,
 		       uint32_t timeout_ms);
@@ -348,7 +372,7 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
- *   mcp (const mcp230xx_t*)      - The MCP230XX to interact with.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   index (uint8_t)              - The GPIO you want to read from.
  *   return_value (uint8_t*)      - The value in which the reading will be
  *                                  stored.
@@ -359,15 +383,18 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed mcp230xx_t or return_value is NULL.
+ *     - EFAULT   : Passed mcp230xx_t, return_value or i2c is NULL.
  *     - EINVAL   : index is invalid for the chip, or i2c is not on the bus the
  *                  MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int mcp230xx_read_gpio(const i2c_interface_t* i2c,
-		       const mcp230xx_t* mcp,
+		       mcp230xx_t* mcp,
 		       uint8_t index,
 		       uint8_t* return_value,
 		       uint32_t timeout_ms);
@@ -379,7 +406,7 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
- *   mcp (const mcp230xx_t*)      - The MCP230XX to interact with.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   index (uint8_t)              - The GPIO you want to set as output.
  *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
  *                                  applicable when the MCP230XX is protected.
@@ -388,15 +415,18 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
  *     - EINVAL   : index is invalid for the chip, or i2c is not on the bus the
  *                  MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int mcp230xx_set_output(const i2c_interface_t* i2c,
-			const mcp230xx_t* mcp,
+			mcp230xx_t* mcp,
 			uint8_t index,
 			uint32_t timeout_ms);
 
@@ -408,7 +438,7 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
- *   mcp (const mcp230xx_t*)      - The MCP230XX to interact with.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   index (uint8_t)              - The GPIO you want to modify.
  *   to_write (uint8_t)           - The value to write. MCP230XX_LOW sets the
  *                                  output low, any other value sets it high.
@@ -419,15 +449,18 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed mcp230xx_t is NULL.
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
  *     - EINVAL   : index is invalid for the chip, or i2c is not on the bus the
  *                  MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int mcp230xx_write_gpio(const i2c_interface_t* i2c,
-			const mcp230xx_t* mcp,
+			mcp230xx_t* mcp,
 			uint8_t index,
 			uint8_t to_write,
 			uint32_t timeout_ms);
