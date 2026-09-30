@@ -521,7 +521,7 @@ int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
  * Retrieve the sampling frequency set in the ADS101X.
  *
  * Parameters:
- *   ads (const ads101x_t*)  - The ADS101X to interact with.
+ *   ads (ads101x_t*)        - The ADS101X to interact with.
  *   dr (ADS101X_DATA_RATE*) - Pointer to where the sampling frequency will be
  *                             saved.
  *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
@@ -537,9 +537,7 @@ int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
-int ads101x_get_fs(const ads101x_t* ads,
-		   ADS101X_DATA_RATE* dr,
-		   uint32_t timeout_ms);
+int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr, uint32_t timeout_ms);
 
 /**
  * ads101x_set_fs
