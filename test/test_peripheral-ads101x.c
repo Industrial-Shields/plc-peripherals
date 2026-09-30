@@ -309,6 +309,20 @@ void test_ads101x_init_without_restart_in_continuous_mode_clears_os_and_mode_bit
 	destroy_ads(ads);
 }
 
+/*
+ * The init functions don't write FSR and DR values that are not part of the
+ * enum, even though it silently accepts them.
+ */
+static uint16_t written_pga(uint16_t fsr)
+{
+	return fsr >= 0b110 ? ADS101X_FSR_0_256V : fsr;
+}
+
+static uint16_t written_dr(uint16_t dr)
+{
+	return dr == 0b111 ? ADS101X_3300SPS : dr;
+}
+
 void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination(
 	void)
 {
@@ -336,9 +350,11 @@ void test_ads101x_init_fuzzes_every_reachable_configuration_register_combination
 					cfg |= CONFIG_REG_MODE | CONFIG_REG_OS;
 				}
 				cfg = (uint16_t)((cfg & ~CONFIG_REG_PGA) |
-						 (fsr << CONFIG_REG_PGA_SHIFT));
+						 (written_pga(fsr)
+						  << CONFIG_REG_PGA_SHIFT));
 				cfg = (uint16_t)((cfg & ~CONFIG_REG_DR) |
-						 (dr << CONFIG_REG_DR_SHIFT));
+						 (written_dr(dr)
+						  << CONFIG_REG_DR_SHIFT));
 				// Init never starts a single-shot conversion.
 				if (!continuous) {
 					cfg &= (uint16_t)~CONFIG_REG_OS;
@@ -447,6 +463,24 @@ void test_ads101x_init_fails_when_writing_the_config_reg_fails(void)
 	TEST_ASSERT_NULL(init_ads(true, false, ADS101X_FSR_4_096V, FAST_DR));
 }
 
+void test_ads101x_init_fails_with_einval_for_an_invalid_fsr(void)
+{
+	// No I2C transfer is expected.
+	errno = 0;
+	TEST_ASSERT_NULL(
+		init_ads(true, false, (ADS101X_GAIN_AMPLIFIER)0b1000, FAST_DR));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_ads101x_init_fails_with_einval_for_an_invalid_dr(void)
+{
+	// No I2C transfer is expected.
+	errno = 0;
+	TEST_ASSERT_NULL(init_ads(
+		true, false, ADS101X_FSR_4_096V, (ADS101X_DATA_RATE)0b1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
 /* --------------------------- ads101x_deinit ------------------------------- */
 
 void test_ads101x_deinit_fails_with_efault_for_null_ads(void)
@@ -507,6 +541,13 @@ void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combinati
 							   comp);
 					expect_i2c_read8_16b(
 						CONFIG_REG, cfg, 0);
+					cfg = (uint16_t)((cfg &
+							  ~(CONFIG_REG_PGA |
+							    CONFIG_REG_DR)) |
+							 (written_pga(pga)
+							  << CONFIG_REG_PGA_SHIFT) |
+							 (written_dr(dr)
+							  << CONFIG_REG_DR_SHIFT));
 
 					// Init writes it without OS.
 					i2c_write8_16b_ExpectAndReturn(
@@ -783,6 +824,53 @@ void test_ads101x_rejects_an_interface_for_another_bus(void)
 }
 
 /* ------------------------- ads101x_single_read ----------------------------- */
+
+void test_ads101x_single_read_fails_with_einval_for_an_invalid_index(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(
+			TEST_I2C, ads, (ADS101X_INPUT)0b1000, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_continuous_read_fails_with_einval_for_an_invalid_index(void)
+{
+	ads101x_t* ads = create_ads(true);
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, (ADS101X_INPUT)0b1000, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_set_fs_fails_with_einval_for_an_invalid_dr(void)
+{
+	ads101x_t* ads = create_ads(true);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_set_fs(TEST_I2C, ads, (ADS101X_DATA_RATE)0b1000, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	ADS101X_DATA_RATE dr;
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
+	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
+
+	destroy_ads(ads);
+}
 
 void test_ads101x_single_read_returns_a_positive_reading(void)
 {
@@ -1554,7 +1642,7 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0,
 		  (1100000 + 50000) / 3300 },
 		{ (ADS101X_DATA_RATE)0b111,
-		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xE0,
+		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0,
 		  (1100000 + 50000) / 3300 },
 	};
 

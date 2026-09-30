@@ -154,6 +154,8 @@ typedef struct {
  * Errors:
  *   errno set to:
  *     - EFAULT   : Passed cfg or i2c is NULL.
+ *     - EINVAL   : cfg->fsr is not an ADS101X_GAIN_AMPLIFIER value, or cfg->dr
+ *                  is not an ADS101X_DATA_RATE value.
  *     - ENOMEM   : Out of memory during allocation.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
@@ -233,6 +235,8 @@ int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
  *   errno set to:
  *     - EFAULT   : Passed storage is NULL or not ADS101X_ALIGN aligned, or cfg
  *                  or i2c is NULL.
+ *     - EINVAL   : cfg->fsr is not an ADS101X_GAIN_AMPLIFIER value, or cfg->dr
+ *                  is not an ADS101X_DATA_RATE value.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
@@ -358,8 +362,9 @@ int ads101x_unprotect(ads101x_t* ads);
  * Errors:
  *   errno set to:
  *     - EFAULT   : Passed ads101x_t, return_value or i2c is NULL.
- *     - EINVAL   : The ADS101X was initialized in continuous mode, or i2c is
- *                  not on the bus the ADS101X was initialized on.
+ *     - EINVAL   : index is not an ADS101X_INPUT value, the ADS101X was
+ *                  initialized in continuous mode, or i2c is not on the bus
+ *                  the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
@@ -401,8 +406,9 @@ int ads101x_single_read(const i2c_interface_t* i2c,
  * Errors:
  *   errno set to:
  *     - EFAULT   : Passed ads101x_t, return_value or i2c is NULL.
- *     - EINVAL   : The ADS101X was initialized in continuous mode, or i2c is
- *                  not on the bus the ADS101X was initialized on.
+ *     - EINVAL   : index is not an ADS101X_INPUT value, the ADS101X was
+ *                  initialized in continuous mode, or i2c is not on the bus
+ *                  the ADS101X was initialized on.
  *     - ERANGE   : Reading value is less than -8.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
@@ -446,8 +452,9 @@ int ads101x_unsigned_single_read(const i2c_interface_t* i2c,
  * Errors:
  *   errno set to:
  *     - EFAULT   : Passed ads101x_t, return_value or i2c is NULL.
- *     - EINVAL   : The ADS101X was initialized in single-shot mode, or i2c is
- *                  not on the bus the ADS101X was initialized on.
+ *     - EINVAL   : index is not an ADS101X_INPUT value, the ADS101X was
+ *                  initialized in single-shot mode, or i2c is not on the bus
+ *                  the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
@@ -487,8 +494,9 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
  * Errors:
  *   errno set to:
  *     - EFAULT   : Passed ads101x_t, return_value or i2c is NULL.
- *     - EINVAL   : The ADS101X was initialized in single-shot mode, or i2c is
- *                  not on the bus the ADS101X was initialized on.
+ *     - EINVAL   : index is not an ADS101X_INPUT value, the ADS101X was
+ *                  initialized in single-shot mode, or i2c is not on the bus
+ *                  the ADS101X was initialized on.
  *     - ERANGE   : Reading value is less than -8.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
@@ -553,7 +561,8 @@ int ads101x_get_fs(const ads101x_t* ads,
  * Errors:
  *   errno set to:
  *     - EFAULT   : Passed ads101x_t or i2c is NULL.
- *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
+ *     - EINVAL   : dr is not an ADS101X_DATA_RATE value, or i2c is not on the
+ *                  bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).

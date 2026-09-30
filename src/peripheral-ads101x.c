@@ -208,7 +208,8 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 			bool restart,
 			const ads101x_config_t* cfg)
 {
-	ADS101X_DATA_RATE in_flight_dr;
+	ADS101X_DATA_RATE dr_to_write, in_flight_dr;
+	ADS101X_GAIN_AMPLIFIER fsr_to_write;
 	bool may_be_converting;
 	uint16_t cfg_reg;
 	uint8_t bus;
@@ -216,6 +217,26 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 	if (ads == NULL || ((uintptr_t)ads % ADS101X_ALIGN) != 0 ||
 	    cfg == NULL) {
 		errno = EFAULT;
+		return -1;
+	}
+
+	// Ensure we write a valid enum (0b110 and 0b111 are equivalent to +-0.256V)
+	if (cfg->fsr == 0b110 || cfg->fsr == 0b111) {
+		fsr_to_write = ADS101X_FSR_0_256V;
+	} else {
+		fsr_to_write = cfg->fsr;
+	}
+
+	// Ensure we write a valid enum (0b111 is equivalent to 3300 SPS)
+	if (cfg->dr == 0b111) {
+		dr_to_write = ADS101X_3300SPS;
+	} else {
+		dr_to_write = cfg->dr;
+	}
+
+	if (fsr_to_write > ADS101X_FSR_0_256V ||
+	    dr_to_write > ADS101X_3300SPS) {
+		errno = EINVAL;
 		return -1;
 	}
 
@@ -259,10 +280,10 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 
 	// Setup PGA and DR
 	cfg_reg &= ~CONFIG_REG_PGA;
-	cfg_reg |= cfg->fsr << CONFIG_REG_PGA_SHIFT;
+	cfg_reg |= fsr_to_write << CONFIG_REG_PGA_SHIFT;
 
 	cfg_reg &= ~CONFIG_REG_DR;
-	cfg_reg |= cfg->dr << CONFIG_REG_DR_SHIFT;
+	cfg_reg |= dr_to_write << CONFIG_REG_DR_SHIFT;
 
 	/*
 	 * In single-shot mode the cache keeps OS set, so every
@@ -293,7 +314,7 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 		 * ads101x_continuous_read with the same initial index works (i.e, when
 		 * calling read right after the init).
 		 */
-		ads101x_delay_until_conversion(cfg->dr);
+		ads101x_delay_until_conversion(dr_to_write);
 	}
 
 	ADS(ads)->addr = addr;
@@ -424,6 +445,11 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
+	if (index > ADS101X_P3_GND) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	if (i2c_check_bus(i2c, ADS(ads)->bus) != 0) {
 		return -1;
 	}
@@ -506,6 +532,11 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 
 	if (ads == NULL || return_value == NULL) {
 		errno = EFAULT;
+		return -1;
+	}
+
+	if (index > ADS101X_P3_GND) {
+		errno = EINVAL;
 		return -1;
 	}
 
@@ -628,6 +659,16 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 
 	if (ads == NULL) {
 		errno = EFAULT;
+		return -1;
+	}
+
+	// Ensure we write a valid enum (0b111 is equivalent to 3300 SPS)
+	if (dr == 0b111) {
+		dr = ADS101X_3300SPS;
+	}
+
+	if (dr > ADS101X_3300SPS) {
+		errno = EINVAL;
 		return -1;
 	}
 
