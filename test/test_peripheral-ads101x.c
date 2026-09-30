@@ -1865,9 +1865,11 @@ void test_ads101x_single_read_waits_out_a_dead_owners_conversion(void)
 	struct timespec start, end;
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	int16_t value;
+	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	// The dead owner's conversion, then this read's own.
@@ -1997,7 +1999,9 @@ void test_ads101x_get_fs_leaves_the_resync_to_a_call_with_the_bus(void)
 	// get_fs has no I2C interface: no transfer is expected.
 	expect_mutex_released();
 	ADS101X_DATA_RATE dr;
+	errno = 0;
 	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
 
 	expect_mutex_released();

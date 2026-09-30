@@ -219,12 +219,14 @@ void test_mcp230xx_init_with_restart_resets_an_mcp23008_then_writes_iocon(void)
 	i2c_write8_8b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, IOCON_008, INIT_RESTART_IOCON, 0);
 
+	errno = 0;
 	mcp230xx_t* mcp = init_mcp(true,
 				   MCP230XX_008,
 				   false,
 				   MCP230XX_ACTIVE_DRIVER_INT,
 				   MCP230XX_INT_ACTIVE_LOW,
 				   MCP230XX_NO_MIRRORED_INT);
+	TEST_ASSERT_EQUAL_INT(0, errno);
 
 	TEST_ASSERT_NOT_NULL(mcp);
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
@@ -596,7 +598,9 @@ void test_mcp230xx_deinit_with_restart_resets_the_registers(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
 
+	errno = 0;
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_deinit(TEST_I2C, mcp, true));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 
 	TEST_ASSERT_EQUAL_UINT32(2, fake_i2c_write_op.calls);
 	assert_last_write_was_a_reset_block(MCP230XX_017);
@@ -920,8 +924,10 @@ void test_mcp230xx_set_input_writes_gppu_before_iodir(void)
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x48, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x18, 0);
 
+	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_set_input(TEST_I2C, mcp, 3, MCP230XX_PULLUP, 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 
 	destroy_mcp(mcp);
 }
@@ -1151,8 +1157,10 @@ void test_mcp230xx_read_gpio_returns_high_when_the_pin_bit_is_set(void)
 	expect_i2c_read8_8b(GPIO_008, 0x10, 0); // only pin 4 high
 
 	uint8_t value;
+	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_read_gpio(TEST_I2C, mcp, 4, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 	TEST_ASSERT_EQUAL_UINT8(MCP230XX_HIGH, value);
 
 	destroy_mcp(mcp);
@@ -1229,7 +1237,9 @@ void test_mcp230xx_set_output_clears_the_iodir_bit(void)
 	expect_i2c_read8_8b(IODIR_008, 0xFF, 0); // every pin an input
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0xDF, 0);
 
+	errno = 0;
 	TEST_ASSERT_EQUAL_INT(0, mcp230xx_set_output(TEST_I2C, mcp, 5, 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 
 	destroy_mcp(mcp);
 }
@@ -1316,8 +1326,10 @@ void test_mcp230xx_write_gpio_sets_the_olat_bit(void)
 	expect_i2c_read8_8b(OLAT_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, OLAT_008, 0x04, 0);
 
+	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_write_gpio(TEST_I2C, mcp, 2, MCP230XX_HIGH, 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 
 	destroy_mcp(mcp);
 }

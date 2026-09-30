@@ -237,12 +237,16 @@ static int ltc2309_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
+	int saved_errno = errno;
+
 	if (LTC(ltc)->is_protected &&
 	    plc_mutex_acquire(&LTC(ltc)->mutex, timeout_ms) != 0) {
 		if (errno != EOWNERDEAD) {
 			return -1;
 		}
+
 		LTC2309_SET_RESYNC(ltc);
+		errno = saved_errno;
 	}
 
 	/*

@@ -1103,10 +1103,12 @@ void test_ltc2309_read_sends_the_command_after_an_owner_died(void)
 	// P0_N1 bipolar matches last_cmd, but it is sent anyway.
 	uint32_t writes_before = fake_i2c_write_op.calls;
 	int16_t value;
+	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ltc2309_read_differential_signed(
 			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
 	assert_wrote_cmd(writes_before, INITIAL_STATE);
 	TEST_ASSERT_EQUAL_INT16(255, value);
 

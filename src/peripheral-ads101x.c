@@ -71,13 +71,16 @@ _Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(ads101x_t) ==
 
 static int ads101x_lock(ads101x_internal_t* ads, uint32_t timeout_ms)
 {
+	int saved_errno = errno;
+
 	if (ads->is_protected &&
 	    plc_mutex_acquire(&ads->mutex, timeout_ms) != 0) {
 		if (errno != EOWNERDEAD) {
 			return -1;
-		} else {
-			ads->needs_resync = true;
 		}
+
+		ads->needs_resync = true;
+		errno = saved_errno;
 	}
 
 	return 0;
