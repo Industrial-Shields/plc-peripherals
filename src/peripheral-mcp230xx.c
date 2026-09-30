@@ -18,13 +18,14 @@
  */
 
 /*
- * The functions of this driver assume that both SEQOP and BANK bits are
- * always in it's default state (0).
+ * mcp230xx_static_init leaves IOCON.BANK and IOCON.SEQOP cleared, and every
+ * other function relies on them staying cleared.
  */
 
 #include <plc-peripherals-i2c.h>
 #include <peripheral-mcp230xx.h>
 
+#include <assert.h>
 #include <malloc.h>
 #include <errno.h>
 #include <stdint.h>
@@ -36,10 +37,16 @@
 #define DEFVAL_REG                                     0x03
 #define INTCON_REG                                     0x04
 #define IOCON_REG                                      0x05
+#define   IOCON_REG_BANK                               (1 << 7)
+#define     IOCON_REG_BANK_SHIFT                       7
 #define   IOCON_REG_MIRROR                             (1 << 6)
 #define     IOCON_REG_MIRROR_SHIFT                     6
+#define   IOCON_REG_SEQOP                              (1 << 5)
+#define     IOCON_REG_SEQOP_SHIFT                      5
 #define   IOCON_REG_DISSLW                             (1 << 4)
 #define     IOCON_REG_DISSLW_SHIFT                     4
+#define   IOCON_REG_HAEN                               (1 << 3)
+#define     IOCON_REG_HAEN_SHIFT                       3
 #define   IOCON_REG_ODR                                (1 << 2)
 #define     IOCON_REG_ODR_SHIFT                        2
 #define   IOCON_REG_INTPOL                             (1 << 1)
@@ -100,38 +107,6 @@ static void mcp230xx_unlock(mcp230xx_internal_t* mcp)
 	}
 }
 
-static int mcp230xx_reset(const i2c_interface_t* i2c,
-			  plc_i2c_addr_t addr,
-			  MCP230XX_TYPE type)
-{
-	// First 0x00 is the register address
-	static const uint8_t reset_mcp23008[] = {
-		0x00, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	};
-	// First 0x00 is the register address
-	static const uint8_t reset_mcp23017[] = {
-		0x00, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0,    0,    0,	  0, 0, 0, 0, 0, 0, 0, 0,
-	};
-	ssize_t bytes_written;
-
-	if (type == MCP230XX_017) {
-		bytes_written =
-			i2c_write(i2c, addr, UINT8T_ARR(reset_mcp23017));
-		if (bytes_written != sizeof(reset_mcp23017)) {
-			return -1;
-		}
-	} else {
-		bytes_written =
-			i2c_write(i2c, addr, UINT8T_ARR(reset_mcp23008));
-		if (bytes_written != sizeof(reset_mcp23008)) {
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
 static bool mcp230xx_config_is_valid(const mcp230xx_config_t* cfg)
 {
 	// First of all, check that the enum values are valid
@@ -177,6 +152,107 @@ static bool mcp230xx_config_is_valid(const mcp230xx_config_t* cfg)
 	return true;
 }
 
+static int mcp23017_ensure_bank_state(const i2c_interface_t* i2c,
+				      plc_i2c_addr_t addr)
+{
+	/*
+	 * Ensure IOCON.BANK = 0. If it is 1 right now, IOCON can't be reached
+	 * through REG_A, since REG_A/B assume IOCON.BANK = 0 addressing.
+	 *
+	 * 0x0B is IOCON with IOCON.BANK = 0, and maps to no register with
+	 * IOCON.BANK = 1 (DS20001952C, Table 3-1). An unmapped address reads
+	 * as 0x00 (not in the datasheet, checked on hardware), and a write to
+	 * it is ignored (not in the datasheet, checked on hardware).
+	 * So:
+	 *
+	 *   1. Read 0x0B. If it isn't 0x00, it is IOCON, so IOCON.BANK is
+	 *      already 0.
+	 *   2. Otherwise, write HAEN to 0x0B as a canary and read it back. If
+	 *      it reads back, IOCON.BANK is 0. IOCON was 0x00, so only HAEN
+	 *      changed.
+	 *   3. Otherwise, IOCON.BANK is 1, and 0x05 is IOCON. Clear IOCON.BANK
+	 *      through it, keeping its other bits.
+	 *
+	 * HAEN is the canary because it does nothing on the MCP23017 (address
+	 * pins are always enabled, Register 3-6, Note 1), so it can stay set.
+	 *
+	 * Every write is a single-byte write, as the datasheet advises when
+	 * changing IOCON.BANK (section 3.5.6). That way it can work whatever
+	 * IOCON.SEQOP is.
+	 */
+	const uint8_t maybe_iocon_reg = 0x0B, bank_1_iocon_reg = 0x05;
+	uint8_t maybe_cfg_reg, bank_1_cfg_reg;
+
+	if (i2c_read8_8b(i2c, addr, maybe_iocon_reg, &maybe_cfg_reg) != 0) {
+		return -1;
+	}
+
+	if (maybe_cfg_reg != 0) {
+		// Only IOCON reads non-zero here. IOCON.BANK must be 0.
+		assert((maybe_cfg_reg & IOCON_REG_BANK) == 0);
+		return 0;
+	}
+
+	maybe_cfg_reg |= IOCON_REG_HAEN;
+	if (i2c_write8_8b(i2c, addr, maybe_iocon_reg, maybe_cfg_reg) != 0) {
+		return -1;
+	}
+
+	if (i2c_read8_8b(i2c, addr, maybe_iocon_reg, &maybe_cfg_reg) != 0) {
+		return -1;
+	}
+
+	if (maybe_cfg_reg != 0) {
+		// The canary read back, so IOCON.BANK must be 0.
+		assert((maybe_cfg_reg & IOCON_REG_BANK) == 0);
+		return 0;
+	}
+
+	// IOCON.BANK is 1, so we need to clear the bit
+	if (i2c_read8_8b(i2c, addr, bank_1_iocon_reg, &bank_1_cfg_reg) != 0) {
+		return -1;
+	}
+	bank_1_cfg_reg &= ~(IOCON_REG_BANK);
+	if (i2c_write8_8b(i2c, addr, bank_1_iocon_reg, bank_1_cfg_reg) != 0) {
+		return -1;
+	}
+
+	// IOCON.BANK is 0 now.
+	return 0;
+}
+
+static int mcp230xx_reset(const i2c_interface_t* i2c,
+			  plc_i2c_addr_t addr,
+			  MCP230XX_TYPE type)
+{
+	// First 0x00 is the register address
+	static const uint8_t reset_mcp23008[] = {
+		0x00, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	};
+	// First 0x00 is the register address
+	static const uint8_t reset_mcp23017[] = {
+		0x00, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0,    0,    0,	  0, 0, 0, 0, 0, 0, 0, 0,
+	};
+	ssize_t bytes_written;
+
+	if (type == MCP230XX_017) {
+		bytes_written =
+			i2c_write(i2c, addr, UINT8T_ARR(reset_mcp23017));
+		if (bytes_written != sizeof(reset_mcp23017)) {
+			return -1;
+		}
+	} else {
+		bytes_written =
+			i2c_write(i2c, addr, UINT8T_ARR(reset_mcp23008));
+		if (bytes_written != sizeof(reset_mcp23008)) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
 int mcp230xx_static_init(const i2c_interface_t* i2c,
 			 mcp230xx_t* mcp,
 			 plc_i2c_addr_t addr,
@@ -197,21 +273,35 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	const uint8_t iocon_reg = REG_A(IOCON_REG, cfg->type);
-
 	if (i2c_get_bus(i2c, &bus) != 0) {
 		return -1;
 	}
 
+	if (cfg->type == MCP230XX_017 &&
+	    mcp23017_ensure_bank_state(i2c, addr) != 0) {
+		return -1;
+	}
+
+	const uint8_t iocon_reg = REG_A(IOCON_REG, cfg->type);
+
+	/*
+	 * With IOCON.SEQOP = 1 the address pointer doesn't increment, so the
+	 * reset would write every byte to IODIR. Clear it to enable SEQOP.
+	 */
+	if (i2c_read8_8b(i2c, addr, iocon_reg, &cfg_reg) != 0) {
+		return -1;
+	}
+	cfg_reg &= ~IOCON_REG_SEQOP;
+
 	if (restart) {
+		// We need to clear SEQOP before calling mcp230xx_reset
+		if (i2c_write8_8b(i2c, addr, iocon_reg, cfg_reg) != 0) {
+			return -1;
+		}
 		if (mcp230xx_reset(i2c, addr, cfg->type) != 0) {
 			return -1;
 		}
 		cfg_reg = IOCON_REG_RESET_VALUE;
-	} else {
-		if (i2c_read8_8b(i2c, addr, iocon_reg, &cfg_reg) != 0) {
-			return -1;
-		}
 	}
 
 	// Enable / Disable I2C slew rate
@@ -231,6 +321,15 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
 	// Set mirror byte
 	cfg_reg &= ~IOCON_REG_MIRROR;
 	cfg_reg |= cfg->mirror << IOCON_REG_MIRROR_SHIFT;
+
+	if (cfg->type == MCP230XX_017) {
+		/*
+		 * Keep HAEN set, so the next init finds IOCON.BANK = 0 with one
+		 * read (see mcp23017_ensure_bank_state). HAEN does nothing on
+		 * the MCP23017.
+		 */
+		cfg_reg |= IOCON_REG_HAEN;
+	}
 
 	if (i2c_write8_8b(i2c, addr, iocon_reg, cfg_reg) != 0) {
 		return -1;

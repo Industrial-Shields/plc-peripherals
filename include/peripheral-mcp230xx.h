@@ -134,6 +134,9 @@ typedef struct {
  * Use mcp230xx_static_init instead to initialize a handle in storage you
  * provide, without malloc.
  *
+ * It leaves IOCON.BANK and IOCON.SEQOP cleared, whatever they were. On the
+ * MCP23017, it also leaves IOCON.HAEN set, which does nothing there.
+ *
  * WARNING: Tear down with mcp230xx_deinit, never with mcp230xx_static_deinit.
  *
  * Parameters:
@@ -215,6 +218,9 @@ int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
  * one handle per device.
  *
  * The storage must not already hold a live handle.
+ *
+ * It leaves IOCON.BANK and IOCON.SEQOP cleared, whatever they were. On the
+ * MCP23017, it also leaves IOCON.HAEN set, which does nothing there.
  *
  * WARNING: Tear down with mcp230xx_static_deinit, never with mcp230xx_deinit.
  *

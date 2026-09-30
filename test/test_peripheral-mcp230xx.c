@@ -49,6 +49,9 @@
 #define IODIR_A_017                                                        0x00
 #define IODIR_B_017                                                        0x01
 #define IOCON_A_017                                                        0x0A
+#define IOCON_B_017                                                        0x0B
+// IOCON's address with IOCON.BANK = 1.
+#define IOCON_BANK_1_017                                                   0x05
 #define GPPU_A_017                                                         0x0C
 #define GPPU_B_017                                                         0x0D
 #define GPIO_A_017                                                         0x12
@@ -56,58 +59,34 @@
 #define OLAT_A_017                                                         0x14
 #define OLAT_B_017                                                         0x15
 
+#define IOCON_REG_BANK                                                (1 << 7)
 #define IOCON_REG_MIRROR                                              (1 << 6)
+#define IOCON_REG_SEQOP                                               (1 << 5)
 #define IOCON_REG_DISSLW                                              (1 << 4)
+#define IOCON_REG_HAEN                                                (1 << 3)
 #define IOCON_REG_ODR                                                 (1 << 2)
 #define IOCON_REG_INTPOL                                              (1 << 1)
-// Bits the driver must never touch: BANK, SEQOP and HAEN.
-#define IOCON_REG_UNTOUCHED                                               0xA9
+// IOCON bits no cfg field sets: bit 7, SEQOP, HAEN and bit 0.
+#define IOCON_REG_NOT_IN_CFG                                              0xA9
 // clang-format on
 
 #define RESET_LEN_008 12
 #define RESET_LEN_017 23
 
 /*
- * IOCON value mcp230xx_init(restart=true) writes for the fixtures below: slew
- * rate control left enabled (DISSLW=0), active-driver INT (ODR=0), active-low
- * INT (INTPOL=0), no mirroring (MIRROR=0).
+ * CMock copies a ReturnThruPtr value when the mocked call happens, not when it
+ * is queued, so each register needs its own slot for a test to queue reads of
+ * different registers.
  */
-#define INIT_RESTART_IOCON 0x00
-
-/*
- * mcp230xx_set_input reads IODIR and GPPU back to back
- * before acting on either, so those two values must stay alive at the same
- * time. Every other read in this driver is consumed before the next one is
- * queued, so they can all share the third slot.
- */
-// clang-format off
-#define READ_SLOT_IODIR                                                       0
-#define READ_SLOT_GPPU                                                        1
-#define READ_SLOT_OTHER                                                       2
-#define READ_VALUE_SLOTS                                                      3
-
-#define IS_IODIR_REG(reg) \
-	((reg) == IODIR_008 || (reg) == IODIR_A_017 || (reg) == IODIR_B_017)
-#define IS_GPPU_REG(reg) \
-	((reg) == GPPU_008 || (reg) == GPPU_A_017 || (reg) == GPPU_B_017)
-
-#define READ_SLOT_OF(reg)                            \
-	(IS_IODIR_REG(reg) ? READ_SLOT_IODIR :       \
-	 IS_GPPU_REG(reg)  ? READ_SLOT_GPPU  :       \
-			     READ_SLOT_OTHER)
-// clang-format on
-
-static uint8_t read_values[READ_VALUE_SLOTS];
+static uint8_t read_values[OLAT_B_017 + 1];
 
 static void expect_i2c_read8_8b(uint8_t reg, uint8_t value, int retval)
 {
 	i2c_read8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, reg, NULL, retval);
 	i2c_read8_8b_IgnoreArg_to_read();
 	if (retval == 0) {
-		uint8_t* slot = &read_values[READ_SLOT_OF(reg)];
-
-		*slot = value;
-		i2c_read8_8b_ReturnThruPtr_to_read(slot);
+		read_values[reg] = value;
+		i2c_read8_8b_ReturnThruPtr_to_read(&read_values[reg]);
 	}
 }
 
@@ -116,9 +95,44 @@ static uint8_t iocon_addr_of(MCP230XX_TYPE type)
 	return type == MCP230XX_017 ? IOCON_A_017 : IOCON_008;
 }
 
+/*
+ * IOCON value mcp230xx_init(restart=true) writes for the fixtures below: slew
+ * rate control left enabled (DISSLW=0), active-driver INT (ODR=0), active-low
+ * INT (INTPOL=0), no mirroring (MIRROR=0). The MCP23017 also keeps HAEN set.
+ */
+static uint8_t init_restart_iocon_of(MCP230XX_TYPE type)
+{
+	return type == MCP230XX_017 ? IOCON_REG_HAEN : 0x00;
+}
+
+/*
+ * Expects the IOCON reads every init starts with. On the MCP23017, IOCON is
+ * read through 0x0B first, so iocon must be non-zero there: IOCON.BANK is then
+ * already 0, and no canary is written.
+ */
+static void expect_init_iocon_reads(MCP230XX_TYPE type, uint8_t iocon)
+{
+	if (type == MCP230XX_017) {
+		expect_i2c_read8_8b(IOCON_B_017, iocon, 0);
+	}
+	expect_i2c_read8_8b(iocon_addr_of(type), iocon, 0);
+}
+
 static size_t reset_len_of(MCP230XX_TYPE type)
 {
 	return type == MCP230XX_017 ? RESET_LEN_017 : RESET_LEN_008;
+}
+
+// Expects a restart=true init up to the reset: the IOCON reads, SEQOP cleared.
+static void expect_init_restart(MCP230XX_TYPE type, uint8_t iocon)
+{
+	expect_init_iocon_reads(type, iocon);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C,
+				      TEST_ADDR,
+				      iocon_addr_of(type),
+				      iocon & ~IOCON_REG_SEQOP,
+				      0);
+	fake_i2c_write_op.retval = (ssize_t)reset_len_of(type);
 }
 
 // Asserts the bytes the fake last saw are a full reset block.
@@ -160,11 +174,11 @@ static mcp230xx_t* init_mcp(bool restart,
 // Creates and initializes an mcp230xx_t via restart=true, IOCON bits all clear.
 static mcp230xx_t* create_mcp(MCP230XX_TYPE type)
 {
-	fake_i2c_write_op.retval = (ssize_t)reset_len_of(type);
+	expect_init_restart(type, init_restart_iocon_of(type));
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C,
 				      TEST_ADDR,
 				      iocon_addr_of(type),
-				      INIT_RESTART_IOCON,
+				      init_restart_iocon_of(type),
 				      0);
 
 	mcp230xx_t* mcp = init_mcp(true,
@@ -263,9 +277,8 @@ void tearDown(void)
 
 void test_mcp230xx_init_with_restart_resets_an_mcp23008_then_writes_iocon(void)
 {
-	fake_i2c_write_op.retval = RESET_LEN_008;
-	i2c_write8_8b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, IOCON_008, INIT_RESTART_IOCON, 0);
+	expect_init_restart(MCP230XX_008, 0x00);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IOCON_008, 0x00, 0);
 
 	errno = 0;
 	mcp230xx_t* mcp = init_mcp(true,
@@ -284,9 +297,9 @@ void test_mcp230xx_init_with_restart_resets_an_mcp23008_then_writes_iocon(void)
 
 void test_mcp230xx_init_with_restart_resets_an_mcp23017_then_writes_iocon(void)
 {
-	fake_i2c_write_op.retval = RESET_LEN_017;
+	expect_init_restart(MCP230XX_017, IOCON_REG_HAEN);
 	i2c_write8_8b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, IOCON_A_017, INIT_RESTART_IOCON, 0);
+		TEST_I2C, TEST_ADDR, IOCON_A_017, IOCON_REG_HAEN, 0);
 
 	mcp230xx_t* mcp = init_mcp(true,
 				   MCP230XX_017,
@@ -303,10 +316,11 @@ void test_mcp230xx_init_with_restart_resets_an_mcp23017_then_writes_iocon(void)
 
 void test_mcp230xx_init_without_restart_reads_then_patches_iocon(void)
 {
-	expect_i2c_read8_8b(IOCON_008, 0xFF, 0);
-	// DISSLW cleared, ODR set (open drain), INTPOL cleared (no polarity
-	// with open drain), MIRROR cleared: 0xFF & ~0x10 & ~0x02 & ~0x40.
-	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IOCON_008, 0xAD, 0);
+	expect_init_iocon_reads(MCP230XX_008, 0xFF);
+	// SEQOP cleared, DISSLW cleared, ODR set (open drain), INTPOL cleared
+	// (no polarity with open drain), MIRROR cleared:
+	// 0xFF & ~0x20 & ~0x10 & ~0x02 & ~0x40.
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IOCON_008, 0x8D, 0);
 
 	mcp230xx_t* mcp = init_mcp(false,
 				   MCP230XX_008,
@@ -322,11 +336,12 @@ void test_mcp230xx_init_without_restart_reads_then_patches_iocon(void)
 
 void test_mcp230xx_init_packs_every_configurable_iocon_bit(void)
 {
-	fake_i2c_write_op.retval = RESET_LEN_017;
-	// DISSLW(0x10) | MIRROR(0x40) | INTPOL(0x02); ODR stays clear because
-	// an active-driver INT is what makes a polarity meaningful at all.
+	expect_init_restart(MCP230XX_017, IOCON_REG_HAEN);
+	// DISSLW(0x10) | MIRROR(0x40) | INTPOL(0x02) | HAEN(0x08); ODR stays
+	// clear because an active-driver INT is what makes a polarity
+	// meaningful at all.
 	i2c_write8_8b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, IOCON_A_017, 0x52, 0);
+		TEST_I2C, TEST_ADDR, IOCON_A_017, 0x5A, 0);
 
 	mcp230xx_t* mcp = init_mcp(true,
 				   MCP230XX_017,
@@ -435,6 +450,7 @@ void test_mcp230xx_init_fails_with_einval_for_an_invalid_mirror(void)
 void test_mcp230xx_init_fails_when_the_reset_is_short_on_the_wire(void)
 {
 	// The device acknowledged one byte fewer than the block that was sent.
+	expect_init_restart(MCP230XX_008, 0x00);
 	fake_i2c_write_op.retval = RESET_LEN_008 - 1;
 
 	TEST_ASSERT_NULL(init_mcp(true,
@@ -447,6 +463,7 @@ void test_mcp230xx_init_fails_when_the_reset_is_short_on_the_wire(void)
 
 void test_mcp230xx_init_fails_when_the_reset_write_fails(void)
 {
+	expect_init_restart(MCP230XX_017, IOCON_REG_HAEN);
 	fake_i2c_write_op.retval = -1;
 
 	TEST_ASSERT_NULL(init_mcp(true,
@@ -471,9 +488,8 @@ void test_mcp230xx_init_fails_when_reading_the_iocon_reg_fails(void)
 
 void test_mcp230xx_init_fails_when_writing_the_iocon_reg_fails(void)
 {
-	fake_i2c_write_op.retval = RESET_LEN_008;
-	i2c_write8_8b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, IOCON_008, INIT_RESTART_IOCON, -1);
+	expect_init_restart(MCP230XX_008, 0x00);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IOCON_008, 0x00, -1);
 
 	TEST_ASSERT_NULL(init_mcp(true,
 				  MCP230XX_008,
@@ -481,6 +497,203 @@ void test_mcp230xx_init_fails_when_writing_the_iocon_reg_fails(void)
 				  MCP230XX_ACTIVE_DRIVER_INT,
 				  MCP230XX_INT_ACTIVE_LOW,
 				  MCP230XX_NO_MIRRORED_INT));
+}
+
+/* ------------------- mcp230xx_init: IOCON.BANK and SEQOP ------------------ */
+
+// Calls a restart=false init of an MCP23017 with the default cfg.
+static mcp230xx_t* init_mcp23017_without_restart(void)
+{
+	return init_mcp(false,
+			MCP230XX_017,
+			false,
+			MCP230XX_ACTIVE_DRIVER_INT,
+			MCP230XX_INT_ACTIVE_LOW,
+			MCP230XX_NO_MIRRORED_INT);
+}
+
+void test_mcp230xx_init_skips_the_canary_when_0x0b_reads_non_zero(void)
+{
+	// No write to 0x0B and no access to 0x05 are expected.
+	expect_init_iocon_reads(MCP230XX_017, IOCON_REG_MIRROR);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_A_017, IOCON_REG_HAEN, 0);
+
+	mcp230xx_t* mcp = init_mcp23017_without_restart();
+	TEST_ASSERT_NOT_NULL(mcp);
+	destroy_mcp(mcp);
+}
+
+struct read_step {
+	uint8_t reg;
+	uint8_t value;
+};
+
+/*
+ * The canary test reads 0x0B twice with different values, which one slot per
+ * register can't give, so its reads are played back from this list.
+ */
+static const struct read_step* read_steps;
+static size_t read_steps_len;
+
+static int play_read_steps(const i2c_interface_t* i2c,
+			   plc_i2c_addr_t addr,
+			   uint8_t reg,
+			   uint8_t* to_read,
+			   int cmock_num_calls)
+{
+	TEST_ASSERT_EQUAL_PTR(TEST_I2C, i2c);
+	TEST_ASSERT_EQUAL_UINT8(TEST_ADDR, addr);
+	TEST_ASSERT_LESS_THAN_size_t(read_steps_len, (size_t)cmock_num_calls);
+	TEST_ASSERT_EQUAL_HEX8(read_steps[cmock_num_calls].reg, reg);
+	*to_read = read_steps[cmock_num_calls].value;
+	return 0;
+}
+
+void test_mcp230xx_init_keeps_bank_0_when_the_canary_reads_back(void)
+{
+	static const struct read_step steps[] = {
+		{ IOCON_B_017, 0x00 },
+		{ IOCON_B_017, IOCON_REG_HAEN },
+		{ IOCON_A_017, IOCON_REG_HAEN },
+	};
+	read_steps = steps;
+	read_steps_len = sizeof(steps) / sizeof(steps[0]);
+	i2c_read8_8b_Stub(play_read_steps);
+
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_B_017, IOCON_REG_HAEN, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_A_017, IOCON_REG_HAEN, 0);
+
+	mcp230xx_t* mcp = init_mcp23017_without_restart();
+	TEST_ASSERT_NOT_NULL(mcp);
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_init_clears_bank_through_0x05_when_the_canary_is_lost(void)
+{
+	// With IOCON.BANK = 1, 0x0B maps to no register: it reads 0x00.
+	expect_i2c_read8_8b(IOCON_B_017, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_B_017, IOCON_REG_HAEN, 0);
+	expect_i2c_read8_8b(IOCON_B_017, 0x00, 0);
+	// Only IOCON.BANK is cleared through 0x05, SEQOP comes after.
+	expect_i2c_read8_8b(
+		IOCON_BANK_1_017, IOCON_REG_BANK | IOCON_REG_SEQOP, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_BANK_1_017, IOCON_REG_SEQOP, 0);
+	expect_i2c_read8_8b(IOCON_A_017, IOCON_REG_SEQOP, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_A_017, IOCON_REG_HAEN, 0);
+
+	mcp230xx_t* mcp = init_mcp23017_without_restart();
+	TEST_ASSERT_NOT_NULL(mcp);
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_init_fails_when_reading_0x0b_fails(void)
+{
+	expect_i2c_read8_8b(IOCON_B_017, 0, -1);
+
+	TEST_ASSERT_NULL(init_mcp23017_without_restart());
+}
+
+void test_mcp230xx_init_fails_when_writing_the_canary_fails(void)
+{
+	expect_i2c_read8_8b(IOCON_B_017, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_B_017, IOCON_REG_HAEN, -1);
+
+	TEST_ASSERT_NULL(init_mcp23017_without_restart());
+}
+
+void test_mcp230xx_init_fails_when_reading_the_canary_back_fails(void)
+{
+	expect_i2c_read8_8b(IOCON_B_017, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_B_017, IOCON_REG_HAEN, 0);
+	expect_i2c_read8_8b(IOCON_B_017, 0, -1);
+
+	TEST_ASSERT_NULL(init_mcp23017_without_restart());
+}
+
+void test_mcp230xx_init_fails_when_reading_iocon_through_0x05_fails(void)
+{
+	expect_i2c_read8_8b(IOCON_B_017, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_B_017, IOCON_REG_HAEN, 0);
+	expect_i2c_read8_8b(IOCON_B_017, 0x00, 0);
+	expect_i2c_read8_8b(IOCON_BANK_1_017, 0, -1);
+
+	TEST_ASSERT_NULL(init_mcp23017_without_restart());
+}
+
+void test_mcp230xx_init_fails_when_clearing_bank_through_0x05_fails(void)
+{
+	expect_i2c_read8_8b(IOCON_B_017, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_B_017, IOCON_REG_HAEN, 0);
+	expect_i2c_read8_8b(IOCON_B_017, 0x00, 0);
+	expect_i2c_read8_8b(IOCON_BANK_1_017, IOCON_REG_BANK, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_BANK_1_017, 0x00, -1);
+
+	TEST_ASSERT_NULL(init_mcp23017_without_restart());
+}
+
+// How many reset writes each i2c_write8_8b call came after.
+static uint32_t resets_before_write[2];
+
+static int record_resets_before_write(const i2c_interface_t* i2c,
+				      plc_i2c_addr_t addr,
+				      uint8_t reg,
+				      uint8_t to_write,
+				      int cmock_num_calls)
+{
+	(void)i2c;
+	(void)addr;
+	(void)reg;
+	(void)to_write;
+
+	TEST_ASSERT_LESS_THAN_INT(2, cmock_num_calls);
+	resets_before_write[cmock_num_calls] = fake_i2c_write_op.calls;
+	return 0;
+}
+
+void test_mcp230xx_init_clears_seqop_before_the_reset(void)
+{
+	expect_init_restart(MCP230XX_017, IOCON_REG_SEQOP | IOCON_REG_HAEN);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IOCON_A_017, IOCON_REG_HAEN, 0);
+	i2c_write8_8b_AddCallback(record_resets_before_write);
+
+	mcp230xx_t* mcp = init_mcp(true,
+				   MCP230XX_017,
+				   false,
+				   MCP230XX_ACTIVE_DRIVER_INT,
+				   MCP230XX_INT_ACTIVE_LOW,
+				   MCP230XX_NO_MIRRORED_INT);
+	TEST_ASSERT_NOT_NULL(mcp);
+	assert_last_write_was_a_reset_block(MCP230XX_017);
+	// The SEQOP write comes before the reset, the final IOCON write after.
+	TEST_ASSERT_EQUAL_UINT32(0, resets_before_write[0]);
+	TEST_ASSERT_EQUAL_UINT32(1, resets_before_write[1]);
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_init_fails_when_clearing_seqop_before_the_reset_fails(void)
+{
+	expect_init_iocon_reads(MCP230XX_008, IOCON_REG_SEQOP);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IOCON_008, 0x00, -1);
+
+	TEST_ASSERT_NULL(init_mcp(true,
+				  MCP230XX_008,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 }
 
 static uint8_t expected_iocon(uint8_t base,
@@ -580,20 +793,25 @@ void test_mcp230xx_init_fuzzes_every_configuration_combination(void)
 								continue;
 							}
 
+							// IOCON.BANK is 0 before a restart=false init.
+							const uint8_t before =
+								restart ?
+									init_restart_iocon_of(
+										type) :
+									0x7F;
 							const uint8_t base =
-								restart ? 0x00 :
-									  0xFF;
+								restart ?
+									0x00 :
+									before &
+										~IOCON_REG_SEQOP;
 							if (restart) {
-								fake_i2c_write_op
-									.retval =
-									(ssize_t)reset_len_of(
-										type);
+								expect_init_restart(
+									type,
+									before);
 							} else {
-								expect_i2c_read8_8b(
-									iocon_addr_of(
-										type),
-									base,
-									0);
+								expect_init_iocon_reads(
+									type,
+									before);
 							}
 							i2c_write8_8b_ExpectAndReturn(
 								TEST_I2C,
@@ -605,7 +823,9 @@ void test_mcp230xx_init_fuzzes_every_configuration_combination(void)
 									slew,
 									int_type,
 									int_pol,
-									mirror),
+									mirror) |
+									init_restart_iocon_of(
+										type),
 								0);
 
 							mcp230xx_t* mcp =
@@ -626,18 +846,22 @@ void test_mcp230xx_init_fuzzes_every_configuration_combination(void)
 		}
 	}
 
-	// Every combination of the bits a restart=false init must preserve.
-	for (uint8_t untouched = 0; untouched <= IOCON_REG_UNTOUCHED;
+	/*
+	 * Every combination of the IOCON bits no cfg field sets. A
+	 * restart=false init keeps them all but SEQOP, which it clears.
+	 */
+	for (uint8_t untouched = 0; untouched <= IOCON_REG_NOT_IN_CFG;
 	     untouched++) {
-		if ((untouched & IOCON_REG_UNTOUCHED) != untouched) {
-			continue; // Not one of the preserved bits.
+		if ((untouched & IOCON_REG_NOT_IN_CFG) != untouched) {
+			continue; // Not one of those bits.
 		}
 
-		expect_i2c_read8_8b(IOCON_008, untouched, 0);
+		expect_init_iocon_reads(MCP230XX_008, untouched);
 		i2c_write8_8b_ExpectAndReturn(TEST_I2C,
 					      TEST_ADDR,
 					      IOCON_008,
-					      untouched | IOCON_REG_DISSLW,
+					      (untouched & ~IOCON_REG_SEQOP) |
+						      IOCON_REG_DISSLW,
 					      0);
 
 		mcp230xx_t* mcp = init_mcp(false,
@@ -754,11 +978,11 @@ static unsigned char* align_up(unsigned char* arena)
 // Expects the reset and IOCON write of a restart=true static_init.
 static void expect_static_init_writes(MCP230XX_TYPE type)
 {
-	fake_i2c_write_op.retval = (ssize_t)reset_len_of(type);
+	expect_init_restart(type, init_restart_iocon_of(type));
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C,
 				      TEST_ADDR,
 				      iocon_addr_of(type),
-				      INIT_RESTART_IOCON,
+				      init_restart_iocon_of(type),
 				      0);
 }
 
@@ -940,6 +1164,7 @@ void test_mcp230xx_static_init_fails_when_the_reset_write_fails(void)
 	mcp230xx_config_t cfg;
 	fill_default_cfg(&cfg, MCP230XX_008);
 
+	expect_init_restart(MCP230XX_008, 0x00);
 	fake_i2c_write_op.retval = -1;
 
 	TEST_ASSERT_EQUAL_INT(
