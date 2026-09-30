@@ -364,12 +364,18 @@ int ads101x_static_deinit(const i2c_interface_t* i2c,
 	}
 
 	if (shutdown) {
-		ADS(ads)->expected_cfg_reg |= CONFIG_REG_MODE;
+		/*
+		 * Keep all parameters, but put the ADS101X in single-shot, no
+		 * conversion.
+		 */
+		const uint16_t shutdown_cfg_reg =
+			(ADS(ads)->expected_cfg_reg | CONFIG_REG_MODE) &
+			~CONFIG_REG_OS;
 
 		if (i2c_write8_16b(i2c,
 				   ADS(ads)->addr,
 				   CONFIG_REG,
-				   ADS(ads)->expected_cfg_reg) != 0) {
+				   shutdown_cfg_reg) != 0) {
 			return -1;
 		}
 	}

@@ -181,8 +181,10 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
  *   ads (ads101x_t*)             - The ADS101X to interact with.
- *   shutdown (bool)              - true if you want to leave the peripheral in
- *                                  a powered-down state.
+ *   shutdown (bool)              - true if you want to leave the peripheral
+ *                                  powered down. If it was in continuous mode,
+ *                                  it will power down once the conversion in
+ *                                  flight finishes.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
@@ -262,8 +264,10 @@ int ads101x_static_init(const i2c_interface_t* i2c,
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
  *   ads (ads101x_t*)             - The ADS101X to interact with.
- *   shutdown (bool)              - true if you want to leave the peripheral in
- *                                  a powered-down state (single-shot mode).
+ *   shutdown (bool)              - true if you want to leave the peripheral
+ *                                  powered down. If it was in continuous mode,
+ *                                  it will power down once the conversion in
+ *                                  flight finishes.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *

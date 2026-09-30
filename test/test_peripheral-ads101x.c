@@ -564,11 +564,12 @@ void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combinati
 						(ADS101X_DATA_RATE)dr);
 					TEST_ASSERT_NOT_NULL(ads);
 
+					// Shutdown: single-shot, no conversion.
 					i2c_write8_16b_ExpectAndReturn(
 						TEST_I2C,
 						TEST_ADDR,
 						CONFIG_REG,
-						cfg,
+						cfg & (uint16_t)~CONFIG_REG_OS,
 						0);
 					TEST_ASSERT_EQUAL_INT(
 						0,
@@ -610,13 +611,40 @@ void test_ads101x_deinit_fuzzes_every_reachable_configuration_register_combinati
 
 void test_ads101x_deinit_fails_when_writing_the_config_reg_fails(void)
 {
-	ads101x_t* ads = create_ads(false); // MODE already set; OR is a no-op
+	ads101x_t* ads = create_ads(false);
 
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, -1);
+	// Shutdown: single-shot, no conversion.
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_NO_RESTART_CFG_SINGLE,
+				       -1);
 
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(TEST_I2C, ads, true));
 	free(ads); // deinit bailed out before freeing it
+}
+
+void test_ads101x_deinit_keeps_a_continuous_handle_when_the_shutdown_fails(void)
+{
+	ads101x_t* ads = create_ads(true);
+
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS |
+					       CONFIG_REG_MODE,
+				       -1);
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(TEST_I2C, ads, true));
+
+	// Still in continuous mode: no EINVAL, and P0_N1 needs no write.
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_ads(ads);
 }
 
 /* ------------------------------ bus checks -------------------------------- */
@@ -658,9 +686,9 @@ void test_ads101x_static_init_and_static_deinit_use_the_callers_storage(void)
 	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(&storage, &dr, 0));
 	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
 
-	// Single-shot mode already has MODE set, so shutdown rewrites the same.
+	// Shutdown: single-shot, no conversion.
 	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_NO_RESTART_CFG_SINGLE, 0);
 	TEST_ASSERT_EQUAL_INT(0,
 			      ads101x_static_deinit(TEST_I2C, &storage, true));
 }
