@@ -142,7 +142,11 @@ typedef struct {
  *   addr (plc_i2c_addr_t)          - The I2C address of the peripheral.
  *   restart (bool)                 - true if you want to reset the peripheral
  *                                    (that is, set the registers to their
- *                                    default values) before applying cfg.
+ *                                    default values) before applying cfg. If
+ *                                    false, pin directions, pull-ups, input
+ *                                    polarity, interrupt settings and output
+ *                                    latches stay as they are on the
+ *                                    MCP230XX.
  *   cfg (const mcp230xx_config_t*) - The configuration to apply. It is only
  *                                    read during the call.
  *
@@ -153,9 +157,11 @@ typedef struct {
  * Errors:
  *   errno set to:
  *     - EFAULT   : Passed cfg or i2c is NULL.
- *     - EINVAL   : int_type is not an MCP230XX_INT_TYPE value, int_pol doesn't
- *                  match int_type (see mcp230xx_config_t), or mirror is
- *                  MCP230XX_MIRRORED_INT on a chip other than the MCP23017.
+ *     - EINVAL   : type is not an MCP230XX_TYPE value, int_type is not an
+ *                  MCP230XX_INT_TYPE value, int_pol doesn't match int_type
+ *                  (see mcp230xx_config_t), or mirror is not an
+ *                  MCP230XX_MIRROR_INT value, or is MCP230XX_MIRRORED_INT on
+ *                  a chip other than the MCP23017.
  *     - ENOMEM   : Out of memory during allocation.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
@@ -219,7 +225,11 @@ int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
  *   addr (plc_i2c_addr_t)          - The I2C address of the peripheral.
  *   restart (bool)                 - true if you want to reset the peripheral
  *                                    (that is, set the registers to their
- *                                    default values) before applying cfg.
+ *                                    default values) before applying cfg. If
+ *                                    false, pin directions, pull-ups, input
+ *                                    polarity, interrupt settings and output
+ *                                    latches stay as they are on the
+ *                                    MCP230XX.
  *   cfg (const mcp230xx_config_t*) - The configuration to apply. It is only
  *                                    read during the call.
  *
@@ -230,9 +240,11 @@ int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
  *   errno set to:
  *     - EFAULT   : Passed storage is NULL or not MCP230XX_ALIGN aligned, or
  *                  cfg or i2c is NULL.
- *     - EINVAL   : int_type is not an MCP230XX_INT_TYPE value, int_pol doesn't
- *                  match int_type (see mcp230xx_config_t), or mirror is
- *                  MCP230XX_MIRRORED_INT on a chip other than the MCP23017.
+ *     - EINVAL   : type is not an MCP230XX_TYPE value, int_type is not an
+ *                  MCP230XX_INT_TYPE value, int_pol doesn't match int_type
+ *                  (see mcp230xx_config_t), or mirror is not an
+ *                  MCP230XX_MIRROR_INT value, or is MCP230XX_MIRRORED_INT on
+ *                  a chip other than the MCP23017.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
@@ -338,9 +350,9 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *   index (uint8_t)                - The GPIO you want to set as input.
  *   config (MCP230XX_INPUT_CONFIG) - Used to enable/disable the pull-up of the
  *                                    input.
- *   timeout_ms (uint32_t)          - The maximum time to wait for a reading.
- *                                    Only applicable when the MCP230XX is
- *                                    protected.
+ *   timeout_ms (uint32_t)          - The maximum time to wait to configure
+ *                                    the pin. Only applicable when the
+ *                                    MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already an input and the pull-up was
  *         correctly configured, otherwise -1.
@@ -408,8 +420,9 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   index (uint8_t)              - The GPIO you want to set as output.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
- *                                  applicable when the MCP230XX is protected.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
+ *                                  pin. Only applicable when the MCP230XX is
+ *                                  protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already an output, otherwise -1.
  *

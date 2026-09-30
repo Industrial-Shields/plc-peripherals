@@ -132,19 +132,49 @@ static int mcp230xx_reset(const i2c_interface_t* i2c,
 	return 0;
 }
 
-static bool mcp230xx_int_config_is_valid(MCP230XX_INT_TYPE int_type,
-					 MCP230XX_INT_POLARITY int_pol)
+static bool mcp230xx_config_is_valid(const mcp230xx_config_t* cfg)
 {
-	switch (int_type) {
-	case MCP230XX_OPEN_DRAIN_INT:
-		return int_pol == MCP230XX_INT_POLARITY_NONE;
-	case MCP230XX_ACTIVE_DRIVER_INT:
-		// The polarity must be a conscious decision, not a default.
-		return int_pol == MCP230XX_INT_ACTIVE_HIGH ||
-		       int_pol == MCP230XX_INT_ACTIVE_LOW;
-	default:
+	// First of all, check that the enum values are valid
+
+	if (cfg->type != MCP230XX_008 && cfg->type != MCP230XX_017) {
 		return false;
 	}
+
+	if (cfg->mirror != MCP230XX_NO_MIRRORED_INT &&
+	    cfg->mirror != MCP230XX_MIRRORED_INT) {
+		return false;
+	}
+
+	if (cfg->int_type != MCP230XX_OPEN_DRAIN_INT &&
+	    cfg->int_type != MCP230XX_ACTIVE_DRIVER_INT) {
+		return false;
+	}
+
+	if (cfg->int_pol != MCP230XX_INT_POLARITY_NONE &&
+	    cfg->int_pol != MCP230XX_INT_ACTIVE_HIGH &&
+	    cfg->int_pol != MCP230XX_INT_ACTIVE_LOW) {
+		return false;
+	}
+
+	// If it's a MCP230XX_017, it cannot have mirrored INT
+	if (cfg->type != MCP230XX_017 && cfg->mirror == MCP230XX_MIRRORED_INT) {
+		return false;
+	}
+
+	/*
+	 * The polarity must be a conscious decision, and not all combinations
+	 * are valid.
+	 */
+	if (cfg->int_type == MCP230XX_OPEN_DRAIN_INT &&
+	    cfg->int_pol != MCP230XX_INT_POLARITY_NONE) {
+		return false;
+	}
+	if (cfg->int_type == MCP230XX_ACTIVE_DRIVER_INT &&
+	    cfg->int_pol == MCP230XX_INT_POLARITY_NONE) {
+		return false;
+	}
+
+	return true;
 }
 
 int mcp230xx_static_init(const i2c_interface_t* i2c,
@@ -162,9 +192,7 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (!mcp230xx_int_config_is_valid(cfg->int_type, cfg->int_pol) ||
-	    (cfg->type != MCP230XX_017 &&
-	     cfg->mirror == MCP230XX_MIRRORED_INT)) {
+	if (!mcp230xx_config_is_valid(cfg)) {
 		errno = EINVAL;
 		return -1;
 	}

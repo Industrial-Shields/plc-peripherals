@@ -404,6 +404,34 @@ void test_mcp230xx_init_fails_with_einval_for_a_mirrored_int_on_an_mcp23008(void
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 }
 
+void test_mcp230xx_init_fails_with_einval_for_an_invalid_type(void)
+{
+	// It would pass every index check of the GPIO calls.
+	errno = 0;
+	TEST_ASSERT_NULL(init_mcp(true,
+				  (MCP230XX_TYPE)2,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  MCP230XX_NO_MIRRORED_INT));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_init_fails_with_einval_for_an_invalid_mirror(void)
+{
+	// 2 << IOCON_REG_MIRROR_SHIFT would spill into another IOCON bit.
+	errno = 0;
+	TEST_ASSERT_NULL(init_mcp(false,
+				  MCP230XX_017,
+				  false,
+				  MCP230XX_ACTIVE_DRIVER_INT,
+				  MCP230XX_INT_ACTIVE_LOW,
+				  (MCP230XX_MIRROR_INT)2));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
 void test_mcp230xx_init_fails_when_the_reset_is_short_on_the_wire(void)
 {
 	// The device acknowledged one byte fewer than the block that was sent.
@@ -871,6 +899,37 @@ void test_mcp230xx_static_init_fails_with_einval_for_an_active_driver_without_po
 	TEST_ASSERT_EQUAL_INT(
 		-1,
 		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_static_init_fails_with_einval_for_an_invalid_type(void)
+{
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_008);
+	cfg.type = (MCP230XX_TYPE)2;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+}
+
+void test_mcp230xx_static_init_fails_with_einval_for_an_invalid_mirror(void)
+{
+	static mcp230xx_t storage;
+	mcp230xx_config_t cfg;
+	fill_default_cfg(&cfg, MCP230XX_017);
+	cfg.mirror = (MCP230XX_MIRROR_INT)2;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_static_init(
+			TEST_I2C, &storage, TEST_ADDR, false, &cfg));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 }
