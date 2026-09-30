@@ -20,6 +20,7 @@
 #ifndef PLC_PERIPHERAL_ADS101X_I2C_H_
 #define PLC_PERIPHERAL_ADS101X_I2C_H_
 
+#include "plc-mutex.h"
 #include "plc-peripherals-i2c.h"
 #include "plc-peripherals-platform.h"
 #ifdef __cplusplus
@@ -27,14 +28,15 @@ extern "C" {
 #endif
 
 /*
- * Sized for the private handle in peripheral-ads101x.c: the I2C address, two
- * copies of the CONFIG register and the bus number.
+ * Sized for the private handle in peripheral-ads101x.c: its mutex, the I2C
+ * address, two copies of the CONFIG register, the bus number and two flags.
  */
-#define ADS101X_INTERNAL_ALIGN PLC_PERIPHERAL_INTERNAL_ALIGNOF(plc_i2c_addr_t)
-#define ADS101X_INTERNAL_SIZE                                      \
-	PLC_PERIPHERAL_INTERNAL_PAD(sizeof(plc_i2c_addr_t) +       \
-					    2 * sizeof(uint16_t) + \
-					    sizeof(uint8_t),       \
+#define ADS101X_INTERNAL_ALIGN PLC_MUTEX_ALIGN
+#define ADS101X_INTERNAL_SIZE                                                 \
+	PLC_PERIPHERAL_INTERNAL_PAD(PLC_MUTEX_SIZE + sizeof(plc_i2c_addr_t) + \
+					    2 * sizeof(uint16_t) +            \
+					    sizeof(uint8_t) +                 \
+					    2 * sizeof(bool),                 \
 				    ADS101X_INTERNAL_ALIGN)
 
 /*
@@ -52,7 +54,7 @@ extern "C" {
 #define ADS101X_ALIGN ADS101X_INTERNAL_ALIGN
 
 typedef struct {
-	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_i2c_addr_t)
+	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_mutex_t)
 	unsigned char opaque[ADS101X_SIZE];
 } ads101x_t;
 
@@ -145,7 +147,7 @@ typedef struct {
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed cfg is NULL.
+ *     - EFAULT   : Passed cfg or i2c is NULL.
  *     - ENOMEM   : Out of memory during allocation.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
@@ -162,7 +164,11 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
  * Deinitialize an ADS101X peripheral "ads". This function currently supports ADS1015
  * only.
  *
- * WARNING: Never use this on an ads101x_static_init handle.
+ * WARNINGS:
+ *   - Never use this on an ads101x_static_init handle.
+ *   - If the handle is protected, its mutex is destroyed first. If the
+ *     shutdown write fails after that, the handle is not freed, but it is no
+ *     longer protected.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
@@ -174,11 +180,13 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ads101x_t is NULL.
+ *     - EFAULT   : Passed ads101x_t or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_static_destroy reports while protected
+ *                  (see plc-mutex.h). The handle is then left as it was.
  */
 int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
 
@@ -211,8 +219,8 @@ int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed storage is NULL, or not ADS101X_ALIGN aligned, or cfg
- *                  is NULL.
+ *     - EFAULT   : Passed storage is NULL or not ADS101X_ALIGN aligned, or cfg
+ *                  or i2c is NULL.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
@@ -229,7 +237,11 @@ int ads101x_static_init(const i2c_interface_t* i2c,
  * Deinitialize an ADS101X peripheral "ads" made by ads101x_static_init. The
  * storage is never freed. This function currently supports ADS1015 only.
  *
- * WARNING: Never use this on an ads101x_init handle.
+ * WARNINGS:
+ *   - Never use this on an ads101x_init handle.
+ *   - If the handle is protected, its mutex is destroyed first. If the
+ *     shutdown write fails after that, the handle is still initialized, but it
+ *     is no longer protected.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
@@ -241,11 +253,13 @@ int ads101x_static_init(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ads101x_t is NULL.
+ *     - EFAULT   : Passed ads101x_t or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_static_destroy reports while protected
+ *                  (see plc-mutex.h). The handle is then left as it was.
  */
 int ads101x_static_deinit(const i2c_interface_t* i2c,
 			  ads101x_t* ads,
@@ -254,42 +268,49 @@ int ads101x_static_deinit(const i2c_interface_t* i2c,
 /**
  * ads101x_protect
  *
- * Protect the ADS101X with a mutex.
+ * Protect the ADS101X with a mutex embedded in its handle. Every other call on
+ * the handle then holds it, waiting up to its timeout_ms for it.
+ *
+ * WARNING: Never call it while another thread or process uses the handle.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
  *   ads (ads101x_t*)             - The ADS101X to protect.
+ *   scope (plc_mutex_scope_t)    - Who the mutex has to exclude. Use
+ *                                  PLC_MUTEX_SCOPE_SHARED if the handle is in
+ *                                  memory shared with other processes (see
+ *                                  plc_mutex_scope_t).
  * Returns:
  *   int - 0 if successful, 1 if already protected, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - ENOMEM : Out of memory during allocation.
- *     - EINVAL : Passed ads101x_t is NULL, or address is invalid.
- *     - EEXIST : The resource was already added.
- *     - EBUSY  : Hutex couldn't be taken.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ads101x_t or i2c is NULL.
+ *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
+ *     - (others) : Whatever plc_mutex_static_create reports (see
+ *                  plc-mutex.h).
  */
-int ads101x_protect(const i2c_interface_t* i2c, ads101x_t* ads);
+int ads101x_protect(const i2c_interface_t* i2c,
+		    ads101x_t* ads,
+		    plc_mutex_scope_t scope);
 
 /**
  * ads101x_unprotect
  *
- * Remove the mutex associated with the ADS101X.
+ * Destroy the mutex embedded in the ADS101X handle.
+ *
+ * WARNING: Never call it while another thread or process uses the handle.
  *
  * Parameters:
- *   ads (ads101x_t)         - The ADS101X to unprotect.
+ *   ads (ads101x_t*) - The ADS101X to unprotect.
  * Returns:
  *   int - 0 if successful, 1 if already unprotected, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : Passed ads101x_t is NULL, or address is invalid.
- *     - ENODEV : The resource is not present.
- *     - EBUSY  : Hash mutex couldn't be taken.
- *     - Linux specific:
- *       - EINVAL: The monotonic clock isn't available.
+ *     - EFAULT   : Passed ads101x_t is NULL.
+ *     - (others) : Whatever plc_mutex_static_destroy reports (see
+ *                  plc-mutex.h).
  */
 int ads101x_unprotect(ads101x_t* ads);
 
@@ -324,12 +345,15 @@ int ads101x_unprotect(ads101x_t* ads);
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ads101x_t or return_value is NULL.
+ *     - EFAULT   : Passed ads101x_t, return_value or i2c is NULL.
  *     - EINVAL   : The ADS101X was initialized in continuous mode, or i2c is
  *                  not on the bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ads101x_single_read(const i2c_interface_t* i2c,
 			ads101x_t* ads,
@@ -364,13 +388,16 @@ int ads101x_single_read(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ads101x_t or return_value is NULL.
+ *     - EFAULT   : Passed ads101x_t, return_value or i2c is NULL.
  *     - EINVAL   : The ADS101X was initialized in continuous mode, or i2c is
  *                  not on the bus the ADS101X was initialized on.
  *     - ERANGE   : Reading value is less than -8.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ads101x_unsigned_single_read(const i2c_interface_t* i2c,
 				 ads101x_t* ads,
@@ -406,12 +433,15 @@ int ads101x_unsigned_single_read(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ads101x_t or return_value is NULL.
+ *     - EFAULT   : Passed ads101x_t, return_value or i2c is NULL.
  *     - EINVAL   : The ADS101X was initialized in single-shot mode, or i2c is
  *                  not on the bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ads101x_continuous_read(const i2c_interface_t* i2c,
 			    ads101x_t* ads,
@@ -444,13 +474,16 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ads101x_t or return_value is NULL.
+ *     - EFAULT   : Passed ads101x_t, return_value or i2c is NULL.
  *     - EINVAL   : The ADS101X was initialized in single-shot mode, or i2c is
  *                  not on the bus the ADS101X was initialized on.
  *     - ERANGE   : Reading value is less than -8.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
 				     ads101x_t* ads,
@@ -475,7 +508,10 @@ int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed ads101x_t or dr is NULL.
+ *     - EFAULT   : Passed ads101x_t or dr is NULL.
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ads101x_get_fs(const ads101x_t* ads,
 		   ADS101X_DATA_RATE* dr,
@@ -504,11 +540,14 @@ int ads101x_get_fs(const ads101x_t* ads,
  *
  * Errors:
  *   errno set to:
- *     - EFAULT   : Passed ads101x_t is NULL.
+ *     - EFAULT   : Passed ads101x_t or i2c is NULL.
  *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h).
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int ads101x_set_fs(const i2c_interface_t* i2c,
 		   ads101x_t* ads,

@@ -91,15 +91,20 @@
  */
 #define INIT_RESTART_CFG_CONTINUOUS 0x02A3
 
-static uint16_t read_value;
+/*
+ * CMock copies a ReturnThruPtr value when the mocked call happens, not when it
+ * is queued, so each register needs its own slot for a test to queue reads of
+ * different registers.
+ */
+static uint16_t read_values[HIGH_THRESHOLD_REG + 1];
 
 static void expect_i2c_read8_16b(uint8_t reg, uint16_t value, int retval)
 {
 	i2c_read8_16b_ExpectAndReturn(TEST_I2C, TEST_ADDR, reg, NULL, retval);
 	i2c_read8_16b_IgnoreArg_to_read();
 	if (retval == 0) {
-		read_value = value;
-		i2c_read8_16b_ReturnThruPtr_to_read(&read_value);
+		read_values[reg] = value;
+		i2c_read8_16b_ReturnThruPtr_to_read(&read_values[reg]);
 	}
 }
 
@@ -166,17 +171,60 @@ static void destroy_ads(ads101x_t* ads)
 	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, false));
 }
 
+#define TEST_SCOPE PLC_MUTEX_SCOPE_PRIVATE
+
 static ads101x_t* create_protected_ads(bool continuous)
 {
 	ads101x_t* ads = create_ads(continuous);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(TEST_I2C, ads));
+	plc_mutex_static_create_ExpectAndReturn(NULL, TEST_SCOPE, 0);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(TEST_I2C, ads, TEST_SCOPE));
 	return ads;
+}
+
+static void expect_mutex_destroyed(int retval)
+{
+	plc_mutex_static_destroy_ExpectAndReturn(NULL, retval);
+	plc_mutex_static_destroy_IgnoreArg_mutex();
 }
 
 static void destroy_protected_ads(ads101x_t* ads)
 {
+	expect_mutex_destroyed(0);
 	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, false));
+}
+
+static void expect_mutex_released(void)
+{
+	plc_mutex_release_ExpectAndReturn(NULL, 0);
+	plc_mutex_release_IgnoreArg_mutex();
+}
+
+// Only the first acquire finds that the previous owner died.
+static int acquire_after_owner_died(plc_mutex_t* mutex,
+				    uint32_t timeout_ms,
+				    int cmock_num_calls)
+{
+	(void)mutex;
+	(void)timeout_ms;
+
+	if (cmock_num_calls == 0) {
+		errno = EOWNERDEAD;
+		return -1;
+	}
+	return 0;
+}
+
+static int
+acquire_times_out(plc_mutex_t* mutex, uint32_t timeout_ms, int cmock_num_calls)
+{
+	(void)mutex;
+	(void)timeout_ms;
+	(void)cmock_num_calls;
+
+	errno = EBUSY;
+	return -1;
 }
 
 void setUp(void)
@@ -511,7 +559,7 @@ void test_ads101x_deinit_fails_when_writing_the_config_reg_fails(void)
 	free(ads); // deinit bailed out before freeing it
 }
 
-/* --------------------------- ads101x_protect ------------------------------ */
+/* ------------------------------ bus checks -------------------------------- */
 
 /* ------------------ ads101x_static_init / static_deinit ------------------- */
 
@@ -713,8 +761,6 @@ void test_ads101x_rejects_an_interface_for_another_bus(void)
 	fake_i2c_bus = TEST_BUS;
 	destroy_ads(ads);
 }
-
-/* -------------------------- ads101x_unprotect ------------------------------ */
 
 /* ------------------------- ads101x_single_read ----------------------------- */
 
@@ -1061,7 +1107,7 @@ void test_ads101x_continuous_read_writes_again_after_returning_to_a_previous_cha
 	void)
 {
 	/*
-	 * If continuous_read  never updated old_cfg_reg after writing, it would
+	 * If continuous_read never updated last_cfg_reg after writing, it would
 	 * stay stuck at whatever it was at init, so switching to a new channel
 	 * and then switching BACK to the original one would wrongly look like
 	 * no change, and no write would be issued
@@ -1102,7 +1148,7 @@ void test_ads101x_continuous_read_reads_directly_after_set_fs_already_settled_th
 	/*
 	 * ads101x_set_fs now writes CONFIG_REG and waits out the switch
 	 * itself in continuous mode, syncing
-	 * old_cfg_reg before returning.
+	 * last_cfg_reg before returning.
 	 */
 	ads101x_t* ads = create_ads(true);
 
@@ -1522,88 +1568,461 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 	destroy_ads(ads);
 }
 
-void test_ads101x_deinit_also_unprotects_when_protected(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
+/* ----------------------- ads101x_protect / unprotect ---------------------- */
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, false));
-}
-
-void test_ads101x_deinit_fails_when_the_unprotect_fails(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
-
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(TEST_I2C, ads, false));
-
-	free(ads); // deinit bailed out before freeing it
-}
-
-void test_ads101x_protect_fails_with_einval_for_null(void)
+void test_ads101x_protect_fails_with_efault_for_null(void)
 {
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(TEST_I2C, NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(TEST_I2C, NULL, TEST_SCOPE));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_ads101x_protect_adds_the_resource_for_its_bus_and_address(void)
+void test_ads101x_protect_fails_with_einval_for_another_bus(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_protect(TEST_I2C, ads));
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(TEST_I2C, ads, TEST_SCOPE));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	fake_i2c_bus = TEST_BUS;
+	destroy_ads(ads);
+}
+
+void test_ads101x_protect_creates_the_mutex_with_the_given_scope(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	plc_mutex_static_create_ExpectAndReturn(
+		NULL, PLC_MUTEX_SCOPE_SHARED, 0);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_protect(TEST_I2C, ads, PLC_MUTEX_SCOPE_SHARED));
 
 	destroy_protected_ads(ads);
-}
-
-void test_ads101x_protect_fails_when_the_bus_cant_be_read(void)
-{
-	ads101x_t* ads = create_ads(false);
-
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(TEST_I2C, ads));
-
-	destroy_ads(ads);
 }
 
 void test_ads101x_protect_returns_1_if_already_protected(void)
 {
 	ads101x_t* ads = create_protected_ads(false);
 
-	TEST_ASSERT_EQUAL_INT(1, ads101x_protect(TEST_I2C, ads));
+	// No second plc_mutex_static_create is expected.
+	TEST_ASSERT_EQUAL_INT(1, ads101x_protect(TEST_I2C, ads, TEST_SCOPE));
 
 	destroy_protected_ads(ads);
 }
 
-void test_ads101x_unprotect_fails_with_einval_for_null(void)
+void test_ads101x_protect_leaves_the_handle_unprotected_when_it_fails(void)
 {
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(NULL));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-}
+	ads101x_t* ads = create_ads(false);
 
-void test_ads101x_unprotect_removes_the_resource(void)
-{
-	ads101x_t* ads = create_protected_ads(false);
+	plc_mutex_static_create_ExpectAndReturn(NULL, TEST_SCOPE, -1);
+	plc_mutex_static_create_IgnoreArg_mutex();
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_protect(TEST_I2C, ads, TEST_SCOPE));
 
-	TEST_ASSERT_EQUAL_INT(0, ads101x_unprotect(ads));
+	// No plc_mutex_acquire/release is expected: the handle isn't protected.
+	ADS101X_DATA_RATE dr;
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
 
 	destroy_ads(ads);
 }
 
-void test_ads101x_unprotect_fails_when_the_resource_cant_be_removed(void)
+void test_ads101x_unprotect_fails_with_efault_for_null(void)
 {
-	ads101x_t* ads = create_protected_ads(false);
-
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(ads));
-
-	destroy_protected_ads(ads);
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_ads101x_unprotect_returns_1_if_already_unprotected(void)
+void test_ads101x_unprotect_returns_1_if_not_protected(void)
 {
-	ads101x_t* ads = create_protected_ads(false);
+	ads101x_t* ads = create_ads(false);
 
 	TEST_ASSERT_EQUAL_INT(1, ads101x_unprotect(ads));
 
 	destroy_ads(ads);
+}
+
+void test_ads101x_unprotect_destroys_the_mutex(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	expect_mutex_destroyed(0);
+	TEST_ASSERT_EQUAL_INT(0, ads101x_unprotect(ads));
+
+	// No plc_mutex_acquire/release is expected anymore.
+	ADS101X_DATA_RATE dr;
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_unprotect_keeps_the_handle_protected_when_it_fails(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	expect_mutex_destroyed(-1);
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_unprotect(ads));
+
+	plc_mutex_acquire_ExpectAndReturn(NULL, 1000, 0);
+	plc_mutex_acquire_IgnoreArg_mutex();
+	expect_mutex_released();
+	ADS101X_DATA_RATE dr;
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_deinit_destroys_the_mutex_when_protected(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	expect_mutex_destroyed(0);
+	TEST_ASSERT_EQUAL_INT(0, ads101x_deinit(TEST_I2C, ads, false));
+}
+
+void test_ads101x_deinit_keeps_the_handle_when_the_mutex_cant_be_destroyed(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	// No shutdown write is expected either.
+	expect_mutex_destroyed(-1);
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_deinit(TEST_I2C, ads, true));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_single_read_fails_when_the_mutex_cant_be_taken(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	// No I2C transfer and no release are expected.
+	plc_mutex_acquire_Stub(acquire_times_out);
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	destroy_protected_ads(ads);
+}
+
+// FAST_DR: 1 / 2400 SPS + 15%, the driver's conversion time.
+#define FAST_DR_CONVERSION_US ((1100000 + 50000) / 2400)
+
+void test_ads101x_single_read_waits_out_a_dead_owners_conversion(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	// Read back, OS=0 means the dead owner's conversion is still running.
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+	expect_i2c_read8_16b(
+		CONFIG_REG, INIT_RESTART_CFG_SINGLE & ~CONFIG_REG_OS, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+	// The dead owner's conversion, then this read's own.
+	TEST_ASSERT_GREATER_OR_EQUAL_INT(2 * FAST_DR_CONVERSION_US,
+					 elapsed_us(start, end));
+	TEST_ASSERT_EQUAL_INT16(255, value);
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_single_read_starts_at_once_when_a_dead_owner_left_it_idle(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+
+	// Read back, OS=1 means no conversion is running: nothing to wait for.
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+	TEST_ASSERT_LESS_THAN_INT(2 * FAST_DR_CONVERSION_US,
+				  elapsed_us(start, end));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_single_read_resyncs_only_once_after_a_dead_owner(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	// No CONFIG_REG read this time.
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_single_read_retries_the_resync_when_it_fails(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	// The CONFIG_REG read fails: nothing else runs, and the lock is released.
+	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
+	expect_mutex_released();
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	// The next read, with a healthy lock, still resyncs first.
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+// INIT_RESTART_CFG_SINGLE, with SLOW_DR instead of FAST_DR.
+#define RESTART_CFG_SINGLE_AT_SLOW_DR                 \
+	((INIT_RESTART_CFG_SINGLE & ~CONFIG_REG_DR) | \
+	 (SLOW_DR << CONFIG_REG_DR_SHIFT))
+
+void test_ads101x_set_fs_keeps_its_rate_through_a_dead_owners_resync(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	// Single-shot mode: set_fs only changes the rate in memory.
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+
+	// The chip still has FAST_DR, and the resync must not bring it back.
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       RESTART_CFG_SINGLE_AT_SLOW_DR,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_get_fs_leaves_the_resync_to_a_call_with_the_bus(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	// get_fs has no I2C interface: no transfer is expected.
+	expect_mutex_released();
+	ADS101X_DATA_RATE dr;
+	TEST_ASSERT_EQUAL_INT(0, ads101x_get_fs(ads, &dr, 1000));
+	TEST_ASSERT_EQUAL_INT(FAST_DR, dr);
+
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+
+	// The resync is still pending, and keeps the new rate.
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       RESTART_CFG_SINGLE_AT_SLOW_DR,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+// SLOW_DR (128 SPS), the slowest rate: 1 / 128 SPS + 15%.
+#define SLOW_DR_CONVERSION_US ((1100000 + 50000) / 128)
+
+void test_ads101x_continuous_read_waits_out_a_dead_owners_conversions(void)
+{
+	ads101x_t* ads = create_protected_ads(true);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	// P0_N1 is what the ADS101X already has, so no CONFIG_REG write.
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_CONTINUOUS, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+	// The in-flight conversion at any rate, then one at the rate read back.
+	TEST_ASSERT_GREATER_OR_EQUAL_INT(SLOW_DR_CONVERSION_US +
+						 FAST_DR_CONVERSION_US,
+					 elapsed_us(start, end));
+	TEST_ASSERT_EQUAL_INT16(255, value);
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_continuous_read_resyncs_only_once_after_a_dead_owner(void)
+{
+	ads101x_t* ads = create_protected_ads(true);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_CONTINUOUS, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	// No CONFIG_REG read this time.
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_continuous_read_retries_the_resync_when_it_fails(void)
+{
+	ads101x_t* ads = create_protected_ads(true);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	// The CONFIG_REG read fails: nothing else runs, and the lock is released.
+	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
+	expect_mutex_released();
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	// The next read, with a healthy lock, still resyncs first.
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_CONTINUOUS, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+// INIT_RESTART_CFG_CONTINUOUS, with SLOW_DR instead of FAST_DR.
+#define RESTART_CFG_CONTINUOUS_AT_SLOW_DR                 \
+	((INIT_RESTART_CFG_CONTINUOUS & ~CONFIG_REG_DR) | \
+	 (SLOW_DR << CONFIG_REG_DR_SHIFT))
+
+void test_ads101x_set_fs_resyncs_in_continuous_mode_after_a_dead_owner(void)
+{
+	ads101x_t* ads = create_protected_ads(true); // cached at FAST_DR
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	/*
+	 * The dead owner already wrote SLOW_DR, but didn't cache it. Asking for
+	 * FAST_DR again must still reach the ADS101X.
+	 */
+	expect_i2c_read8_16b(CONFIG_REG, RESTART_CFG_CONTINUOUS_AT_SLOW_DR, 0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS,
+				       0);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
+
+	// Resynced: the next read neither reads CONFIG_REG nor writes it.
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_set_fs_retries_the_resync_when_it_fails(void)
+{
+	ads101x_t* ads = create_protected_ads(true);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	// The CONFIG_REG read fails: no write, and the lock is released.
+	expect_i2c_read8_16b(CONFIG_REG, 0, -1);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+
+	// The next call, with a healthy lock, still resyncs first.
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_CONTINUOUS, 0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       RESTART_CFG_CONTINUOUS_AT_SLOW_DR,
+				       0);
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+
+	destroy_protected_ads(ads);
 }
 
 void test_ads101x_single_read_when_protected_locks_and_unlocks(void)
