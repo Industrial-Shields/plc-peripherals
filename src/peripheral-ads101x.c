@@ -124,10 +124,10 @@ static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 {
 	if (signed_read_value < -8) {
 		/*
-		 * Quote from the ADS101X datasheet, page 22:
-		 * Single-ended signal measurements, where VAINN = 0 V and VAINP = 0 V to +FS, only use
-		 * the positive code range from 0000h to 7FF0h. However, because of device offset, the
-		 * ADS101x can still output negative codes in case VAINP is close to 0 V.
+		 * Quote from the ADS101X datasheet (SBAS473F, section 7.5.4):
+		 * Single-ended signal measurements, where VAINN = 0V and VAINP = 0V to +FS, only use
+		 * the positive code range from 000h to 7FFh. However, because of device offset, the
+		 * ADS101x can still output negative codes in case VAINP is close to 0V.
 		 *
 		 * We accept up to three bits of error.
 		 */

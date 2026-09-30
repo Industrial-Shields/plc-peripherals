@@ -389,7 +389,7 @@ int ads101x_single_read(const i2c_interface_t* i2c,
  * reading. This function blocks for one conversion time at the current data
  * rate before reading the result. To use it, the ADS101X must be in single-shot
  * mode (ads101x_init must have been called with continuous_mode=false). It
- * returns the reading as a signed number.
+ * returns the reading as an unsigned number.
  *
  * Because of the device offset, a single-ended input close to 0V can still read
  * slightly negative (SBAS473F, section 7.5.4). Readings from -8 to -1 are
