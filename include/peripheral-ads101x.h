@@ -143,7 +143,10 @@ typedef struct {
  *   addr (plc_i2c_addr_t)         - The I2C address of the peripheral.
  *   restart (bool)                - true if you want to reset the peripheral
  *                                   (that is, set the registers to their
- *                                   default values) before applying cfg.
+ *                                   default values) before applying cfg. If
+ *                                   false, the comparator settings stay as
+ *                                   they are on the ADS101X, since this
+ *                                   library never configures them.
  *   cfg (const ads101x_config_t*) - The configuration to apply. It is only
  *                                   read during the call.
  *
@@ -226,7 +229,10 @@ int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
  *   addr (plc_i2c_addr_t)         - The I2C address of the peripheral.
  *   restart (bool)                - true if you want to reset the peripheral
  *                                   (that is, set the registers to their
- *                                   default values) before applying cfg.
+ *                                   default values) before applying cfg. If
+ *                                   false, the comparator settings stay as
+ *                                   they are on the ADS101X, since this
+ *                                   library never configures them.
  *   cfg (const ads101x_config_t*) - The configuration to apply. It is only
  *                                   read during the call.
  *
