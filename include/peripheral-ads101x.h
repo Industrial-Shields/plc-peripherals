@@ -162,7 +162,8 @@ typedef struct {
  *     - ENOMEM   : Out of memory during allocation.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
+ *                  plc-peripherals-i2c-hal.h), or plc_delay_us (see
+ *                  plc-delay.h).
  */
 ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 			plc_i2c_addr_t addr,
@@ -197,9 +198,9 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
  *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_static_destroy reports while protected
- *                  (see plc-mutex.h). The handle is then left as it was.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_static_destroy
+ *                  while protected (see plc-mutex.h). If the mutex can't be
+ *                  destroyed, the handle is left as it was.
  */
 int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
 
@@ -247,7 +248,8 @@ int ads101x_deinit(const i2c_interface_t* i2c, ads101x_t* ads, bool shutdown);
  *                  is not an ADS101X_DATA_RATE value.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
+ *                  plc-peripherals-i2c-hal.h), or plc_delay_us (see
+ *                  plc-delay.h).
  */
 int ads101x_static_init(const i2c_interface_t* i2c,
 			ads101x_t* ads,
@@ -283,9 +285,9 @@ int ads101x_static_init(const i2c_interface_t* i2c,
  *     - EINVAL   : i2c is not on the bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_static_destroy reports while protected
- *                  (see plc-mutex.h). The handle is then left as it was.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_static_destroy
+ *                  while protected (see plc-mutex.h). If the mutex can't be
+ *                  destroyed, the handle is left as it was.
  */
 int ads101x_static_deinit(const i2c_interface_t* i2c,
 			  ads101x_t* ads,
@@ -378,8 +380,8 @@ int ads101x_unprotect(ads101x_t* ads);
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
@@ -424,8 +426,8 @@ int ads101x_single_read(const i2c_interface_t* i2c,
  *                  than -8.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
@@ -470,8 +472,8 @@ int ads101x_unsigned_single_read(const i2c_interface_t* i2c,
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
@@ -514,8 +516,8 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
  *                  than -8.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
@@ -577,8 +579,8 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr, uint32_t timeout_ms);
  *                  bus the ADS101X was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */

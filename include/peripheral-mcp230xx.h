@@ -202,9 +202,9 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
  *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_static_destroy reports while protected
- *                  (see plc-mutex.h). The handle is then left as it was.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_static_destroy
+ *                  while protected (see plc-mutex.h). If the mutex can't be
+ *                  destroyed, the handle is left as it was.
  */
 int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
 
@@ -288,9 +288,9 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
  *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_static_destroy reports while protected
- *                  (see plc-mutex.h). The handle is then left as it was.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_static_destroy
+ *                  while protected (see plc-mutex.h). If the mutex can't be
+ *                  destroyed, the handle is left as it was.
  */
 int mcp230xx_static_deinit(const i2c_interface_t* i2c,
 			   mcp230xx_t* mcp,
@@ -371,10 +371,9 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *                  MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
- *                  plc-mutex.h). EOWNERDEAD is never reported, because the
- *                  driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
  */
 int mcp230xx_set_input(const i2c_interface_t* i2c,
 		       mcp230xx_t* mcp,
@@ -406,10 +405,9 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
  *                  MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
- *                  plc-mutex.h). EOWNERDEAD is never reported, because the
- *                  driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
  */
 int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 		       mcp230xx_t* mcp,
@@ -439,10 +437,9 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
  *                  MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
- *                  plc-mutex.h). EOWNERDEAD is never reported, because the
- *                  driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
  */
 int mcp230xx_set_output(const i2c_interface_t* i2c,
 			mcp230xx_t* mcp,
@@ -473,10 +470,9 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
  *                  MCP230XX was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
- *                  plc-mutex.h). EOWNERDEAD is never reported, because the
- *                  driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
  */
 int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 			mcp230xx_t* mcp,

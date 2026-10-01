@@ -19,9 +19,9 @@
 
 #include <plc-peripherals-i2c.h>
 #include <peripheral-ads101x.h>
+#include <plc-delay.h>
 
 #include <malloc.h>
-#include <unistd.h>
 #include <errno.h>
 #include <stdint.h>
 
@@ -155,9 +155,9 @@ static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 		cfg &= ~CONFIG_REG_DR;            \
 		cfg |= dr << CONFIG_REG_DR_SHIFT; \
 	} while (0)
-static void ads101x_delay_until_conversion(ADS101X_DATA_RATE dr)
+static int ads101x_delay_until_conversion(ADS101X_DATA_RATE dr)
 {
-	usleep(ads101x_get_conversion_time_us(dr));
+	return plc_delay_us(ads101x_get_conversion_time_us(dr));
 }
 
 #define ADS101X_CHANGE_CHANNEL(new_cfg, channel_index)            \
@@ -182,8 +182,6 @@ static int ads101x_resync_if_needed(const i2c_interface_t* i2c,
 			    i2c, ads->addr, CONFIG_REG, &actual_cfg_reg) != 0) {
 			return -1;
 		}
-		ads->needs_resync = false;
-
 		is_reading = ADS101X_IS_CONTINUOUS_MODE(ads) ||
 			     !(actual_cfg_reg & CONFIG_REG_OS);
 
@@ -195,12 +193,17 @@ static int ads101x_resync_if_needed(const i2c_interface_t* i2c,
 			 * The conversion in flight may still use the previous rate.
 			 * Take the biggest timeout possible just in case.
 			 */
-			ads101x_delay_until_conversion(ADS101X_128SPS);
+			if (ads101x_delay_until_conversion(ADS101X_128SPS) !=
+			    0) {
+				return -1;
+			}
 		}
-		if (is_reading) {
-			ads101x_delay_until_conversion(
-				ADS101X_GET_DR(actual_cfg_reg));
+		if (is_reading && ads101x_delay_until_conversion(ADS101X_GET_DR(
+					  actual_cfg_reg)) != 0) {
+			return -1;
 		}
+
+		ads->needs_resync = false;
 	}
 
 	return 0;
@@ -308,8 +311,9 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 	 * (SBAS473F, sections 7.4.2.1 and 7.4.2.2): wait it out, so that a read
 	 * right after init doesn't get its result.
 	 */
-	if (may_be_converting) {
-		ads101x_delay_until_conversion(in_flight_dr);
+	if (may_be_converting &&
+	    ads101x_delay_until_conversion(in_flight_dr) != 0) {
+		return -1;
 	}
 
 	if (cfg->continuous_mode) {
@@ -318,7 +322,9 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 		 * ads101x_continuous_read with the same initial index works (i.e, when
 		 * calling read right after the init).
 		 */
-		ads101x_delay_until_conversion(dr_to_write);
+		if (ads101x_delay_until_conversion(dr_to_write) != 0) {
+			return -1;
+		}
 	}
 
 	ADS(ads)->addr = addr;
@@ -490,8 +496,11 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 	}
 
 	// Delay for the conversion
-	ads101x_delay_until_conversion(
-		ADS101X_GET_DR(ADS(ads)->expected_cfg_reg));
+	if (ads101x_delay_until_conversion(
+		    ADS101X_GET_DR(ADS(ads)->expected_cfg_reg)) != 0) {
+		ret = -1;
+		goto ads101x_single_read_exit;
+	}
 
 	if (i2c_read8_16b(i2c, ADS(ads)->addr, CONVERSION_REG, &read_value) !=
 	    0) {
@@ -600,10 +609,16 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 		 * rate Wait the old conversion time plus one full conversion at
 		 * the new rate.
 		 */
-		ads101x_delay_until_conversion(
-			ADS101X_GET_DR(ADS(ads)->last_cfg_reg));
-		ads101x_delay_until_conversion(
-			ADS101X_GET_DR(ADS(ads)->expected_cfg_reg));
+		if (ads101x_delay_until_conversion(
+			    ADS101X_GET_DR(ADS(ads)->last_cfg_reg)) != 0) {
+			ret = -1;
+			goto ads101x_continuous_read_exit;
+		}
+		if (ads101x_delay_until_conversion(
+			    ADS101X_GET_DR(ADS(ads)->expected_cfg_reg)) != 0) {
+			ret = -1;
+			goto ads101x_continuous_read_exit;
+		}
 
 		ADS(ads)->last_cfg_reg = ADS(ads)->expected_cfg_reg;
 	}
@@ -736,10 +751,16 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 		 * rate. Wait it out, then wait one full conversion at the new
 		 * rate.
 		 */
-		ads101x_delay_until_conversion(
-			ADS101X_GET_DR(ADS(ads)->last_cfg_reg));
-		ads101x_delay_until_conversion(
-			ADS101X_GET_DR(ADS(ads)->expected_cfg_reg));
+		if (ads101x_delay_until_conversion(
+			    ADS101X_GET_DR(ADS(ads)->last_cfg_reg)) != 0) {
+			ret = -1;
+			goto ads101x_set_fs_exit;
+		}
+		if (ads101x_delay_until_conversion(
+			    ADS101X_GET_DR(ADS(ads)->expected_cfg_reg)) != 0) {
+			ret = -1;
+			goto ads101x_set_fs_exit;
+		}
 
 		ADS(ads)->last_cfg_reg = ADS(ads)->expected_cfg_reg;
 	}

@@ -116,7 +116,8 @@ typedef enum {
  *     - ENOMEM   : Out of memory during allocation.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
+ *                  plc-peripherals-i2c-hal.h), or plc_delay_us (see
+ *                  plc-delay.h).
  */
 ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr);
 
@@ -147,9 +148,9 @@ ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr);
  *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_static_destroy reports while protected
- *                  (see plc-mutex.h). The handle is then left as it was.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_static_destroy
+ *                  while protected (see plc-mutex.h). If the mutex can't be
+ *                  destroyed, the handle is left as it was.
  */
 int ltc2309_deinit(const i2c_interface_t* i2c, ltc2309_t* ltc, bool shutdown);
 
@@ -181,7 +182,8 @@ int ltc2309_deinit(const i2c_interface_t* i2c, ltc2309_t* ltc, bool shutdown);
  *                  i2c_interface is NULL.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
+ *                  plc-peripherals-i2c-hal.h), or plc_delay_us (see
+ *                  plc-delay.h).
  */
 int ltc2309_static_init(const i2c_interface_t* i2c,
 			ltc2309_t* ltc,
@@ -215,9 +217,9 @@ int ltc2309_static_init(const i2c_interface_t* i2c,
  *     - EINVAL   : i2c is not on the bus the LTC2309 was initialized on.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_static_destroy reports while protected
- *                  (see plc-mutex.h). The handle is then left as it was.
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_static_destroy
+ *                  while protected (see plc-mutex.h). If the mutex can't be
+ *                  destroyed, the handle is left as it was.
  */
 int ltc2309_static_deinit(const i2c_interface_t* i2c,
 			  ltc2309_t* ltc,
@@ -301,8 +303,8 @@ int ltc2309_unprotect(ltc2309_t* ltc);
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
@@ -341,8 +343,8 @@ int ltc2309_read_single_ended_unsigned(const i2c_interface_t* i2c,
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
@@ -380,8 +382,8 @@ int ltc2309_read_single_ended_signed(const i2c_interface_t* i2c,
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
@@ -419,8 +421,8 @@ int ltc2309_read_differential_unsigned(const i2c_interface_t* i2c,
  *     - ERANGE   : The conversion result is invalid.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h).
- *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */

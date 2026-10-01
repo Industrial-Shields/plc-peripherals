@@ -21,12 +21,8 @@
  * i2c_get_bus is mocked too: ads101x_protect calls it directly, one layer
  * below plc-peripherals-i2c.h.
  *
- * usleep() between a config write and the following conversion read is not
- * mocked; it's a real (short) sleep. Every test that exercises it picks a
- * fast data rate (ADS101X_2400SPS or faster) to keep the suite quick, except
- * the one test that deliberately measures elapsed wall-clock time to confirm
- * ads101x_continuous_read waits out both the old and the new conversion
- * period on a combined channel/rate change.
+ * plc-delay.h is mocked too: fake-delay records every delay the driver asks
+ * for, so the tests check the delays instead of the time a call took.
  */
 
 #include "unity.h"
@@ -37,12 +33,14 @@
 #include "mock_plc-peripherals-i2c.h"
 #include "peripheral-ads101x.h"
 
+#include "mock_plc-delay.h"
+
 // For the shared i2c_get_bus / i2c_check_bus stubs
 #include "fake-i2c.h"
+#include "fake-delay.h"
 
 #include <errno.h>
 #include <stdlib.h>
-#include <time.h>
 
 #define TEST_I2C ((i2c_interface_t*)0x1)
 #define TEST_ADDR ((plc_i2c_addr_t)0x48)
@@ -65,16 +63,13 @@
 #define LOW_THRESHOLD_REG_RESET_VALUE 0x8000
 #define HIGH_THRESHOLD_REG_RESET_VALUE 0x7FFF
 
-/*
- * A data rate fast enough (~479us) that the real usleep() in
- * ads101x_delay_until_conversion doesn't slow the suite down.
- */
 #define FAST_DR ADS101X_2400SPS
-/*
- * The slowest available data rate (~8984us), used only by the one test that
- * deliberately measures elapsed time.
- */
 #define SLOW_DR ADS101X_128SPS
+
+// The driver's conversion time at sps samples per second: 1 / sps + 15%.
+#define CONVERSION_US(sps) ((1100000 + 50000) / (sps))
+#define FAST_DR_CONVERSION_US CONVERSION_US(2400)
+#define SLOW_DR_CONVERSION_US CONVERSION_US(128)
 
 /*
  * CONFIG_REG value ads101x_init(restart=true) writes for
@@ -111,16 +106,13 @@ static void expect_i2c_read8_16b(uint8_t reg, uint16_t value, int retval)
 	}
 }
 
-static long elapsed_ms(struct timespec start, struct timespec end)
+// Asserts the delays asked for since the last fake_delay_reset, in order.
+static void assert_delays(const uint32_t* expected_us, size_t len)
 {
-	return (end.tv_sec - start.tv_sec) * 1000L +
-	       (end.tv_nsec - start.tv_nsec) / 1000000L;
-}
-
-static long elapsed_us(struct timespec start, struct timespec end)
-{
-	return (end.tv_sec - start.tv_sec) * 1000000L +
-	       (end.tv_nsec - start.tv_nsec) / 1000L;
+	TEST_ASSERT_EQUAL_size_t(len, fake_delay.len);
+	if (len > 0) {
+		TEST_ASSERT_EQUAL_UINT32_ARRAY(expected_us, fake_delay.us, len);
+	}
 }
 
 static void expect_init_config_read(void)
@@ -238,6 +230,9 @@ acquire_times_out(plc_mutex_t* mutex, uint32_t timeout_ms, int cmock_num_calls)
 
 void setUp(void)
 {
+	fake_delay_reset();
+	plc_delay_us_Stub(fake_plc_delay_us);
+
 	fake_i2c_bus = TEST_BUS;
 	fake_i2c_bus_retval = 0;
 	i2c_get_bus_Stub(fake_i2c_get_bus);
@@ -259,6 +254,8 @@ void test_ads101x_init_with_restart_packs_config_reg_in_single_mode(void)
 	ads101x_t* ads = init_ads(true, false, ADS101X_FSR_4_096V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
+	// OS=1 after the reset: no conversion to wait out, and none to start.
+	assert_delays(NULL, 0);
 	destroy_ads(ads);
 }
 
@@ -274,6 +271,9 @@ void test_ads101x_init_with_restart_packs_config_reg_in_continuous_mode(void)
 	ads101x_t* ads = init_ads(true, true, ADS101X_FSR_4_096V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
+	// The first conversion, so a read right after init gets it.
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US };
+	assert_delays(expected, 1);
 	destroy_ads(ads);
 }
 
@@ -289,6 +289,24 @@ void test_ads101x_init_without_restart_reads_then_patches_config_reg(void)
 	ads101x_t* ads = init_ads(false, false, ADS101X_FSR_1_024V, FAST_DR);
 
 	TEST_ASSERT_NOT_NULL(ads);
+	// OS=0 and MODE=0: a continuous conversion at an unknown rate runs.
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US };
+	assert_delays(expected, 1);
+	destroy_ads(ads);
+}
+
+void test_ads101x_init_waits_out_a_single_shot_conversion_still_running(void)
+{
+	// OS=0, MODE=1, DR=920SPS: a single-shot conversion at 920SPS runs.
+	expect_i2c_read8_16b(CONFIG_REG, 0x0163, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, 0x07A3, 0);
+
+	ads101x_t* ads = init_ads(false, false, ADS101X_FSR_1_024V, FAST_DR);
+
+	TEST_ASSERT_NOT_NULL(ads);
+	static const uint32_t expected[] = { CONVERSION_US(920) };
+	assert_delays(expected, 1);
 	destroy_ads(ads);
 }
 
@@ -1602,8 +1620,12 @@ void test_ads101x_set_fs_writes_and_waits_when_the_rate_actually_changes_in_cont
 					       0x60,
 				       0);
 
+	fake_delay_reset();
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_set_fs(TEST_I2C, ads, ADS101X_920SPS, 1000));
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US,
+					     CONVERSION_US(920) };
+	assert_delays(expected, 2);
 
 	destroy_ads(ads);
 }
@@ -1663,15 +1685,12 @@ void test_ads101x_set_fs_waits_for_both_the_old_and_new_conversion_rate(void)
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, (0x0203 & ~0xE0) | 0xA0, 0);
 
-	struct timespec start, end;
-	clock_gettime(CLOCK_MONOTONIC, &start);
-
+	fake_delay_reset();
 	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
 
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	long ms = elapsed_ms(start, end);
-	TEST_ASSERT_GREATER_OR_EQUAL_INT(8, ms);
-	TEST_ASSERT_LESS_THAN_INT(14, ms);
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 2);
 
 	destroy_ads(ads);
 }
@@ -1684,31 +1703,30 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 	/*
 	 * ads101x_get_conversion_time_us is a private lookup table with one
 	 * case per ADS101X_DATA_RATE plus a default for the 0b111 duplicate of
-	 * 3300SPS.  expected_us mirrors ads101x_get_conversion_time_us's own
-	 * formula; the bound is [expected_us, 2 * expected_us) to tolerate
-	 * scheduling jitter while still catching a grossly wrong table entry.
+	 * 3300SPS. expected_us mirrors ads101x_get_conversion_time_us's own
+	 * formula.
 	 */
 	ads101x_t* ads = create_ads(false);
 	static const struct {
 		ADS101X_DATA_RATE dr;
 		uint16_t expected_cfg;
-		long expected_us;
+		uint32_t expected_us;
 	} cases[] = {
 		{ ADS101X_250SPS,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x20,
-		  (1100000 + 50000) / 250 },
+		  CONVERSION_US(250) },
 		{ ADS101X_490SPS,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x40,
-		  (1100000 + 50000) / 490 },
+		  CONVERSION_US(490) },
 		{ ADS101X_1600SPS,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x80,
-		  (1100000 + 50000) / 1600 },
+		  CONVERSION_US(1600) },
 		{ ADS101X_3300SPS,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0,
-		  (1100000 + 50000) / 3300 },
+		  CONVERSION_US(3300) },
 		{ (ADS101X_DATA_RATE)0b111,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0,
-		  (1100000 + 50000) / 3300 },
+		  CONVERSION_US(3300) },
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -1721,21 +1739,15 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 					       0);
 		expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 
-		struct timespec start, end;
-		clock_gettime(CLOCK_MONOTONIC, &start);
-
+		fake_delay_reset();
 		int16_t value;
 		TEST_ASSERT_EQUAL_INT(
 			0,
 			ads101x_single_read(
 				TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		long us = elapsed_us(start, end);
-
 		TEST_ASSERT_EQUAL_INT16(0x0FF, value);
-		TEST_ASSERT_GREATER_OR_EQUAL_INT(cases[i].expected_us, us);
-		TEST_ASSERT_LESS_THAN_INT(2 * cases[i].expected_us, us);
+		assert_delays(&cases[i].expected_us, 1);
 	}
 
 	destroy_ads(ads);
@@ -1883,9 +1895,6 @@ void test_ads101x_single_read_fails_when_the_mutex_cant_be_taken(void)
 	destroy_protected_ads(ads);
 }
 
-// FAST_DR: 1 / 2400 SPS + 15%, the driver's conversion time.
-#define FAST_DR_CONVERSION_US ((1100000 + 50000) / 2400)
-
 void test_ads101x_single_read_waits_out_a_dead_owners_conversion(void)
 {
 	ads101x_t* ads = create_protected_ads(false);
@@ -1899,19 +1908,18 @@ void test_ads101x_single_read_waits_out_a_dead_owners_conversion(void)
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	expect_mutex_released();
 
-	struct timespec start, end;
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	fake_delay_reset();
 	int16_t value;
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(0, errno);
-	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	// The dead owner's conversion, then this read's own.
-	TEST_ASSERT_GREATER_OR_EQUAL_INT(2 * FAST_DR_CONVERSION_US,
-					 elapsed_us(start, end));
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 2);
 	TEST_ASSERT_EQUAL_INT16(255, value);
 
 	destroy_protected_ads(ads);
@@ -1929,16 +1937,14 @@ void test_ads101x_single_read_starts_at_once_when_a_dead_owner_left_it_idle(void
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	expect_mutex_released();
 
-	struct timespec start, end;
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	fake_delay_reset();
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
-	clock_gettime(CLOCK_MONOTONIC, &end);
 
-	TEST_ASSERT_LESS_THAN_INT(2 * FAST_DR_CONVERSION_US,
-				  elapsed_us(start, end));
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US };
+	assert_delays(expected, 1);
 
 	destroy_protected_ads(ads);
 }
@@ -1953,19 +1959,25 @@ void test_ads101x_single_read_resyncs_only_once_after_a_dead_owner(void)
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	expect_mutex_released();
+	fake_delay_reset();
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	// OS=1: nothing left running, so only this read's own conversion.
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US };
+	assert_delays(expected, 1);
 
 	// No CONFIG_REG read this time.
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	expect_mutex_released();
+	fake_delay_reset();
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	assert_delays(expected, 1);
 
 	destroy_protected_ads(ads);
 }
@@ -2062,9 +2074,6 @@ void test_ads101x_get_fs_leaves_the_resync_to_a_call_with_the_bus(void)
 	destroy_protected_ads(ads);
 }
 
-// SLOW_DR (128 SPS), the slowest rate: 1 / 128 SPS + 15%.
-#define SLOW_DR_CONVERSION_US ((1100000 + 50000) / 128)
-
 void test_ads101x_continuous_read_waits_out_a_dead_owners_conversions(void)
 {
 	ads101x_t* ads = create_protected_ads(true);
@@ -2075,19 +2084,17 @@ void test_ads101x_continuous_read_waits_out_a_dead_owners_conversions(void)
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	expect_mutex_released();
 
-	struct timespec start, end;
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	fake_delay_reset();
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_continuous_read(
 			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
-	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	// The in-flight conversion at any rate, then one at the rate read back.
-	TEST_ASSERT_GREATER_OR_EQUAL_INT(SLOW_DR_CONVERSION_US +
-						 FAST_DR_CONVERSION_US,
-					 elapsed_us(start, end));
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 2);
 	TEST_ASSERT_EQUAL_INT16(255, value);
 
 	destroy_protected_ads(ads);
@@ -2101,19 +2108,25 @@ void test_ads101x_continuous_read_resyncs_only_once_after_a_dead_owner(void)
 	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_CONTINUOUS, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	expect_mutex_released();
+	fake_delay_reset();
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_continuous_read(
 			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 2);
 
 	// No CONFIG_REG read this time.
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	expect_mutex_released();
+	fake_delay_reset();
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_continuous_read(
 			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	assert_delays(NULL, 0);
 
 	destroy_protected_ads(ads);
 }
@@ -2165,16 +2178,31 @@ void test_ads101x_set_fs_resyncs_in_continuous_mode_after_a_dead_owner(void)
 				       INIT_RESTART_CFG_CONTINUOUS,
 				       0);
 	expect_mutex_released();
+	fake_delay_reset();
 	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
+	/*
+	 * Four expected delays:
+	 *   - Two of the resync (the in-flight conversion at any rate, then
+	 *     one at the rate read back.
+	 *   - Two of set_fs: the conversion at that rate, then one at
+	 *     the new rate.
+	 */
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US,
+					     SLOW_DR_CONVERSION_US,
+					     SLOW_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 4);
 
-	// Resynced: the next read neither reads CONFIG_REG nor writes it.
+	// The next read neither reads CONFIG_REG nor writes it.
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	expect_mutex_released();
+	fake_delay_reset();
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_continuous_read(
 			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	assert_delays(NULL, 0);
 
 	destroy_protected_ads(ads);
 }
@@ -2268,6 +2296,132 @@ void test_ads101x_set_fs_when_protected_locks_and_unlocks(void)
 
 	TEST_ASSERT_EQUAL_INT(
 		0, ads101x_set_fs(TEST_I2C, ads, ADS101X_920SPS, 1000));
+
+	destroy_protected_ads(ads);
+}
+
+/* ---------------------------- failed delays -------------------------------- */
+
+void test_ads101x_init_fails_when_waiting_for_the_first_conversion_fails(void)
+{
+	expect_ads101x_restart();
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS,
+				       0);
+	fake_delay.fail_at = 0;
+
+	errno = 0;
+	TEST_ASSERT_NULL(init_ads(true, true, ADS101X_FSR_4_096V, FAST_DR));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_ads101x_single_read_fails_without_reading_when_the_delay_fails(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	// No CONVERSION_REG read is expected.
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	fake_delay_reset();
+	fake_delay.fail_at = 0;
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_continuous_read_writes_the_config_again_after_a_failed_delay(
+	void)
+{
+	ads101x_t* ads = create_ads(true);
+	const uint16_t p1_n3_cfg = INIT_RESTART_CFG_CONTINUOUS |
+				   (ADS101X_P1_N3 << 12);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, p1_n3_cfg, 0);
+	fake_delay_reset();
+	fake_delay.fail_at = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
+
+	// The ADS101X may not use P1_N3 yet, so it is written and waited again.
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, p1_n3_cfg, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 2);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_set_fs_writes_the_config_again_after_a_failed_delay(void)
+{
+	ads101x_t* ads = create_ads(true);
+	const uint16_t slow_cfg =
+		(INIT_RESTART_CFG_CONTINUOUS & ~CONFIG_REG_DR) |
+		(SLOW_DR << CONFIG_REG_DR_SHIFT);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, slow_cfg, 0);
+	fake_delay_reset();
+	fake_delay.fail_at = 1;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, slow_cfg, 0);
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US,
+					     SLOW_DR_CONVERSION_US };
+	assert_delays(expected, 2);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_single_read_resyncs_again_after_a_failed_delay(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+	plc_mutex_acquire_Stub(acquire_after_owner_died);
+
+	// OS=0: the dead owner's conversion is running, but waiting fails.
+	expect_i2c_read8_16b(
+		CONFIG_REG, INIT_RESTART_CFG_SINGLE & ~CONFIG_REG_OS, 0);
+	expect_mutex_released();
+	fake_delay_reset();
+	fake_delay.fail_at = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	// The next read resyncs again, although its acquire succeeds.
+	expect_i2c_read8_16b(CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	expect_mutex_released();
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US };
+	assert_delays(expected, 1);
 
 	destroy_protected_ads(ads);
 }

@@ -19,11 +19,11 @@
 
 #include <plc-peripherals-i2c.h>
 #include <peripheral-ltc2309.h>
+#include <plc-delay.h>
 
 #include <malloc.h>
 #include <errno.h>
 #include <stdint.h>
-#include <unistd.h>
 
 // clang-format off
 static const uint8_t INITIAL_STATE   = 0b00000000;
@@ -100,7 +100,9 @@ int ltc2309_static_init(const i2c_interface_t* i2c,
 	 *
 	 * Assume the chip could be sleeping.
 	 */
-	usleep(200 * 1000);
+	if (plc_delay_us(200 * 1000) != 0) {
+		return -1;
+	}
 
 	return 0;
 }
@@ -284,7 +286,11 @@ static int ltc2309_read(const i2c_interface_t* i2c,
 			goto ltc2309_read_exit;
 		}
 		LTC(ltc)->last_cmd = new_cmd;
-		usleep(5); // It must wait 1.8 us minimum before reading
+		// It must wait 1.8 us minimum before reading
+		if (plc_delay_us(5) != 0) {
+			ret = -1;
+			goto ltc2309_read_exit;
+		}
 	}
 
 	if (i2c_read(i2c, LTC(ltc)->addr, buffer, 2) != 2) {

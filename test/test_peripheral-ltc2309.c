@@ -18,14 +18,9 @@
 /*
  * Tests for src/peripheral-ltc2309.c. All of its dependencies are mocked:
  * plc-peripherals-i2c.h and plc-peripherals-i2c-hal.h (the calls it makes are
- * stubbed by fake-i2c), and plc-mutex.h (the mutex ltc2309_protect embeds in
- * the handle).
- *
- * ltc2309_init() and ltc2309_static_init() always sleep a real, fixed 200ms
- * (tREFWAKE) with no data-rate-style knob to shorten it. Every test that needs
- * an initialized ltc2309_t pays this once; the suite is measurably slower than
- * ADS101X's as a result, but there's nothing to fake without changing the
- * driver itself.
+ * stubbed by fake-i2c), plc-mutex.h (the mutex ltc2309_protect embeds in the
+ * handle), and plc-delay.h (fake-delay records every delay the driver asks
+ * for, so the tests check the delays instead of the time a call took).
  */
 
 #include "unity.h"
@@ -37,9 +32,12 @@
 #include "mock_plc-peripherals-i2c.h"
 #include "peripheral-ltc2309.h"
 
+#include "mock_plc-delay.h"
+
+#include "fake-delay.h"
+
 #include <errno.h>
 #include <stdlib.h>
-#include <time.h>
 
 #define TEST_I2C FAKE_I2C_IFACE
 #define TEST_ADDR ((plc_i2c_addr_t)0x08)
@@ -57,11 +55,8 @@
 #define COMMAND_BYTE_BIP                                                   0x00
 // clang-format on
 
-static long elapsed_ms(struct timespec start, struct timespec end)
-{
-	return (end.tv_sec - start.tv_sec) * 1000L +
-	       (end.tv_nsec - start.tv_nsec) / 1000000L;
-}
+#define TREFWAKE_US 200000
+#define CMD_DELAY_US 5
 
 static void assert_last_write_was(uint8_t expected_byte)
 {
@@ -155,6 +150,9 @@ acquire_times_out(plc_mutex_t* mutex, uint32_t timeout_ms, int cmock_num_calls)
 
 void setUp(void)
 {
+	fake_delay_reset();
+	plc_delay_us_Stub(fake_plc_delay_us);
+
 	fake_i2c_reset();
 	fake_i2c_expected_addr = TEST_ADDR;
 	i2c_write_Stub(fake_i2c_write);
@@ -176,19 +174,12 @@ void test_ltc2309_init_writes_initial_state_and_waits_trefwake(void)
 {
 	fake_i2c_write_op.retval = 1;
 
-	struct timespec start, end;
-	clock_gettime(CLOCK_MONOTONIC, &start);
-
 	ltc2309_t* ltc = ltc2309_init(TEST_I2C, TEST_ADDR);
-
-	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	TEST_ASSERT_NOT_NULL(ltc);
 	assert_last_write_was(INITIAL_STATE);
-
-	long ms = elapsed_ms(start, end);
-	TEST_ASSERT_GREATER_OR_EQUAL_INT(200, ms);
-	TEST_ASSERT_LESS_THAN_INT(260, ms);
+	TEST_ASSERT_EQUAL_size_t(1, fake_delay.len);
+	TEST_ASSERT_EQUAL_UINT32(TREFWAKE_US, fake_delay.us[0]);
 
 	destroy_ltc(ltc);
 }
@@ -1185,4 +1176,63 @@ void test_ltc2309_read_single_ended_unsigned_when_protected_locks_and_unlocks(
 			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
 	destroy_protected_ltc(ltc);
+}
+
+/* ---------------------------- plc_delay_us -------------------------------- */
+
+void test_ltc2309_read_waits_after_sending_its_command_only(void)
+{
+	ltc2309_t* ltc = create_ltc(); // last_cmd is INITIAL_STATE (P0_N1)
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+	int16_t value;
+
+	// P0_N1 is already last_cmd: no command, so no delay.
+	fake_i2c_read_answers(reading, 2);
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_size_t(0, fake_delay.len);
+
+	fake_i2c_read_answers(reading, 2);
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+	TEST_ASSERT_EQUAL_size_t(1, fake_delay.len);
+	TEST_ASSERT_EQUAL_UINT32(CMD_DELAY_US, fake_delay.us[0]);
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_init_fails_when_waiting_trefwake_fails(void)
+{
+	fake_i2c_write_op.retval = 1;
+	fake_delay.fail_at = 0;
+
+	errno = 0;
+	TEST_ASSERT_NULL(ltc2309_init(TEST_I2C, TEST_ADDR));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+}
+
+void test_ltc2309_read_fails_without_reading_when_the_delay_fails(void)
+{
+	ltc2309_t* ltc = create_ltc();
+
+	fake_delay_reset();
+	fake_delay.fail_at = 0;
+	uint32_t reads_before = fake_i2c_read_op.calls;
+
+	errno = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ltc2309_read_differential_signed(
+			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(reads_before, fake_i2c_read_op.calls);
+
+	destroy_ltc(ltc);
 }
