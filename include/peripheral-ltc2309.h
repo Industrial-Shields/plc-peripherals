@@ -35,8 +35,7 @@ extern "C" {
 #define LTC2309_INTERNAL_ALIGN PLC_MUTEX_ALIGN
 #define LTC2309_INTERNAL_SIZE                                                 \
 	PLC_PERIPHERAL_INTERNAL_PAD(PLC_MUTEX_SIZE + sizeof(plc_i2c_addr_t) + \
-					    2 * sizeof(uint8_t) +             \
-					    sizeof(bool),                     \
+					    sizeof(uint8_t) + sizeof(bool),   \
 				    LTC2309_INTERNAL_ALIGN)
 
 /*

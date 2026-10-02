@@ -56,7 +56,7 @@
 // clang-format on
 
 #define TREFWAKE_US 200000
-#define CMD_DELAY_US 5
+#define CMD_DELAY_US 2
 
 static void assert_last_write_was(uint8_t expected_byte)
 {
@@ -383,7 +383,7 @@ void test_ltc2309_read_differential_signed_fails_with_efault_for_null_ltc(void)
 
 void test_ltc2309_read_differential_signed_returns_a_positive_reading(void)
 {
-	ltc2309_t* ltc = create_ltc(); // starts on P0_N1 (last_cmd=0x00)
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
@@ -394,7 +394,8 @@ void test_ltc2309_read_differential_signed_returns_a_positive_reading(void)
 		ltc2309_read_differential_signed(
 			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 
-	assert_skipped_write(writes_before); // P0_N1 is already last_cmd
+	// P0_N1 bipolar is the same byte init wrote, and it is sent anyway.
+	assert_wrote_cmd(writes_before, INITIAL_STATE);
 	TEST_ASSERT_EQUAL_INT16(255, value);
 
 	destroy_ltc(ltc);
@@ -439,7 +440,8 @@ void test_ltc2309_read_differential_signed_writes_on_a_pair_change(void)
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_differential_signed_skips_the_write_on_the_same_pair(void)
+void test_ltc2309_read_differential_signed_writes_the_command_again_on_the_same_pair(
+	void)
 {
 	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
@@ -450,6 +452,7 @@ void test_ltc2309_read_differential_signed_skips_the_write_on_the_same_pair(void
 		0,
 		ltc2309_read_differential_signed(
 			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
+	const uint8_t cmd = fake_i2c_write_op.bytes[0];
 
 	uint32_t writes_before = fake_i2c_write_op.calls;
 	fake_i2c_read_answers(reading, 2);
@@ -458,7 +461,7 @@ void test_ltc2309_read_differential_signed_skips_the_write_on_the_same_pair(void
 		ltc2309_read_differential_signed(
 			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
 
-	assert_skipped_write(writes_before);
+	assert_wrote_cmd(writes_before, cmd);
 
 	destroy_ltc(ltc);
 }
@@ -507,14 +510,8 @@ void test_ltc2309_read_differential_signed_selects_every_differential_pair(void)
 					      &value,
 					      1000));
 
-		if (idx == 0) {
-			// P0_N1 (index 0) is what last_cmd starts at.
-			assert_skipped_write(writes_before);
-		} else {
-			assert_wrote_cmd(
-				writes_before,
-				(uint8_t)(idx << COMMAND_BYTE_CHANNEL_SHIFT));
-		}
+		assert_wrote_cmd(writes_before,
+				 (uint8_t)(idx << COMMAND_BYTE_CHANNEL_SHIFT));
 
 		destroy_ltc(ltc);
 	}
@@ -539,8 +536,8 @@ void test_ltc2309_read_differential_signed_fails_when_writing_the_command_byte_f
 void test_ltc2309_read_sends_the_command_again_after_a_failed_write(void)
 {
 	// The chip may have got P2_N3 even though the write failed, so going
-	// back to P0_N1, the last_cmd, must not skip the write.
-	ltc2309_t* ltc = create_ltc(); // last_cmd is INITIAL_STATE (P0_N1)
+	// back to P0_N1, the byte init wrote, must send it again.
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 
 	fake_i2c_write_op.retval = -1;
@@ -627,8 +624,7 @@ void test_ltc2309_read_single_ended_unsigned_fails_with_efault_for_null_ltc(void
 
 void test_ltc2309_read_single_ended_unsigned_returns_a_positive_reading(void)
 {
-	ltc2309_t* ltc =
-		create_ltc(); // starts on INITIAL_STATE (last_cmd=0x00)
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	fake_i2c_read_answers(reading, 2);
 
@@ -639,7 +635,7 @@ void test_ltc2309_read_single_ended_unsigned_returns_a_positive_reading(void)
 		ltc2309_read_single_ended_unsigned(
 			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
-	// SD bit must flip to single-ended: last_cmd changes even on channel 0.
+	// SD bit must flip to single-ended, even on channel 0.
 	assert_wrote_cmd(writes_before, COMMAND_BYTE_SGL | COMMAND_BYTE_UNI);
 	TEST_ASSERT_EQUAL_UINT16(255, value);
 
@@ -665,7 +661,7 @@ void test_ltc2309_read_single_ended_unsigned_never_sign_extends_the_top_bit(void
 	destroy_ltc(ltc);
 }
 
-void test_ltc2309_read_single_ended_unsigned_skips_the_write_on_the_same_channel(
+void test_ltc2309_read_single_ended_unsigned_writes_the_command_again_on_the_same_channel(
 	void)
 {
 	ltc2309_t* ltc = create_ltc();
@@ -685,7 +681,7 @@ void test_ltc2309_read_single_ended_unsigned_skips_the_write_on_the_same_channel
 		ltc2309_read_single_ended_unsigned(
 			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
 
-	assert_skipped_write(writes_before);
+	assert_wrote_cmd(writes_before, COMMAND_BYTE_SGL | COMMAND_BYTE_UNI);
 
 	destroy_ltc(ltc);
 }
@@ -1084,14 +1080,14 @@ void test_ltc2309_read_fails_when_the_mutex_cant_be_taken(void)
 
 void test_ltc2309_read_sends_the_command_after_an_owner_died(void)
 {
-	ltc2309_t* ltc = create_protected_ltc(); // last_cmd is INITIAL_STATE
+	ltc2309_t* ltc = create_protected_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 
 	plc_mutex_acquire_Stub(acquire_after_owner_died);
 	fake_i2c_read_answers(reading, 2);
 	expect_mutex_released();
 
-	// P0_N1 bipolar matches last_cmd, but it is sent anyway.
+	// P0_N1 bipolar is the byte init wrote, and it is sent anyway.
 	uint32_t writes_before = fake_i2c_write_op.calls;
 	int16_t value;
 	errno = 0;
@@ -1122,7 +1118,7 @@ void test_ltc2309_read_sends_the_command_again_after_a_failed_recovery(void)
 			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_read_op.calls);
 
-	// The recovery is still pending, so the next read sends the command too.
+	// The next read sends the command too.
 	fake_i2c_write_op.retval = 1;
 	fake_i2c_read_answers(reading, 2);
 	expect_mutex_released();
@@ -1178,31 +1174,126 @@ void test_ltc2309_read_single_ended_unsigned_when_protected_locks_and_unlocks(
 	destroy_protected_ltc(ltc);
 }
 
+/* ------------------------- fresh conversions ---------------------------- */
+
+/*
+ * A model of when the LTC2309 converts (datasheet, "Continuous Read"). A
+ * conversion only starts at a STOP: the one ending a command write, on the
+ * input that command selects, and the one ending a read, on the same input
+ * again. A read returns the last conversion, not one of the input right now.
+ *
+ * chip_input_code is what the selected input is at, as a 12-bit code, and a
+ * test changes it between reads.
+ */
+static uint8_t chip_cmd;
+static uint16_t chip_input_code;
+static uint16_t chip_conversion;
+
+static void chip_converts(void)
+{
+	// Left-justified 12-bit result, the 4 low bits always 0
+	chip_conversion = (uint16_t)(chip_input_code << 4);
+}
+
+static ssize_t chip_write(const i2c_interface_t* i2c,
+			  plc_i2c_addr_t addr,
+			  const uint8_t* to_write,
+			  uint16_t to_write_len,
+			  int num_calls)
+{
+	(void)i2c;
+	(void)num_calls;
+
+	TEST_ASSERT_EQUAL_HEX16(TEST_ADDR, addr);
+	TEST_ASSERT_EQUAL_UINT16(1, to_write_len);
+
+	chip_cmd = to_write[0];
+	chip_converts();
+	return 1;
+}
+
+static ssize_t chip_read(const i2c_interface_t* i2c,
+			 plc_i2c_addr_t addr,
+			 uint8_t* to_read,
+			 uint16_t to_read_len,
+			 int num_calls)
+{
+	(void)i2c;
+	(void)num_calls;
+
+	TEST_ASSERT_EQUAL_HEX16(TEST_ADDR, addr);
+	TEST_ASSERT_EQUAL_UINT16(2, to_read_len);
+
+	to_read[0] = (uint8_t)(chip_conversion >> 8);
+	to_read[1] = (uint8_t)(chip_conversion & 0xFF);
+
+	// The STOP ending the read starts the next conversion
+	chip_converts();
+	return 2;
+}
+
+void test_ltc2309_read_again_of_the_same_input_is_a_fresh_conversion(void)
+{
+	/*
+	 * regressions-3x.md D27, and examples/LTC2309_StaleRead on hardware:
+	 * a read of the same input as the previous one must not return the
+	 * conversion that read started, but one of the input as it is now.
+	 */
+	ltc2309_t* ltc = create_ltc();
+	const uint8_t ch4_cmd =
+		(uint8_t)(LTC2309_CH4 << COMMAND_BYTE_CHANNEL_SHIFT) |
+		COMMAND_BYTE_SGL | COMMAND_BYTE_UNI;
+	uint16_t value;
+
+	i2c_write_Stub(chip_write);
+	i2c_read_Stub(chip_read);
+
+	chip_input_code = 3300;
+	TEST_ASSERT_EQUAL_INT(0,
+			      ltc2309_read_single_ended_unsigned(
+				      TEST_I2C, ltc, LTC2309_CH4, &value, 0));
+	TEST_ASSERT_EQUAL_HEX8(ch4_cmd, chip_cmd);
+	TEST_ASSERT_EQUAL_UINT16(3300, value);
+
+	// The input changes after the read, as when a wire is moved
+	chip_input_code = 0;
+	TEST_ASSERT_EQUAL_INT(0,
+			      ltc2309_read_single_ended_unsigned(
+				      TEST_I2C, ltc, LTC2309_CH4, &value, 0));
+	TEST_ASSERT_EQUAL_UINT16(0, value);
+
+	chip_input_code = 3300;
+	TEST_ASSERT_EQUAL_INT(0,
+			      ltc2309_read_single_ended_unsigned(
+				      TEST_I2C, ltc, LTC2309_CH4, &value, 0));
+	TEST_ASSERT_EQUAL_UINT16(3300, value);
+
+	destroy_ltc(ltc);
+}
+
 /* ---------------------------- plc_delay_us -------------------------------- */
 
-void test_ltc2309_read_waits_after_sending_its_command_only(void)
+void test_ltc2309_read_waits_the_conversion_after_every_command(void)
 {
-	ltc2309_t* ltc = create_ltc(); // last_cmd is INITIAL_STATE (P0_N1)
+	ltc2309_t* ltc = create_ltc();
 	static const uint8_t reading[2] = { 0x0F, 0xF0 };
 	int16_t value;
 
-	// P0_N1 is already last_cmd: no command, so no delay.
-	fake_i2c_read_answers(reading, 2);
-	fake_delay_reset();
-	TEST_ASSERT_EQUAL_INT(
-		0,
-		ltc2309_read_differential_signed(
-			TEST_I2C, ltc, LTC2309_P0_N1, &value, 1000));
-	TEST_ASSERT_EQUAL_size_t(0, fake_delay.len);
-
-	fake_i2c_read_answers(reading, 2);
-	fake_delay_reset();
-	TEST_ASSERT_EQUAL_INT(
-		0,
-		ltc2309_read_differential_signed(
-			TEST_I2C, ltc, LTC2309_P2_N3, &value, 1000));
-	TEST_ASSERT_EQUAL_size_t(1, fake_delay.len);
-	TEST_ASSERT_EQUAL_UINT32(CMD_DELAY_US, fake_delay.us[0]);
+	// Twice the same input, then another one: each read waits.
+	for (int i = 0; i < 3; i++) {
+		fake_i2c_read_answers(reading, 2);
+		fake_delay_reset();
+		TEST_ASSERT_EQUAL_INT(
+			0,
+			ltc2309_read_differential_signed(TEST_I2C,
+							 ltc,
+							 i < 2 ? LTC2309_P0_N1 :
+								 LTC2309_P2_N3,
+							 &value,
+							 1000));
+		TEST_ASSERT_EQUAL_size_t(1, fake_delay.len);
+		TEST_ASSERT_EQUAL_UINT32(CMD_DELAY_US, fake_delay.us[0]);
+	}
 
 	destroy_ltc(ltc);
 }
