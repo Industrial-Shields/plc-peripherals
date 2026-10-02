@@ -155,3 +155,45 @@ void test_plc_delay_us_falls_back_to_the_realtime_clock(void)
 	TEST_ASSERT_EQUAL_INT_MESSAGE(
 		0, WEXITSTATUS(status), "The delay ended early");
 }
+
+void test_plc_time_us_reads_the_realtime_clock_too(void)
+{
+	fflush(NULL);
+	pid_t pid = fork();
+	TEST_ASSERT_GREATER_OR_EQUAL_INT(0, pid);
+
+	if (pid == 0) {
+		struct timespec realtime;
+		uint64_t now;
+
+		if (hide_monotonic_sleeps() != 0) {
+			_exit(1);
+		}
+
+		errno = 0;
+		if (plc_time_us(&now) != 0 || errno != 0) {
+			_exit(2);
+		}
+		clock_gettime(CLOCK_REALTIME, &realtime);
+
+		// CLOCK_REALTIME counts from 1970, CLOCK_MONOTONIC from boot
+		const uint64_t realtime_us =
+			(uint64_t)realtime.tv_sec * 1000000U +
+			(uint64_t)realtime.tv_nsec / 1000U;
+		if (realtime_us - now > 1000000U) {
+			_exit(3);
+		}
+
+		_exit(0);
+	}
+
+	int status = 0;
+	TEST_ASSERT_EQUAL_INT(pid, waitpid(pid, &status, 0));
+	TEST_ASSERT_TRUE_MESSAGE(WIFEXITED(status), "Child didn't exit");
+	TEST_ASSERT_NOT_EQUAL_INT_MESSAGE(
+		1, WEXITSTATUS(status), "Couldn't hide the monotonic sleeps");
+	TEST_ASSERT_NOT_EQUAL_INT_MESSAGE(
+		2, WEXITSTATUS(status), "plc_time_us failed");
+	TEST_ASSERT_EQUAL_INT_MESSAGE(
+		0, WEXITSTATUS(status), "It didn't read the realtime clock");
+}

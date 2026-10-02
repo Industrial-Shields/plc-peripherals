@@ -217,3 +217,21 @@ void test_plc_delay_us_lets_a_lower_priority_task_run_for_whole_ticks(void)
 	TEST_IGNORE_MESSAGE("FreeRTOS only");
 }
 #endif // PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+
+void test_plc_time_us_fails_with_efault_for_null(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, plc_time_us(NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_plc_time_us_advances_at_least_by_a_delay(void)
+{
+	uint64_t start, end;
+
+	TEST_ASSERT_EQUAL_INT(0, plc_time_us(&start));
+	TEST_ASSERT_EQUAL_INT(0, plc_delay_us(20000));
+	TEST_ASSERT_EQUAL_INT(0, plc_time_us(&end));
+
+	TEST_ASSERT_TRUE(end - start >= 20000);
+}

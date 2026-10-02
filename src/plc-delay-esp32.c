@@ -22,6 +22,8 @@
 
 #if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
 
+#include <errno.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <esp_timer.h>
@@ -57,6 +59,16 @@ int plc_delay_us(uint32_t us)
 		taskYIELD();
 	}
 
+	return 0;
+}
+
+int plc_time_us(uint64_t* us)
+{
+	if (us == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+	*us = (uint64_t)esp_timer_get_time();
 	return 0;
 }
 

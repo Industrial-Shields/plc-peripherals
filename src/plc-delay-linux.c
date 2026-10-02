@@ -122,4 +122,24 @@ int plc_delay_us(uint32_t us)
 	return 0;
 }
 
+int plc_time_us(uint64_t* us)
+{
+	struct timespec now;
+
+	if (us == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	pthread_once(&delay_clock_once, pick_delay_clock);
+
+	if (clock_gettime(delay_clock, &now) != 0) {
+		return -1;
+	}
+
+	*us = (uint64_t)now.tv_sec * US_PER_S +
+	      (uint64_t)now.tv_nsec / NS_PER_US;
+	return 0;
+}
+
 #endif // PLC_ENVIRONMENT == PLC_LINUX

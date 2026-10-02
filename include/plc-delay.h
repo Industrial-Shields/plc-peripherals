@@ -20,7 +20,8 @@
 #ifndef PLC_DELAY_H_
 #define PLC_DELAY_H_
 
-// The delays the drivers wait for their datasheet timings.
+// The delays the drivers wait for their datasheet timings, and the clock
+// they measure time with.
 #include <stdint.h>
 
 #include <plc-peripherals-platform.h>
@@ -69,6 +70,33 @@ extern "C" {
  *     - ESP32 specific: It can never fail.
  */
 int plc_delay_us(uint32_t us);
+
+/**
+ * plc_time_us
+ *
+ * Get the time of the clock plc_delay_us waits on, in microseconds. Its
+ * starting point is arbitrary, so only the difference between two calls means
+ * anything.
+ *
+ * Linux specific:
+ *   - It reads CLOCK_MONOTONIC if available, as plc_delay_us does. If the
+ *     kernel doesn't have it, or can't sleep on it, it reads CLOCK_REALTIME
+ *     instead, which jumps when the wall-clock time is set.
+ *
+ * Parameters:
+ *   us (uint64_t*) - Where the time is stored.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed us is NULL.
+ *     - Linux specific:
+ *       - (others) : Whatever clock_gettime reports. A working kernel never
+ *                    does.
+ */
+int plc_time_us(uint64_t* us);
 
 #ifdef __cplusplus
 }
