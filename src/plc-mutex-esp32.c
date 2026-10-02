@@ -77,7 +77,7 @@ plc_mutex_t* plc_mutex_create(void)
 		ECM(malloc(sizeof(error_checker_mutex_t)));
 
 	if (mutex_struct == NULL) {
-		errno = ENOMEM;
+		PLC_SET_MALLOC_ERRNO();
 	}
 
 	else if (create_esp_mutex(mutex_struct) != 0) {

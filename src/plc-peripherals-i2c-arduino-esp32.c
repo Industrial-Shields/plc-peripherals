@@ -74,9 +74,12 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 	}
 
 	i2c_interface_t* ret = malloc(sizeof(struct _i2c_interface_t));
-	if (ret != NULL) {
+	if (ret == NULL) {
+		PLC_SET_MALLOC_ERRNO();
+	} else {
 		ret->bus_number = bus;
 	}
+
 	return ret;
 }
 

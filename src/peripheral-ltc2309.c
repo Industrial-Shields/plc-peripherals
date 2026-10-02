@@ -112,7 +112,7 @@ ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr)
 	ltc2309_t* ret = malloc(sizeof(ltc2309_t));
 
 	if (ret == NULL) {
-		errno = ENOMEM;
+		PLC_SET_MALLOC_ERRNO();
 		return NULL;
 	}
 

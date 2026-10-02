@@ -344,7 +344,7 @@ ads101x_t* ads101x_init(const i2c_interface_t* i2c,
 	ads101x_t* ret = malloc(sizeof(ads101x_t));
 
 	if (ret == NULL) {
-		errno = ENOMEM;
+		PLC_SET_MALLOC_ERRNO();
 		return NULL;
 	}
 

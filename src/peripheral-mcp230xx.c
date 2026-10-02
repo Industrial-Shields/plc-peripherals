@@ -350,7 +350,7 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 	mcp230xx_t* ret = malloc(sizeof(mcp230xx_t));
 
 	if (ret == NULL) {
-		errno = ENOMEM;
+		PLC_SET_MALLOC_ERRNO();
 		return NULL;
 	}
 

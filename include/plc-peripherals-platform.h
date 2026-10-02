@@ -47,6 +47,17 @@
 #endif
 
 /*
+ * Set errno after a failed malloc. On Linux, malloc already sets it to ENOMEM
+ * (POSIX), so it is left as it is. The ESP32 malloc doesn't set it.
+ */
+#if PLC_ENVIRONMENT == PLC_LINUX
+#define PLC_SET_MALLOC_ERRNO() ((void)0)
+#else
+#include <errno.h>
+#define PLC_SET_MALLOC_ERRNO() (errno = ENOMEM)
+#endif
+
+/*
  * Helpers to size and align the opaque storage of a handle, in both C and C++.
  */
 #if defined(__cplusplus)

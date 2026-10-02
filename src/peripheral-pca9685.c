@@ -408,7 +408,7 @@ pca9685_t* pca9685_init(const i2c_interface_t* i2c,
 	pca9685_t* ret = malloc(sizeof(pca9685_t));
 
 	if (ret == NULL) {
-		errno = ENOMEM;
+		PLC_SET_MALLOC_ERRNO();
 		return NULL;
 	}
 

@@ -80,6 +80,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 
 	i2c_interface_t* i2c = malloc(sizeof(i2c_interface_t));
 	if (!i2c) {
+		PLC_SET_MALLOC_ERRNO();
 		goto i2c_init_return_null;
 	}
 

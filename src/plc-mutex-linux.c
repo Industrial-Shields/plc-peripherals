@@ -239,10 +239,11 @@ plc_mutex_t* plc_mutex_create(void)
 {
 	plc_mutex_t* mutex = malloc(sizeof(plc_mutex_t));
 
-	if (mutex != NULL &&
-	    create_pthread_mutex(mutex, PLC_MUTEX_SCOPE_PRIVATE) != 0) {
+	if (mutex == NULL) {
+		PLC_SET_MALLOC_ERRNO();
+	} else if (create_pthread_mutex(mutex, PLC_MUTEX_SCOPE_PRIVATE) != 0) {
 		free(mutex);
-		mutex = NULL;
+		return NULL;
 	}
 
 	return mutex;
