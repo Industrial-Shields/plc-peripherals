@@ -23,5 +23,8 @@
 #include <plc-peripherals-version.h>
 #include <plc-peripherals-i2c.h>
 #include <peripheral-ads101x.h>
+#include <peripheral-ltc2309.h>
+#include <peripheral-mcp230xx.h>
+#include <peripheral-pca9685.h>
 
 #endif // PLC_PERIPHERALS_H_
