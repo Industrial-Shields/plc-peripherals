@@ -84,9 +84,9 @@ typedef enum {
 typedef enum {
 	// clang-format off
 	ADS101X_P0_N1  = 0b000,
-	ADS101X_P1_N3  = 0b001,
-	ADS101X_P2_N3  = 0b010,
-	ADS101X_P3_N3  = 0b011,
+	ADS101X_P0_N3  = 0b001,
+	ADS101X_P1_N3  = 0b010,
+	ADS101X_P2_N3  = 0b011,
 	ADS101X_P0_GND = 0b100,
 	ADS101X_P1_GND = 0b101,
 	ADS101X_P2_GND = 0b110,

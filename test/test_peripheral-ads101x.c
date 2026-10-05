@@ -941,7 +941,7 @@ void test_ads101x_single_read_selects_the_requested_channel(void)
 {
 	ads101x_t* ads = create_ads(false);
 
-	// MUX bits (14-12) cleared then set to P1_N3's index (1): bit12 set.
+	// MUX bits (14-12) cleared then set to P0_N3's index (1): bit12 set.
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
 				       CONFIG_REG,
@@ -952,7 +952,7 @@ void test_ads101x_single_read_selects_the_requested_channel(void)
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ads101x_single_read(TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N3, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -972,7 +972,7 @@ void test_ads101x_single_read_switches_correctly_between_two_nonzero_channels(
 	int16_t value;
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ads101x_single_read(TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N3, &value, 1000));
 
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
@@ -983,7 +983,7 @@ void test_ads101x_single_read_switches_correctly_between_two_nonzero_channels(
 
 	TEST_ASSERT_EQUAL_INT(
 		0,
-		ads101x_single_read(TEST_I2C, ads, ADS101X_P2_N3, &value, 1000));
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -1271,7 +1271,7 @@ void test_ads101x_continuous_read_writes_on_a_channel_change(void)
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_continuous_read(
-			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
+			TEST_I2C, ads, ADS101X_P0_N3, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -1298,7 +1298,7 @@ void test_ads101x_continuous_read_writes_again_after_returning_to_a_previous_cha
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_continuous_read(
-			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
+			TEST_I2C, ads, ADS101X_P0_N3, &value, 1000));
 
 	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 				       TEST_ADDR,
@@ -1360,7 +1360,7 @@ void test_ads101x_continuous_read_fails_when_writing_the_config_reg_fails(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1,
 		ads101x_continuous_read(
-			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
+			TEST_I2C, ads, ADS101X_P0_N3, &value, 1000));
 
 	destroy_ads(ads);
 }
