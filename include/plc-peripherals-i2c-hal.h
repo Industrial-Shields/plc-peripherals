@@ -115,14 +115,15 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
  *   deinit_i2c_bus (bool)  - If true, also de-initialize the I2C bus.
  *
  * Returns:
- *   int - 0 if successful, 1 if the bus was de-initialized, or -1 if some error
- *         happens.
+ *   int - 0 if successful, and the interface is freed. -1 if some error
+ *         happens, and the interface is not freed.
  *
  * Errors:
  *   errno set to:
  *     - EFAULT        : Passed i2c_interface is NULL.
  *     - ESP32 specific:
- *       - EIO         : i2cDeinit function reported some error.
+ *       - EIO         : i2cDeinit function reported some error, and the bus
+ *                       is still initialized.
  *     - Linux specific:
  *       - ENOTSUP     : deinit_i2c_bus was true. This function only closes
  *                       the interface, it doesn't take down the I2C bus.
