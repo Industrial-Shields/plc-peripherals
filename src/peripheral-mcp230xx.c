@@ -30,6 +30,11 @@
 #include <errno.h>
 #include <stdint.h>
 
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32 || PLC_ENVIRONMENT == PLC_ESP_IDF
+// ESP-IDF's soc/gpio_reg.h has a GPIO_REG(io_num), avoid name collisions
+#undef GPIO_REG
+#endif
+
 // clang-format off
 #define IODIR_REG                                      0x00
 #define IPOL_REG                                       0x01

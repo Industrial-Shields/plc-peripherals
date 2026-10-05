@@ -28,7 +28,10 @@
 #include <esp32-hal-i2c.h>
 
 #include <esp_log.h>
+// Only the ESP_LOGx calls use it, and they compile to nothing at level 0
+#if defined(CORE_DEBUG_LEVEL) && CORE_DEBUG_LEVEL > 0
 static const char* TAG = "plc-peripherals-i2c";
+#endif
 
 struct _i2c_interface_t {
 	uint8_t bus_number;
