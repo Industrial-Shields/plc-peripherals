@@ -21,6 +21,7 @@
 #include <peripheral-ads101x.h>
 #include <plc-delay.h>
 
+#include <assert.h>
 #include <malloc.h>
 #include <errno.h>
 #include <stdint.h>
@@ -150,6 +151,7 @@ static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 #define ADS101X_IS_CONTINUOUS_MODE_REG(reg) (!((reg) & CONFIG_REG_MODE))
 
 #define ADS101X_GET_DR(cfg) ((cfg & CONFIG_REG_DR) >> CONFIG_REG_DR_SHIFT)
+#define ADS101X_NORMALIZE_DR(dr) ((dr) == 0b111 ? ADS101X_3300SPS : (dr))
 #define ADS101X_SET_DR(cfg, dr)                   \
 	do {                                      \
 		cfg &= ~CONFIG_REG_DR;            \
@@ -159,6 +161,11 @@ static int ads101x_delay_until_conversion(ADS101X_DATA_RATE dr)
 {
 	return plc_delay_us(ads101x_get_conversion_time_us(dr));
 }
+#define ADS101X_DELAY_UNTIL_NEW_CFG(ads)                         \
+	(ads101x_delay_until_conversion(                         \
+		 ADS101X_GET_DR(ADS(ads)->last_cfg_reg)) != 0 || \
+	 ads101x_delay_until_conversion(                         \
+		 ADS101X_GET_DR(ADS(ads)->expected_cfg_reg)) != 0)
 
 #define ADS101X_CHANGE_CHANNEL(new_cfg, channel_index)            \
 	do {                                                      \
@@ -209,6 +216,61 @@ static int ads101x_resync_if_needed(const i2c_interface_t* i2c,
 	return 0;
 }
 
+/*
+ * Read the last conversion result. The caller checks ads and return_value for
+ * NULL, and must hold the lock before calling it (if protected).
+ */
+static int ads101x_read_conversion(const i2c_interface_t* i2c,
+				   const ads101x_internal_t* ads,
+				   int16_t* return_value)
+{
+	uint16_t read_value;
+
+	assert(ads != NULL);
+	assert(return_value != NULL);
+
+	if (i2c_read8_16b(i2c, ads->addr, CONVERSION_REG, &read_value) != 0) {
+		return -1;
+	}
+
+	/*
+	 * The low 4 bits are reserved and always read back 0 (SBAS473F, Table
+	 * 8-3). Anything else is a corrupted transfer.
+	 */
+	if ((read_value & CONVERSION_REG_RESERVED) != 0) {
+		errno = ERANGE;
+		return -1;
+	}
+
+	*return_value = ads101x_conversion_reg_to_value(read_value);
+	return 0;
+}
+
+/*
+ * Check that the ADS101X is in the mode of the read, and select input "index".
+ * The caller checks ads for NULL, and must hold the lock before calling it (if
+ * protected).
+ */
+static int ads101x_prepare_read(const i2c_interface_t* i2c,
+				ads101x_internal_t* ads,
+				ADS101X_INPUT index,
+				bool continuous)
+{
+	assert(ads != NULL);
+
+	if (ADS101X_IS_CONTINUOUS_MODE(ads) != continuous) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (ads101x_resync_if_needed(i2c, ads) != 0) {
+		return -1;
+	}
+
+	ADS101X_CHANGE_CHANNEL(ads->expected_cfg_reg, index);
+	return 0;
+}
+
 int ads101x_static_init(const i2c_interface_t* i2c,
 			ads101x_t* ads,
 			plc_i2c_addr_t addr,
@@ -234,12 +296,8 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 		fsr_to_write = cfg->fsr;
 	}
 
-	// Ensure we write a valid enum (0b111 is equivalent to 3300 SPS)
-	if (cfg->dr == 0b111) {
-		dr_to_write = ADS101X_3300SPS;
-	} else {
-		dr_to_write = cfg->dr;
-	}
+	// Ensure we write a valid enum
+	dr_to_write = ADS101X_NORMALIZE_DR(cfg->dr);
 
 	if (fsr_to_write > ADS101X_FSR_0_256V ||
 	    dr_to_write > ADS101X_3300SPS) {
@@ -453,7 +511,6 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 			int16_t* return_value,
 			uint32_t timeout_ms)
 {
-	uint16_t read_value;
 	int ret;
 
 	if (ads == NULL || return_value == NULL) {
@@ -474,18 +531,10 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (ADS101X_IS_CONTINUOUS_MODE(ads)) {
-		errno = EINVAL;
+	if (ads101x_prepare_read(i2c, ADS(ads), index, false) != 0) {
 		ret = -1;
 		goto ads101x_single_read_exit;
 	}
-
-	if (ads101x_resync_if_needed(i2c, ADS(ads)) != 0) {
-		ret = -1;
-		goto ads101x_single_read_exit;
-	}
-
-	ADS101X_CHANGE_CHANNEL(ADS(ads)->expected_cfg_reg, index);
 
 	if (i2c_write8_16b(i2c,
 			   ADS(ads)->addr,
@@ -502,24 +551,7 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 		goto ads101x_single_read_exit;
 	}
 
-	if (i2c_read8_16b(i2c, ADS(ads)->addr, CONVERSION_REG, &read_value) !=
-	    0) {
-		ret = -1;
-		goto ads101x_single_read_exit;
-	}
-
-	/*
-	 * The low 4 bits are reserved and always read back 0 (SBAS473F, Table
-	 * 8-3). Anything else is a corrupted transfer.
-	 */
-	if ((read_value & CONVERSION_REG_RESERVED) != 0) {
-		errno = ERANGE;
-		ret = -1;
-		goto ads101x_single_read_exit;
-	}
-
-	*return_value = ads101x_conversion_reg_to_value(read_value);
-	ret = 0;
+	ret = ads101x_read_conversion(i2c, ADS(ads), return_value);
 
 ads101x_single_read_exit:
 	ads101x_unlock(ADS(ads));
@@ -556,7 +588,6 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 			    int16_t* return_value,
 			    uint32_t timeout_ms)
 {
-	uint16_t read_value;
 	int ret;
 
 	if (ads == NULL || return_value == NULL) {
@@ -577,18 +608,10 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (!ADS101X_IS_CONTINUOUS_MODE(ads)) {
-		errno = EINVAL;
+	if (ads101x_prepare_read(i2c, ADS(ads), index, true) != 0) {
 		ret = -1;
 		goto ads101x_continuous_read_exit;
 	}
-
-	if (ads101x_resync_if_needed(i2c, ADS(ads)) != 0) {
-		ret = -1;
-		goto ads101x_continuous_read_exit;
-	}
-
-	ADS101X_CHANGE_CHANNEL(ADS(ads)->expected_cfg_reg, index);
 
 	if (ADS(ads)->expected_cfg_reg != ADS(ads)->last_cfg_reg) {
 		if (i2c_write8_16b(i2c,
@@ -609,13 +632,7 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 		 * rate Wait the old conversion time plus one full conversion at
 		 * the new rate.
 		 */
-		if (ads101x_delay_until_conversion(
-			    ADS101X_GET_DR(ADS(ads)->last_cfg_reg)) != 0) {
-			ret = -1;
-			goto ads101x_continuous_read_exit;
-		}
-		if (ads101x_delay_until_conversion(
-			    ADS101X_GET_DR(ADS(ads)->expected_cfg_reg)) != 0) {
+		if (ADS101X_DELAY_UNTIL_NEW_CFG(ads)) {
 			ret = -1;
 			goto ads101x_continuous_read_exit;
 		}
@@ -623,24 +640,7 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 		ADS(ads)->last_cfg_reg = ADS(ads)->expected_cfg_reg;
 	}
 
-	if (i2c_read8_16b(i2c, ADS(ads)->addr, CONVERSION_REG, &read_value) !=
-	    0) {
-		ret = -1;
-		goto ads101x_continuous_read_exit;
-	}
-
-	/*
-	 * The low 4 bits are reserved and always read back 0 (SBAS473F, Table
-	 * 8-3). Anything else is a corrupted transfer.
-	 */
-	if ((read_value & CONVERSION_REG_RESERVED) != 0) {
-		errno = ERANGE;
-		ret = -1;
-		goto ads101x_continuous_read_exit;
-	}
-
-	*return_value = ads101x_conversion_reg_to_value(read_value);
-	ret = 0;
+	ret = ads101x_read_conversion(i2c, ADS(ads), return_value);
 
 ads101x_continuous_read_exit:
 	ads101x_unlock(ADS(ads));
@@ -686,7 +686,7 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr, uint32_t timeout_ms)
 
 	local_dr = ADS101X_GET_DR(ADS(ads)->expected_cfg_reg);
 	// Ensure we return a valid enum (0b111 is equivalent to 3300 SPS)
-	*dr = local_dr == 0b111 ? ADS101X_3300SPS : local_dr;
+	*dr = ADS101X_NORMALIZE_DR(local_dr);
 
 	ads101x_unlock(ADS(ads));
 
@@ -705,10 +705,8 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	// Ensure we write a valid enum (0b111 is equivalent to 3300 SPS)
-	if (dr == 0b111) {
-		dr = ADS101X_3300SPS;
-	}
+	// Ensure we write a valid enum
+	dr = ADS101X_NORMALIZE_DR(dr);
 
 	if (dr > ADS101X_3300SPS) {
 		errno = EINVAL;
@@ -751,13 +749,7 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 		 * rate. Wait it out, then wait one full conversion at the new
 		 * rate.
 		 */
-		if (ads101x_delay_until_conversion(
-			    ADS101X_GET_DR(ADS(ads)->last_cfg_reg)) != 0) {
-			ret = -1;
-			goto ads101x_set_fs_exit;
-		}
-		if (ads101x_delay_until_conversion(
-			    ADS101X_GET_DR(ADS(ads)->expected_cfg_reg)) != 0) {
+		if (ADS101X_DELAY_UNTIL_NEW_CFG(ads)) {
 			ret = -1;
 			goto ads101x_set_fs_exit;
 		}
