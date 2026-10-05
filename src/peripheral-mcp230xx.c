@@ -607,6 +607,52 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 	return 0;
 }
 
+int mcp230xx_read_all_gpios(const i2c_interface_t* i2c,
+			    mcp230xx_t* mcp,
+			    uint16_t* return_value,
+			    uint32_t timeout_ms)
+{
+	uint16_t gpio_regs_017;
+	uint8_t gpio_reg_008;
+	int result;
+
+	if (mcp == NULL || return_value == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
+		return -1;
+	}
+
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
+	if (MCP_TYPE(mcp) == MCP230XX_017) {
+		result = i2c_read8_16b(i2c,
+				       MCP(mcp)->addr,
+				       REG_A(GPIO_REG, MCP_TYPE(mcp)),
+				       &gpio_regs_017);
+	} else {
+		result = i2c_read8_8b(
+			i2c, MCP(mcp)->addr, GPIO_REG, &gpio_reg_008);
+	}
+	mcp230xx_unlock(MCP(mcp));
+
+	if (result != 0) {
+		return result;
+	}
+
+	if (MCP_TYPE(mcp) == MCP230XX_017) {
+		// GPIOA is the first byte read, and holds GPIOs 0 to 7
+		*return_value =
+			(uint16_t)((gpio_regs_017 >> 8) | (gpio_regs_017 << 8));
+	} else {
+		*return_value = gpio_reg_008;
+	}
+	return 0;
+}
+
 int mcp230xx_set_output(const i2c_interface_t* i2c,
 			mcp230xx_t* mcp,
 			uint8_t index,

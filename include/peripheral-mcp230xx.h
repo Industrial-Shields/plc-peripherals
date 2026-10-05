@@ -416,6 +416,38 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 		       uint32_t timeout_ms);
 
 /**
+ * mcp230xx_read_all_gpios
+ *
+ * Read the level of every GPIO of MCP230XX "mcp" at once, in a single I2C
+ * transfer. Bit i is GPIO i, as indexed by mcp230xx_read_gpio. On an MCP23008,
+ * bits 8 to 15 are 0. A GPIO declared as output reads the level of its pin.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
+ *   return_value (uint16_t*)     - The value in which the reading will be
+ *                                  stored.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *                                  applicable when the MCP230XX is protected.
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed mcp230xx_t, return_value or i2c is NULL.
+ *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
+ */
+int mcp230xx_read_all_gpios(const i2c_interface_t* i2c,
+			    mcp230xx_t* mcp,
+			    uint16_t* return_value,
+			    uint32_t timeout_ms);
+
+/**
  * mcp230xx_set_output
  *
  * Set a GPIO of the MCP230XX "mcp" as an output.
