@@ -64,12 +64,18 @@
 #define OLAT_REG                                       0x0A
 // clang-format on
 
+typedef union {
+	uint16_t gpio_017;
+	uint8_t gpio_008;
+} mcp230xx_gpio_reg_t;
+
 typedef struct {
 	plc_mutex_t mutex;
 	plc_i2c_addr_t addr;
 	uint8_t bus;
 	uint8_t type;
 	bool is_protected;
+	mcp230xx_gpio_reg_t last_gpio;
 } mcp230xx_internal_t;
 
 _Static_assert(sizeof(mcp230xx_t) == sizeof(mcp230xx_internal_t),
@@ -311,6 +317,7 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
 			 bool restart,
 			 const mcp230xx_config_t* cfg)
 {
+	uint16_t gpio_regs;
 	uint8_t cfg_reg;
 	uint8_t bus;
 
@@ -387,6 +394,25 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
 
 	if (i2c_write8_8b(i2c, addr, iocon_reg, cfg_reg) != 0) {
 		return -1;
+	}
+
+	if (cfg->type == MCP230XX_017) {
+		if (i2c_read8_16b(i2c,
+				  addr,
+				  REG_A(GPIO_REG, cfg->type),
+				  &gpio_regs) != 0) {
+			return -1;
+		}
+
+		MCP(mcp)->last_gpio.gpio_017 =
+			(uint16_t)((gpio_regs >> 8) | (gpio_regs << 8));
+	} else {
+		if (i2c_read8_8b(i2c,
+				 addr,
+				 GPIO_REG,
+				 &MCP(mcp)->last_gpio.gpio_008) != 0) {
+			return -1;
+		}
 	}
 
 	MCP(mcp)->addr = addr;
@@ -592,10 +618,29 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
 		return -1;
 	}
+
 	result = i2c_read8_8b(i2c,
 			      MCP(mcp)->addr,
 			      GPIO_REG_ADDR(mcp, GPIO_REG, index),
 			      &gpio_reg);
+	if (result == 0) {
+		if (MCP_TYPE(mcp) == MCP230XX_017) {
+			if (index < MCP23008_MAX_GPIOS) {
+				MCP(mcp)->last_gpio.gpio_017 =
+					(MCP(mcp)->last_gpio.gpio_017 &
+					 0xFF00) |
+					gpio_reg;
+			} else {
+				MCP(mcp)->last_gpio.gpio_017 =
+					(MCP(mcp)->last_gpio.gpio_017 &
+					 0x00FF) |
+					(gpio_reg << 8);
+			}
+		} else {
+			MCP(mcp)->last_gpio.gpio_008 = gpio_reg;
+		}
+	}
+
 	mcp230xx_unlock(MCP(mcp));
 
 	if (result != 0) {
@@ -633,24 +678,23 @@ int mcp230xx_read_all_gpios(const i2c_interface_t* i2c,
 				       MCP(mcp)->addr,
 				       REG_A(GPIO_REG, MCP_TYPE(mcp)),
 				       &gpio_regs_017);
+		if (result == 0) {
+			MCP(mcp)->last_gpio.gpio_017 =
+				(uint16_t)((gpio_regs_017 >> 8) |
+					   (gpio_regs_017 << 8));
+			*return_value = MCP(mcp)->last_gpio.gpio_017;
+		}
 	} else {
 		result = i2c_read8_8b(
 			i2c, MCP(mcp)->addr, GPIO_REG, &gpio_reg_008);
+		if (result == 0) {
+			MCP(mcp)->last_gpio.gpio_008 = gpio_reg_008;
+			*return_value = gpio_reg_008;
+		}
 	}
 	mcp230xx_unlock(MCP(mcp));
 
-	if (result != 0) {
-		return result;
-	}
-
-	if (MCP_TYPE(mcp) == MCP230XX_017) {
-		// GPIOA is the first byte read, and holds GPIOs 0 to 7
-		*return_value =
-			(uint16_t)((gpio_regs_017 >> 8) | (gpio_regs_017 << 8));
-	} else {
-		*return_value = gpio_reg_008;
-	}
-	return 0;
+	return result;
 }
 
 int mcp230xx_set_output(const i2c_interface_t* i2c,
@@ -715,6 +759,225 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 				      GPIO_REG_ADDR(mcp, OLAT_REG, index),
 				      GPIO_PIN_MASK(index),
 				      to_write != MCP230XX_LOW);
+	mcp230xx_unlock(MCP(mcp));
+
+	return result;
+}
+
+int mcp230xx_enable_interrupt(const i2c_interface_t* i2c,
+			      mcp230xx_t* mcp,
+			      uint8_t index,
+			      MCP230XX_INT_MODE mode,
+			      uint32_t timeout_ms)
+{
+	uint8_t gpinten_reg, intcon_reg, defval_reg;
+	int result;
+
+	if (mcp == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (mcp230xx_check_gpio(mcp, index) != 0) {
+		return -1;
+	}
+
+	if (mode != MCP230XX_INT_ON_CHANGE && mode != MCP230XX_INT_WHILE_HIGH &&
+	    mode != MCP230XX_INT_WHILE_LOW) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
+		return -1;
+	}
+
+	const uint8_t gpinten_addr = GPIO_REG_ADDR(mcp, GPINTEN_REG, index);
+	const uint8_t intcon_addr = GPIO_REG_ADDR(mcp, INTCON_REG, index);
+	const uint8_t defval_addr = GPIO_REG_ADDR(mcp, DEFVAL_REG, index);
+	const uint8_t pin_mask = GPIO_PIN_MASK(index);
+
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
+
+	if (i2c_read8_8b(i2c, MCP(mcp)->addr, gpinten_addr, &gpinten_reg) !=
+		    0 ||
+	    i2c_read8_8b(i2c, MCP(mcp)->addr, intcon_addr, &intcon_reg) != 0 ||
+	    i2c_read8_8b(i2c, MCP(mcp)->addr, defval_addr, &defval_reg) != 0) {
+		result = -1;
+		goto enable_interrupt_error_cleanup;
+	}
+
+	/*
+	 * INTCON compares the input with its previous value (0) or with DEFVAL
+	 * (1), and the interrupt fires while it differs from DEFVAL. DEFVAL
+	 * doesn't matter on a change.
+	 */
+	const uint8_t new_gpinten = gpinten_reg | pin_mask;
+	const uint8_t new_intcon = mode == MCP230XX_INT_ON_CHANGE ?
+					   intcon_reg & ~pin_mask :
+					   intcon_reg | pin_mask;
+	const uint8_t new_defval =
+		mode == MCP230XX_INT_WHILE_LOW	? defval_reg | pin_mask :
+		mode == MCP230XX_INT_WHILE_HIGH ? defval_reg & ~pin_mask :
+						  defval_reg;
+
+	if (new_gpinten == gpinten_reg && new_intcon == intcon_reg &&
+	    new_defval == defval_reg) {
+		result = 1;
+		goto enable_interrupt_error_cleanup;
+	}
+
+	/*
+	 * Write DEFVAL and INTCON before GPINTEN, so the interrupt is only
+	 * enabled once it compares the input the new way. Otherwise it could
+	 * fire spuriously with the old settings.
+	 */
+
+	if (i2c_write8_8b(i2c, MCP(mcp)->addr, defval_addr, new_defval) != 0 ||
+	    i2c_write8_8b(i2c, MCP(mcp)->addr, intcon_addr, new_intcon) != 0 ||
+	    i2c_write8_8b(i2c, MCP(mcp)->addr, gpinten_addr, new_gpinten) !=
+		    0) {
+		result = -1;
+		goto enable_interrupt_error_cleanup;
+	}
+
+	result = 0;
+
+enable_interrupt_error_cleanup:
+	mcp230xx_unlock(MCP(mcp));
+	return result;
+}
+
+/*
+ * Read INTF, INTCAP and GPIO of every port in a single transfer into "regs",
+ * which clears the pending interrupts, and save GPIO as the last one read.
+ * The caller must hold the lock before calling it (if protected).
+ */
+static int mcp230xx_read_int_regs(const i2c_interface_t* i2c,
+				  mcp230xx_t* mcp,
+				  mcp230xx_int_regs_t* regs)
+{
+	// INTF, INTCAP and GPIO, the MCP23017 interleaving ports A and B
+	uint8_t bytes[3 * 2];
+	uint16_t bytes_read;
+
+	const bool is_017 = MCP_TYPE(mcp) == MCP230XX_017;
+	const uint8_t intf_addr = REG_A(INTF_REG, MCP_TYPE(mcp));
+	const uint16_t len = is_017 ? 6 : 3;
+
+	if (i2c_write_then_read(i2c,
+				MCP(mcp)->addr,
+				&intf_addr,
+				1,
+				bytes,
+				len,
+				&bytes_read) != 1) {
+		return -1;
+	}
+
+	if (bytes_read != len) {
+		// The register address went out but the read came up short
+		errno = EIO;
+		return -1;
+	}
+
+	if (is_017) {
+		regs->intf = (uint16_t)(bytes[0] | (bytes[1] << 8));
+		regs->intcap = (uint16_t)(bytes[2] | (bytes[3] << 8));
+		regs->gpio = (uint16_t)(bytes[4] | (bytes[5] << 8));
+		regs->prev_gpio = MCP(mcp)->last_gpio.gpio_017;
+		MCP(mcp)->last_gpio.gpio_017 = regs->gpio;
+	} else {
+		regs->intf = (uint16_t)bytes[0];
+		regs->intcap = (uint16_t)bytes[1];
+		regs->gpio = (uint16_t)bytes[2];
+		regs->prev_gpio = MCP(mcp)->last_gpio.gpio_008;
+		MCP(mcp)->last_gpio.gpio_008 = (uint8_t)(regs->gpio & 0xFF);
+	}
+
+	return 0;
+}
+
+int mcp230xx_disable_interrupt(const i2c_interface_t* i2c,
+			       mcp230xx_t* mcp,
+			       uint8_t index,
+			       mcp230xx_int_regs_t* regs,
+			       uint32_t timeout_ms)
+{
+	int result;
+
+	if (mcp == NULL || regs == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (mcp230xx_check_gpio(mcp, index) != 0) {
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
+		return -1;
+	}
+
+	const uint8_t pin_mask = GPIO_PIN_MASK(index);
+
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
+
+	result = mcp230xx_update_bits(i2c,
+				      mcp,
+				      GPIO_REG_ADDR(mcp, GPINTEN_REG, index),
+				      pin_mask,
+				      false);
+	/*
+	 * Cleanup even if it returns 1, since we don't need to touch the
+	 * interrupt registers if it was already disabled.
+	 */
+	if (result != 0) {
+		goto disable_interrupt_cleanup;
+	}
+
+	/*
+	 * Clearing GPINTEN only masks a pending interrupt. INTF hides it, but
+	 * it stays latched until INTCAP or GPIO is read, and comes back once
+	 * enabled again (this was checked on hardware, not the datasheet).
+	 */
+	if (mcp230xx_read_int_regs(i2c, mcp, regs) != 0) {
+		result = -1;
+		goto disable_interrupt_cleanup;
+	}
+
+disable_interrupt_cleanup:
+	mcp230xx_unlock(MCP(mcp));
+
+	return result;
+}
+
+int mcp230xx_read_interrupt(const i2c_interface_t* i2c,
+			    mcp230xx_t* mcp,
+			    mcp230xx_int_regs_t* regs,
+			    uint32_t timeout_ms)
+{
+	int result;
+
+	if (mcp == NULL || regs == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
+		return -1;
+	}
+
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
+
+	result = mcp230xx_read_int_regs(i2c, mcp, regs);
+
 	mcp230xx_unlock(MCP(mcp));
 
 	return result;

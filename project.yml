@@ -130,6 +130,10 @@
       # expectation setups within single test functions, and it OOMs
       # it's fixed stack size.
       - CMOCK_MEM_DYNAMIC
+    :test_peripheral-mcp230xx:
+      # The GPIO index fuzz test initializes 24 handles in one test function,
+      # which outgrows CMock's fixed buffer.
+      - CMOCK_MEM_DYNAMIC
   :release: []
 
   # Enable to inject name of a test as a unique compilation symbol into its respective executable build. 

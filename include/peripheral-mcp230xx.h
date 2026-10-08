@@ -36,13 +36,13 @@ extern "C" {
 
 /*
  * Sized for the private handle in peripheral-mcp230xx.c: its mutex, the I2C
- * address, the bus number, the chip type and a flag.
+ * address, the bus number, the chip type, a flag and the last GPIO read.
  */
 #define MCP230XX_INTERNAL_ALIGN PLC_MUTEX_ALIGN
 #define MCP230XX_INTERNAL_SIZE                                                \
 	PLC_PERIPHERAL_INTERNAL_PAD(PLC_MUTEX_SIZE + sizeof(plc_i2c_addr_t) + \
 					    2 * sizeof(uint8_t) +             \
-					    sizeof(bool),                     \
+					    sizeof(bool) + sizeof(uint16_t),  \
 				    MCP230XX_INTERNAL_ALIGN)
 
 /*
@@ -90,6 +90,17 @@ typedef enum {
 	MCP230XX_PULLUP = 1,
 } MCP230XX_INPUT_CONFIG;
 
+/*
+ * When an input's interrupt-on-change fires (datasheet, INTCON and DEFVAL
+ * registers). With MCP230XX_INT_WHILE_HIGH or MCP230XX_INT_WHILE_LOW, the
+ * interrupt stays active for as long as the input is at that level.
+ */
+typedef enum {
+	MCP230XX_INT_ON_CHANGE = 0, // Any change of the input
+	MCP230XX_INT_WHILE_HIGH = 1, // The input is high
+	MCP230XX_INT_WHILE_LOW = 2, // The input is low
+} MCP230XX_INT_MODE;
+
 /**
  * mcp230xx_config_t
  *
@@ -123,6 +134,26 @@ typedef struct {
 	MCP230XX_INT_POLARITY int_pol;
 	MCP230XX_MIRROR_INT mirror;
 } mcp230xx_config_t;
+
+/**
+ * mcp230xx_int_regs_t
+ *
+ * What mcp230xx_read_interrupt read. Bit i is GPIO i, as indexed by
+ * mcp230xx_read_gpio. On an MCP23008, bits 8 to 15 are 0.
+ *
+ *   intf (uint16_t)      - Which GPIOs caused the interrupt (INTF). 0 if none
+ *                          was pending.
+ *   intcap (uint16_t)    - The level of every GPIO when it happened (INTCAP).
+ *   gpio (uint16_t)      - The level of every GPIO now (GPIO).
+ *   prev_gpio (uint16_t) - The level of every GPIO at the previous read of
+ *                          GPIO.
+ */
+typedef struct {
+	uint16_t intf;
+	uint16_t intcap;
+	uint16_t gpio;
+	uint16_t prev_gpio;
+} mcp230xx_int_regs_t;
 
 /**
  * mcp230xx_init
@@ -387,6 +418,12 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
  * Read MCP230XX_HIGH/LOW from a GPIO of MCP230XX "mcp". It should be declared as
  * input before calling this function.
  *
+ * WARNING: The read clears the interrupt pending on the GPIO's port, if any
+ * (datasheet, INTCAP register), and saves the port's levels as the last ones
+ * read. So mcp230xx_read_interrupt won't report the changes of the port that
+ * happened before this read. When interrupts are enabled on the port, take the
+ * levels from mcp230xx_read_interrupt's gpio instead.
+ *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
@@ -421,6 +458,12 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
  * Read the level of every GPIO of MCP230XX "mcp" at once, in a single I2C
  * transfer. Bit i is GPIO i, as indexed by mcp230xx_read_gpio. On an MCP23008,
  * bits 8 to 15 are 0. A GPIO declared as output reads the level of its pin.
+ *
+ * WARNING: The read clears the interrupts pending on every port, if any
+ * (datasheet, INTCAP register), and saves the levels as the last ones read. So
+ * mcp230xx_read_interrupt won't report the changes that happened before this
+ * read. When interrupts are enabled, take the levels from
+ * mcp230xx_read_interrupt's gpio instead.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
@@ -511,6 +554,154 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 			uint8_t index,
 			uint8_t to_write,
 			uint32_t timeout_ms);
+
+/**
+ * mcp230xx_enable_interrupt
+ *
+ * Enable the interrupt-on-change of a GPIO of MCP230XX "mcp", so it activates
+ * the INT output as "mode" says. It must be declared as input before calling
+ * this function.
+ *
+ * It configures DEFVAL and INTCON before setting GPINTEN, so the interrupt is
+ * never enabled with a comparison it wasn't asked for.
+ *
+ * WARNING: Changes that mcp230xx_read_gpio and mcp230xx_read_all_gpios clear
+ * aren't reported by mcp230xx_read_interrupt (see mcp230xx_read_interrupt).
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
+ *   index (uint8_t)              - The GPIO whose interrupt you want to enable.
+ *   mode (MCP230XX_INT_MODE)     - When the interrupt fires.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
+ *                                  interrupt. Only applicable when the
+ *                                  MCP230XX is protected.
+ * Returns:
+ *   int - 0 if successful, 1 if it was already enabled with that mode,
+ *         otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
+ *     - EINVAL   : index is invalid for the chip, mode is not an
+ *                  MCP230XX_INT_MODE value, or i2c is not on the bus the
+ *                  MCP230XX was initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
+ */
+int mcp230xx_enable_interrupt(const i2c_interface_t* i2c,
+			      mcp230xx_t* mcp,
+			      uint8_t index,
+			      MCP230XX_INT_MODE mode,
+			      uint32_t timeout_ms);
+
+/**
+ * mcp230xx_disable_interrupt
+ *
+ * Disable the interrupt-on-change of a GPIO of MCP230XX "mcp", so it no longer
+ * activates the INT output. Its INTCON and DEFVAL bits are left as they are.
+ *
+ * Disabling a GPIO only masks an interrupt of it that is pending: it stays
+ * latched until INTCAP or GPIO is read, and would fire again once enabled.
+ * So, once disabled, the same registers as mcp230xx_read_interrupt are read
+ * into "regs", which clears every pending interrupt of the MCP230XX, of any
+ * GPIO. The changes they report must be handled from "regs", as
+ * mcp230xx_read_interrupt's, because they won't interrupt anymore. If the GPIO
+ * was already disabled, nothing is read and "regs" isn't written.
+ *
+ * The GPIO is already masked when it is read, so intf never flags it, but a
+ * change of its level is still seen through gpio and prev_gpio.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
+ *   index (uint8_t)              - The GPIO whose interrupt you want to
+ *                                  disable.
+ *   regs (mcp230xx_int_regs_t*)  - Where to store what was read (see
+ *                                  mcp230xx_read_interrupt).
+ *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
+ *                                  interrupt. Only applicable when the
+ *                                  MCP230XX is protected.
+ * Returns:
+ *   int - 0 if successful, 1 if it was already disabled, otherwise -1.
+ *         "regs" is only written when 0 is returned. On failure, the GPIO
+ *         may still be enabled, or be disabled with its interrupt still
+ *         latched, which calling mcp230xx_read_interrupt clears.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed mcp230xx_t, regs or i2c is NULL.
+ *     - EINVAL   : index is invalid for the chip, or i2c is not on the bus the
+ *                  MCP230XX was initialized on.
+ *     - EIO      : The MCP230XX returned fewer bytes than asked.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
+ */
+int mcp230xx_disable_interrupt(const i2c_interface_t* i2c,
+			       mcp230xx_t* mcp,
+			       uint8_t index,
+			       mcp230xx_int_regs_t* regs,
+			       uint32_t timeout_ms);
+
+/**
+ * mcp230xx_read_interrupt
+ *
+ * Read which GPIOs of MCP230XX "mcp" caused the pending interrupt, the level
+ * of every GPIO when it happened, and their level now (datasheet, INTF, INTCAP
+ * and GPIO registers), in a single I2C transfer. Bit i is GPIO i, as indexed by
+ * mcp230xx_read_gpio. On an MCP23008, bits 8 to 15 are 0.
+ *
+ * Reading INTCAP and GPIO clears the pending interrupts, so the INT output
+ * deactivates (unless an input enabled with MCP230XX_INT_WHILE_HIGH or
+ * MCP230XX_INT_WHILE_LOW is still at that level).
+ *
+ * WARNING:
+ *   - A port's bits in intcap are only meaningful when one of its GPIOs is set
+ *     in intf. Otherwise, they hold the port's level at its previous
+ *     interrupt, or an unknown value if it never had one.
+ *   - mcp230xx_read_gpio and mcp230xx_read_all_gpios also clear the pending
+ *     interrupts and save the levels, so the changes that happened before
+ *     them aren't reported here.
+ *   - A GPIO that changes and goes back to its level before it is read leaves
+ *     no trace, and its change is lost, when:
+ *       - On an MCP23017, another GPIO of its port already has an interrupt
+ *         pending: INTF and INTCAP only hold the first one (checked on
+ *         hardware).
+ *       - It happens during this transfer, once GPIO has been sampled but
+ *         before the interrupt is cleared: the interrupt it raises is cleared
+ *         by this same read.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
+ *   regs (mcp230xx_int_regs_t*)  - Where to store what was read (see
+ *                                  mcp230xx_int_regs_t).
+ *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *                                  applicable when the MCP230XX is protected.
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed mcp230xx_t, regs or i2c is NULL.
+ *     - EINVAL   : i2c is not on the bus the MCP230XX was initialized on.
+ *     - EIO      : The MCP230XX returned fewer bytes than asked.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
+ */
+int mcp230xx_read_interrupt(const i2c_interface_t* i2c,
+			    mcp230xx_t* mcp,
+			    mcp230xx_int_regs_t* regs,
+			    uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }
