@@ -190,7 +190,7 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 		return to_write_len;
 	case 0:
 		errno = EAGAIN;
-		return 0;
+		return -1;
 	case -1:
 		if (errno == EBADF) {
 			/*
@@ -246,7 +246,7 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		return to_read_len;
 	case 0:
 		errno = EAGAIN;
-		return 0;
+		return -1;
 	case -1:
 		if (errno == EBADF) {
 			/*
@@ -319,7 +319,7 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 		return to_write_len;
 	case 0:
 		errno = EAGAIN;
-		return 0;
+		return -1;
 	case -1:
 		if (errno == EBADF) {
 			/*

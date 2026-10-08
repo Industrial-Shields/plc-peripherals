@@ -246,7 +246,7 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *   read_bytes (uint16_t*)        - Pointer to save the real number of read bytes.
  *
  * Returns:
- *   ssize_t - The number of bytes written (it can be 0), or -1 if an error happens.
+ *   ssize_t - The number of bytes written, or -1 if an error happens.
  *
  * Errors:
  *   errno set to:
