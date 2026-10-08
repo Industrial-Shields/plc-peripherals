@@ -169,9 +169,6 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 	if (set_i2c_address_flags(addr, i2c, &addr_flags) != 0) {
 		return -1;
 	}
-	if (to_write_len == 0) {
-		return 0;
-	}
 
 	/*
 	 * I2C_RDWR only reads this buffer: i2cdev_ioctl_rdwr() memdup_user()s
@@ -228,8 +225,10 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 	if (set_i2c_address_flags(addr, i2c, &addr_flags) != 0) {
 		return -1;
 	}
+
 	if (to_read_len == 0) {
-		return 0;
+		errno = EINVAL;
+		return -1;
 	}
 
 	const struct i2c_msg msg = { .addr = addr,
@@ -284,9 +283,11 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 	if (set_i2c_address_flags(addr, i2c, &addr_flags) != 0) {
 		return -1;
 	}
+
 	if (to_write_len == 0 || to_read_len == 0) {
 		*read_bytes = 0;
-		return 0;
+		errno = EINVAL;
+		return -1;
 	}
 
 	/*

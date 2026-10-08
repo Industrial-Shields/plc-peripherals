@@ -219,6 +219,11 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 		return -1;
 	}
 
+	if (to_read_len == 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	size_t read_count = 0;
 	esp_err_t read_result = i2cRead(i2c->bus_number,
 					addr,
@@ -283,6 +288,12 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 	}
 
 	if (check_i2c_address(addr) != 0) {
+		return -1;
+	}
+
+	if (to_write_len == 0 || to_read_len == 0) {
+		*read_bytes = 0;
+		errno = EINVAL;
 		return -1;
 	}
 

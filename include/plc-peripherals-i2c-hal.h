@@ -141,10 +141,12 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  *   i2c (const i2c_interface_t*)  - I2C interface to write on.
  *   addr (plc_i2c_addr_t)         - I2C address to write to.
  *   to_write (const uint8_t*)     - Array of bytes to write to the passed I2C address.
- *   to_write_len (uint16_t)       - Length of the array.
+ *   to_write_len (uint16_t)       - Length of the array. If it's 0, only the
+ *                                   address is sent, which probes the device.
  *
  * Returns:
- *   ssize_t - The number of bytes written (it can be 0), or -1 if an error happens.
+ *   ssize_t - The number of bytes written, or -1 if an error happens. With
+ *             to_write_len = 0, 0 if the device acknowledged its address.
  *
  * Errors:
  *   errno set to:
@@ -155,8 +157,13 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  *                              this platform does not support.
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
- *       - EIO                : i2cWrite function reported some error.
+ *       - EIO                : i2cWrite function reported some error. The
+ *                              device didn't acknowledge the address or a
+ *                              byte, the bus isn't initialized, or the
+ *                              transfer failed.
  *     - Linux specific       :
+ *       - ENOTSUP            : to_write_len is 0, and the adapter can't send
+ *                              zero-length messages.
  *       - EAGAIN             : The transfer completed zero messages.
  *       - EBADE              : The adapter driver returned an unexpected
  *                              message count.
@@ -186,16 +193,17 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  *   addr (plc_i2c_addr_t)         - I2C address to read from.
  *   to_read (const uint8_t*)      - Array of bytes to read from the passed I2C address.
  *   to_read_len (uint16_t)        - Number of bytes to read. It must be equal or
- *                                   greater than the array length.
+ *                                   greater than the array length. It can't
+ *                                   be 0.
  *
  * Returns:
- *   ssize_t - The number of bytes read (it can be 0), or -1 if an error happens.
+ *   ssize_t - The number of bytes read, or -1 if an error happens.
  *
  * Errors:
  *   errno set to:
  *     - EFAULT               : A NULL pointer was given.
  *     - EINVAL               : The address, or the passed i2c_interface, is
- *                              invalid.
+ *                              invalid, or to_read_len is 0.
  *     - ENOTSUP              : The address asks for 10-bit addressing, which
  *                              this platform does not support.
  *     - ETIMEDOUT            : The transfer timed out.
@@ -230,10 +238,11 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *   i2c (const i2c_interface_t*)  - I2C interface to read from.
  *   addr (plc_i2c_addr_t)         - I2C address to read from.
  *   to_write (const uint8_t*)     - Array of bytes to write from the passed I2C address.
- *   to_write_len (uint16_t)       - Number of bytes to write.
+ *   to_write_len (uint16_t)       - Number of bytes to write. It can't be 0.
  *   to_read (const uint8_t*)      - Array of bytes to read from the passed I2C address.
  *   to_read_len (uint16_t)        - Number of bytes to read. It must be equal or
- *                                   greater than the array length.
+ *                                   greater than the array length. It can't
+ *                                   be 0.
  *   read_bytes (uint16_t*)        - Pointer to save the real number of read bytes.
  *
  * Returns:
@@ -243,7 +252,7 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *   errno set to:
  *     - EFAULT               : A NULL pointer was given.
  *     - EINVAL               : The address, or the passed i2c_interface, is
- *                              invalid.
+ *                              invalid, or to_write_len or to_read_len is 0.
  *     - ENOTSUP              : The address asks for 10-bit addressing, which
  *                              this platform does not support.
  *     - ETIMEDOUT            : The transfer timed out.
