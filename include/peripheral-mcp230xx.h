@@ -32,6 +32,8 @@ extern "C" {
 #define MCP23017_MAX_GPIOS     16
 #define MCP230XX_HIGH          1
 #define MCP230XX_LOW           0
+#define MCP230XX_INPUT         1
+#define MCP230XX_OUTPUT        0
 // clang-format on
 
 /*
@@ -525,6 +527,41 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
 			uint32_t timeout_ms);
 
 /**
+ * mcp230xx_set_pin_mode_all
+ *
+ * Set every GPIO of MCP230XX "mcp" as an input or as an output at once, in a
+ * single I2C transfer. Pull-ups and inversions are left as they are (see
+ * mcp230xx_set_input).
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
+ *   modes (uint16_t)             - MCP230XX_INPUT or MCP230XX_OUTPUT per
+ *                                  GPIO.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
+ *                                  pins. Only applicable when the MCP230XX is
+ *                                  protected.
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
+ *     - EINVAL   : modes has bits 8 to 15 set on a chip other than the
+ *                  MCP23017, or i2c is not on the bus the MCP230XX was
+ *                  initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
+ */
+int mcp230xx_set_pin_mode_all(const i2c_interface_t* i2c,
+			      mcp230xx_t* mcp,
+			      uint16_t modes,
+			      uint32_t timeout_ms);
+
+/**
  * mcp230xx_write_gpio
  *
  * Set MCP230XX_HIGH/LOW to a GPIO of MCP230XX "mcp". It should be declared as
@@ -557,6 +594,39 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 			uint8_t index,
 			uint8_t to_write,
 			uint32_t timeout_ms);
+
+/**
+ * mcp230xx_write_all
+ *
+ * Set MCP230XX_HIGH/LOW to every GPIO of MCP230XX "mcp" at once, in a single
+ * I2C transfer. The GPIOs to be used as outputs should be declared as output
+ * before calling this function.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
+ *   to_write (uint16_t)          - 0 sets a GPIO low, 1 high.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
+ *                                  applicable when the MCP230XX is protected.
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed mcp230xx_t or i2c is NULL.
+ *     - EINVAL   : to_write has bits 8 to 15 set on a chip other than the
+ *                  MCP23017, or i2c is not on the bus the MCP230XX was
+ *                  initialized on.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
+ */
+int mcp230xx_write_all(const i2c_interface_t* i2c,
+		       mcp230xx_t* mcp,
+		       uint16_t to_write,
+		       uint32_t timeout_ms);
 
 /**
  * mcp230xx_enable_interrupt

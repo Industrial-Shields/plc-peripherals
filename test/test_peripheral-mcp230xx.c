@@ -1021,6 +1021,17 @@ void test_mcp230xx_rejects_an_interface_for_another_bus(void)
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_write_all(TEST_I2C, mcp, MCP230XX_HIGH, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_pin_mode_all(TEST_I2C, mcp, MCP230XX_INPUT, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
 		-1,
 		mcp230xx_read_all_gpios(TEST_I2C, mcp, &(uint16_t){ 0 }, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
@@ -1966,6 +1977,104 @@ void test_mcp230xx_set_output_fails_when_writing_the_iodir_reg_fails(void)
 	destroy_mcp(mcp);
 }
 
+/* ---------------------- mcp230xx_set_pin_mode_all -------------------------- */
+
+void test_mcp230xx_set_pin_mode_all_fails_with_efault_for_null_mcp(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      mcp230xx_set_pin_mode_all(
+				      TEST_I2C, NULL, MCP230XX_INPUT, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_mcp230xx_set_pin_mode_all_fails_with_einval_for_gpios_over_7_on_an_mcp23008(
+	void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	// GPIO 8 as input; nothing is written
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_pin_mode_all(
+			TEST_I2C, mcp, MCP230XX_INPUT << 8, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_pin_mode_all_writes_the_iodir_reg_of_an_mcp23008(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	// GPIOs 0 and 7 as inputs, the others as outputs
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x81, 0);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_set_pin_mode_all(
+				      TEST_I2C,
+				      mcp,
+				      MCP230XX_INPUT << 7 | MCP230XX_INPUT << 0,
+				      1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_pin_mode_all_writes_both_ports_of_an_mcp23017_at_once(
+	void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
+
+	/*
+	 * GPIOs 0 (port A) and 15 (port B) as inputs: IODIRA (0x01) from the
+	 * high byte, then IODIRB (0x80)
+	 */
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IODIR_A_017, 0x0180, 0);
+
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_set_pin_mode_all(TEST_I2C,
+							mcp,
+							MCP230XX_INPUT << 15 |
+								MCP230XX_INPUT
+									<< 0,
+							1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_pin_mode_all_fails_when_the_write_fails(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IODIR_A_017, 0x0100, -1);
+
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_pin_mode_all(TEST_I2C, mcp, MCP230XX_INPUT, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_pin_mode_all_when_protected_locks_and_unlocks(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+
+	expect_mutex_acquired();
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x01, 0);
+	expect_mutex_released();
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_set_pin_mode_all(TEST_I2C, mcp, MCP230XX_INPUT, 1000));
+
+	destroy_protected_mcp(mcp);
+}
+
 /* ------------------------- mcp230xx_write_gpio ----------------------------- */
 
 void test_mcp230xx_write_gpio_fails_with_efault_for_null_mcp(void)
@@ -2083,6 +2192,98 @@ void test_mcp230xx_write_gpio_fails_when_writing_the_olat_reg_fails(void)
 		-1, mcp230xx_write_gpio(TEST_I2C, mcp, 0, MCP230XX_HIGH, 1000));
 
 	destroy_mcp(mcp);
+}
+
+/* -------------------------- mcp230xx_write_all ----------------------------- */
+
+void test_mcp230xx_write_all_fails_with_efault_for_null_mcp(void)
+{
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_write_all(TEST_I2C, NULL, MCP230XX_HIGH, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_mcp230xx_write_all_fails_with_einval_for_gpios_over_7_on_an_mcp23008(
+	void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	// GPIO 8 high; nothing is written
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_write_all(TEST_I2C, mcp, MCP230XX_HIGH << 8, 1000));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_write_all_writes_the_olat_reg_of_an_mcp23008(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	// GPIOs 0 and 7 high, the others low
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, OLAT_008, 0x81, 0);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_write_all(TEST_I2C,
+						 mcp,
+						 MCP230XX_HIGH << 7 |
+							 MCP230XX_HIGH << 0,
+						 1000));
+	TEST_ASSERT_EQUAL_INT(0, errno);
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_write_all_writes_both_ports_of_an_mcp23017_at_once(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
+
+	/*
+	 * GPIOs 0 (port A) and 15 (port B) high: OLATA (0x01) from the high
+	 * byte, then OLATB (0x80)
+	 */
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, OLAT_A_017, 0x0180, 0);
+
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_write_all(TEST_I2C,
+						 mcp,
+						 MCP230XX_HIGH << 15 |
+							 MCP230XX_HIGH << 0,
+						 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_write_all_fails_when_the_write_fails(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, OLAT_A_017, 0x0100, -1);
+
+	TEST_ASSERT_EQUAL_INT(
+		-1, mcp230xx_write_all(TEST_I2C, mcp, MCP230XX_HIGH, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_write_all_when_protected_locks_and_unlocks(void)
+{
+	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
+
+	expect_mutex_acquired();
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, OLAT_008, 0x01, 0);
+	expect_mutex_released();
+
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_write_all(TEST_I2C, mcp, MCP230XX_HIGH, 1000));
+
+	destroy_protected_mcp(mcp);
 }
 
 /* --------------------- GPIO index to register mapping ---------------------- */
@@ -2378,6 +2579,19 @@ void test_mcp230xx_fails_when_the_mutex_cant_be_taken(void)
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1, mcp230xx_write_gpio(TEST_I2C, mcp, 9, MCP230XX_HIGH, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_write_all(TEST_I2C, mcp, MCP230XX_HIGH << 9, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_pin_mode_all(
+			TEST_I2C, mcp, MCP230XX_INPUT << 9, 1000));
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
 
 	errno = 0;

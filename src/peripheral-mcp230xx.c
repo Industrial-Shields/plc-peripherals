@@ -746,6 +746,47 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
 	return result;
 }
 
+int mcp230xx_set_pin_mode_all(const i2c_interface_t* i2c,
+			      mcp230xx_t* mcp,
+			      uint16_t modes,
+			      uint32_t timeout_ms)
+{
+	int result;
+
+	if (mcp == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (MCP_TYPE(mcp) != MCP230XX_017 && (modes & 0xFF00) != 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
+		return -1;
+	}
+
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
+
+	if (MCP_TYPE(mcp) == MCP230XX_017) {
+		result =
+			i2c_write8_16b(i2c,
+				       MCP(mcp)->addr,
+				       REG_A(IODIR_REG, MCP_TYPE(mcp)),
+				       (uint16_t)((modes << 8) | (modes >> 8)));
+	} else {
+		result = i2c_write8_8b(
+			i2c, MCP(mcp)->addr, IODIR_REG, (uint8_t)modes);
+	}
+
+	mcp230xx_unlock(MCP(mcp));
+
+	return result;
+}
+
 int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 			mcp230xx_t* mcp,
 			uint8_t index,
@@ -775,6 +816,47 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
 				      GPIO_REG_ADDR(mcp, OLAT_REG, index),
 				      GPIO_PIN_MASK(index),
 				      to_write != MCP230XX_LOW);
+	mcp230xx_unlock(MCP(mcp));
+
+	return result;
+}
+
+int mcp230xx_write_all(const i2c_interface_t* i2c,
+		       mcp230xx_t* mcp,
+		       uint16_t to_write,
+		       uint32_t timeout_ms)
+{
+	int result;
+
+	if (mcp == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (MCP_TYPE(mcp) != MCP230XX_017 && (to_write & 0xFF00) != 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
+		return -1;
+	}
+
+	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
+		return -1;
+	}
+
+	if (MCP_TYPE(mcp) == MCP230XX_017) {
+		result = i2c_write8_16b(i2c,
+					MCP(mcp)->addr,
+					REG_A(OLAT_REG, MCP_TYPE(mcp)),
+					(uint16_t)((to_write << 8) |
+						   (to_write >> 8)));
+	} else {
+		result = i2c_write8_8b(
+			i2c, MCP(mcp)->addr, OLAT_REG, (uint8_t)to_write);
+	}
+
 	mcp230xx_unlock(MCP(mcp));
 
 	return result;
