@@ -36,6 +36,9 @@
 #define   MODE1_REG_EXTCLK                             (1 << 6)
 #define   MODE1_REG_AI                                 (1 << 5)
 #define   MODE1_REG_SLEEP                              (1 << 4)
+#define   MODE1_REG_SUB1                               (1 << 3)
+#define   MODE1_REG_SUB2                               (1 << 2)
+#define   MODE1_REG_SUB3                               (1 << 1)
 #define   MODE1_REG_ALLCALL                            (1 << 0)
 #define   MODE1_REG_RESET_VALUE                        0b00010001
 #define MODE2_REG                                      0x01
@@ -360,12 +363,25 @@ int pca9685_static_init(const i2c_interface_t* i2c,
 	}
 
 	/*
-	 * Enable auto-increment, clear the RESTART flag, and never switch to
-	 * the external clock.
+	 * Enable auto-increment, clear the RESTART flag, never switch to the
+	 * external clock, and enable the group addresses as configured.
 	 */
 	mode1_reg |= MODE1_REG_AI;
-	mode1_reg &= ~MODE1_REG_RESTART;
-	mode1_reg &= ~MODE1_REG_EXTCLK;
+	mode1_reg &=
+		~(MODE1_REG_RESTART | MODE1_REG_EXTCLK | MODE1_REG_ALLCALL |
+		  MODE1_REG_SUB1 | MODE1_REG_SUB2 | MODE1_REG_SUB3);
+	if (cfg->allcall) {
+		mode1_reg |= MODE1_REG_ALLCALL;
+	}
+	if (cfg->subcall1) {
+		mode1_reg |= MODE1_REG_SUB1;
+	}
+	if (cfg->subcall2) {
+		mode1_reg |= MODE1_REG_SUB2;
+	}
+	if (cfg->subcall3) {
+		mode1_reg |= MODE1_REG_SUB3;
+	}
 
 	mode2_reg = MODE2_REG_RESET_VALUE & (~MODE2_REG_INVRT) &
 		    (~MODE2_REG_OUTDRV);

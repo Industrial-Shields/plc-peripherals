@@ -220,14 +220,22 @@ static void expect_wake_from_sleep(uint8_t awake_mode1)
 	expect_i2c_write8_8b(MODE1, awake_mode1 | MODE1_RESTART, 0);
 }
 
+static pca9685_t* init_pca_cfg(bool restart, const pca9685_config_t* cfg)
+{
+	return pca9685_init(TEST_I2C, TEST_ADDR, restart, cfg);
+}
+
+// ALLCALL stays as at power-on, so the expectations can use MODE1_POR
 static pca9685_t*
 init_pca(bool restart, PCA9685_OUTPUT_DRIVE drive, PCA9685_OUTPUT_LOGIC logic)
 {
-	pca9685_config_t cfg;
+	const pca9685_config_t cfg = {
+		.drive = drive,
+		.logic = logic,
+		.allcall = true,
+	};
 
-	cfg.drive = drive;
-	cfg.logic = logic;
-	return pca9685_init(TEST_I2C, TEST_ADDR, restart, &cfg);
+	return init_pca_cfg(restart, &cfg);
 }
 
 static void expect_init_restart(void)
@@ -411,6 +419,45 @@ void test_pca9685_init_without_restart_on_an_awake_chip_only_sets_ai(void)
 	destroy_pca(pca);
 }
 
+void test_pca9685_init_with_restart_enables_only_the_configured_group_addresses(
+	void)
+{
+	const pca9685_config_t cfg = {
+		.drive = PCA9685_TOTEM_POLE,
+		.logic = PCA9685_NOT_INVERTED,
+		.subcall1 = true,
+		.subcall3 = true,
+	};
+
+	expect_reset();
+	expect_i2c_write8_8b(MODE2, MODE2_OUTDRV, 0);
+	expect_wake_from_sleep(MODE1_AI | MODE1_SUB1 | MODE1_SUB3);
+
+	pca9685_t* pca = init_pca_cfg(true, &cfg);
+
+	TEST_ASSERT_NOT_NULL(pca);
+	destroy_pca(pca);
+}
+
+void test_pca9685_init_without_restart_clears_the_group_addresses_not_configured(
+	void)
+{
+	const pca9685_config_t cfg = {
+		.drive = PCA9685_TOTEM_POLE,
+		.logic = PCA9685_NOT_INVERTED,
+	};
+
+	expect_i2c_read8_8b(
+		MODE1, MODE1_SUB1 | MODE1_SUB2 | MODE1_SUB3 | MODE1_ALLCALL, 0);
+	expect_i2c_write8_8b(MODE2, MODE2_OUTDRV, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI, 0);
+
+	pca9685_t* pca = init_pca_cfg(false, &cfg);
+
+	TEST_ASSERT_NOT_NULL(pca);
+	destroy_pca(pca);
+}
+
 void test_pca9685_init_without_restart_wakes_and_restarts_a_sleeping_chip(void)
 {
 	// Asleep with outputs held, as after a pca9685_set_frequency cut short
@@ -428,17 +475,24 @@ void test_pca9685_init_without_restart_wakes_and_restarts_a_sleeping_chip(void)
 	destroy_pca(pca);
 }
 
-void test_pca9685_init_without_restart_keeps_the_other_mode1_bits(void)
+void test_pca9685_init_without_restart_sets_the_configured_group_addresses(void)
 {
-	const uint8_t others = MODE1_SUB1 | MODE1_SUB2 | MODE1_SUB3 |
+	const pca9685_config_t cfg = {
+		.drive = PCA9685_TOTEM_POLE,
+		.logic = PCA9685_NOT_INVERTED,
+		.allcall = true,
+		.subcall1 = true,
+		.subcall2 = true,
+		.subcall3 = true,
+	};
+	const uint8_t groups = MODE1_SUB1 | MODE1_SUB2 | MODE1_SUB3 |
 			       MODE1_ALLCALL;
 
-	expect_i2c_read8_8b(MODE1, others | MODE1_EXTCLK, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_EXTCLK, 0);
 	expect_i2c_write8_8b(MODE2, MODE2_OUTDRV, 0);
-	expect_i2c_write8_8b(MODE1, others | MODE1_AI, 0);
+	expect_i2c_write8_8b(MODE1, groups | MODE1_AI, 0);
 
-	pca9685_t* pca =
-		init_pca(false, PCA9685_TOTEM_POLE, PCA9685_NOT_INVERTED);
+	pca9685_t* pca = init_pca_cfg(false, &cfg);
 
 	TEST_ASSERT_NOT_NULL(pca);
 	destroy_pca(pca);
@@ -768,7 +822,9 @@ void test_pca9685_rejects_an_interface_for_another_bus(void)
 void test_pca9685_static_init_and_static_deinit_use_the_callers_storage(void)
 {
 	pca9685_t storage;
-	pca9685_config_t cfg = { PCA9685_TOTEM_POLE, PCA9685_NOT_INVERTED };
+	pca9685_config_t cfg = { PCA9685_TOTEM_POLE,
+				 PCA9685_NOT_INVERTED,
+				 true };
 
 	expect_init_restart();
 	TEST_ASSERT_EQUAL_INT(
@@ -786,7 +842,9 @@ void test_pca9685_static_init_and_static_deinit_use_the_callers_storage(void)
 void test_pca9685_static_deinit_with_shutdown_turns_off_and_sleeps(void)
 {
 	pca9685_t storage;
-	pca9685_config_t cfg = { PCA9685_TOTEM_POLE, PCA9685_NOT_INVERTED };
+	pca9685_config_t cfg = { PCA9685_TOTEM_POLE,
+				 PCA9685_NOT_INVERTED,
+				 true };
 
 	expect_init_restart();
 	TEST_ASSERT_EQUAL_INT(
@@ -808,7 +866,7 @@ void test_pca9685_static_init_accepts_an_aligned_address_in_a_buffer(void)
 	static unsigned char buffer[2 * PCA9685_SIZE]
 		__attribute__((aligned(PCA9685_ALIGN)));
 	pca9685_t* pca = (pca9685_t*)(buffer + PCA9685_ALIGN);
-	pca9685_config_t cfg = { PCA9685_OPEN_DRAIN, PCA9685_INVERTED };
+	pca9685_config_t cfg = { PCA9685_OPEN_DRAIN, PCA9685_INVERTED, true };
 
 	expect_reset();
 	expect_i2c_write8_8b(MODE2, MODE2_INVRT, 0);
@@ -823,7 +881,9 @@ void test_pca9685_static_init_fails_with_efault_for_misaligned_storage(void)
 {
 	static unsigned char buffer[2 * PCA9685_SIZE]
 		__attribute__((aligned(PCA9685_ALIGN)));
-	pca9685_config_t cfg = { PCA9685_TOTEM_POLE, PCA9685_NOT_INVERTED };
+	pca9685_config_t cfg = { PCA9685_TOTEM_POLE,
+				 PCA9685_NOT_INVERTED,
+				 true };
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1,
@@ -838,7 +898,9 @@ void test_pca9685_static_init_fails_with_efault_for_misaligned_storage(void)
 
 void test_pca9685_static_init_fails_with_efault_for_null_storage(void)
 {
-	pca9685_config_t cfg = { PCA9685_TOTEM_POLE, PCA9685_NOT_INVERTED };
+	pca9685_config_t cfg = { PCA9685_TOTEM_POLE,
+				 PCA9685_NOT_INVERTED,
+				 true };
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
@@ -1796,7 +1858,9 @@ void test_pca9685_deinit_keeps_the_handle_when_the_mutex_cant_be_destroyed(void)
 void test_pca9685_static_deinit_destroys_the_mutex_when_protected(void)
 {
 	pca9685_t storage;
-	pca9685_config_t cfg = { PCA9685_TOTEM_POLE, PCA9685_NOT_INVERTED };
+	pca9685_config_t cfg = { PCA9685_TOTEM_POLE,
+				 PCA9685_NOT_INVERTED,
+				 true };
 
 	expect_init_restart();
 	TEST_ASSERT_EQUAL_INT(

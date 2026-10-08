@@ -86,10 +86,22 @@ typedef enum {
  *                                  totem pole.
  *   logic (PCA9685_OUTPUT_LOGIC) - Whether the 16 outputs are inverted. An
  *                                  inverted output is low while it is on.
+ *   allcall (bool)               - Whether the PCA9685 also answers at its
+ *                                  LED All Call address (0x70 at power-on).
+ *   subcall1 (bool)              - Whether it also answers at its Sub Call
+ *                                  address 1 (0x71 at power-on).
+ *   subcall2 (bool)              - The same for Sub Call address 2 (0x72 at
+ *                                  power-on).
+ *   subcall3 (bool)              - The same for Sub Call address 3 (0x74 at
+ *                                  power-on).
  */
 typedef struct {
 	PCA9685_OUTPUT_DRIVE drive;
 	PCA9685_OUTPUT_LOGIC logic;
+	bool allcall;
+	bool subcall1;
+	bool subcall2;
+	bool subcall3;
 } pca9685_config_t;
 
 /**
