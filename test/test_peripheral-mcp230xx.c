@@ -41,6 +41,7 @@
 
 // clang-format off
 #define IODIR_008                                                          0x00
+#define IPOL_008                                                           0x01
 #define IOCON_008                                                          0x05
 #define GPINTEN_008                                                        0x02
 #define DEFVAL_008                                                         0x03
@@ -53,6 +54,8 @@
 
 #define IODIR_A_017                                                        0x00
 #define IODIR_B_017                                                        0x01
+#define IPOL_A_017                                                         0x02
+#define IPOL_B_017                                                         0x03
 #define IOCON_A_017                                                        0x0A
 #define IOCON_B_017                                                        0x0B
 // IOCON's address with IOCON.BANK = 1.
@@ -1331,12 +1334,12 @@ void test_mcp230xx_set_input_fails_with_einval_for_an_invalid_config(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
-	// Anything but NO_PULLUP/PULLUP is a mistake, not a request for a pull-up.
+	// Anything but an MCP230XX_INPUT_CONFIG value is a mistake
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
 		mcp230xx_set_input(
-			TEST_I2C, mcp, 0, (MCP230XX_INPUT_CONFIG)2, 1000));
+			TEST_I2C, mcp, 0, (MCP230XX_INPUT_CONFIG)4, 1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_mcp(mcp);
@@ -1349,6 +1352,7 @@ void test_mcp230xx_set_input_writes_gppu_before_iodir(void)
 	// Force distinct contents in IODIR and GPPU registers
 	expect_i2c_read8_8b(IODIR_008, 0x10, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x40, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x48, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x18, 0);
 
@@ -1368,6 +1372,7 @@ void test_mcp230xx_set_input_leaves_the_other_pins_alone(void)
 	// pull-ups. Only pin 1's bit may change in either register.
 	expect_i2c_read8_8b(IODIR_008, 0xFD, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x0D, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x0F, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0xFF, 0);
 
@@ -1384,6 +1389,7 @@ void test_mcp230xx_set_input_disables_the_pullup_when_asked(void)
 	// Pin 2 is already an input, so only its pull-up goes away.
 	expect_i2c_read8_8b(IODIR_008, 0xFF, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x3C, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x38, 0);
 
 	TEST_ASSERT_EQUAL_INT(
@@ -1404,6 +1410,7 @@ void test_mcp230xx_set_input_only_writes_gppu_when_it_is_already_an_input(void)
 
 	expect_i2c_read8_8b(IODIR_008, 0x20, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x02, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x22, 0);
 
 	TEST_ASSERT_EQUAL_INT(
@@ -1423,6 +1430,7 @@ void test_mcp230xx_set_input_drops_a_stale_pullup_from_an_output(void)
 
 	expect_i2c_read8_8b(IODIR_008, 0x01, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x40, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x41, 0);
 
@@ -1441,6 +1449,7 @@ void test_mcp230xx_set_input_only_writes_iodir_when_the_pullup_already_matches(
 	// Pin 0 is an output and already has no pull-up, so GPPU is left alone.
 	expect_i2c_read8_8b(IODIR_008, 0x80, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x40, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x81, 0);
 
 	TEST_ASSERT_EQUAL_INT(
@@ -1457,6 +1466,7 @@ void test_mcp230xx_set_input_returns_1_when_already_configured(void)
 	// Pin 7 is already an input and already pulled up: nothing to write.
 	expect_i2c_read8_8b(IODIR_008, 0x80, 0);
 	expect_i2c_read8_8b(GPPU_008, 0xA0, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 
 	TEST_ASSERT_EQUAL_INT(
 		1, mcp230xx_set_input(TEST_I2C, mcp, 7, MCP230XX_PULLUP, 1000));
@@ -1471,6 +1481,7 @@ void test_mcp230xx_set_input_uses_the_b_side_registers_for_high_indices(void)
 	// Pin 11 is bit 3 of port B.
 	expect_i2c_read8_8b(IODIR_B_017, 0x01, 0);
 	expect_i2c_read8_8b(GPPU_B_017, 0x02, 0);
+	expect_i2c_read8_8b(IPOL_B_017, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_B_017, 0x0A, 0);
 	i2c_write8_8b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, IODIR_B_017, 0x09, 0);
@@ -1515,11 +1526,135 @@ void test_mcp230xx_set_input_fails_when_writing_the_gppu_reg_fails(void)
 
 	expect_i2c_read8_8b(IODIR_008, 0x10, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x20, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x21, -1);
 
 	TEST_ASSERT_EQUAL_INT(
 		-1,
 		mcp230xx_set_input(TEST_I2C, mcp, 0, MCP230XX_PULLUP, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_input_writes_ipol_before_iodir_when_inverted(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	expect_i2c_read8_8b(IODIR_008, 0x00, 0);
+	expect_i2c_read8_8b(GPPU_008, 0x00, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x10, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IPOL_008, 0x18, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x08, 0);
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_set_input(
+			TEST_I2C, mcp, 3, MCP230XX_NO_PULLUP_INVERTED, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_input_writes_gppu_then_ipol_then_iodir(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	expect_i2c_read8_8b(IODIR_008, 0x00, 0);
+	expect_i2c_read8_8b(GPPU_008, 0x00, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x08, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IPOL_008, 0x08, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x08, 0);
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_set_input(
+			TEST_I2C, mcp, 3, MCP230XX_PULLUP_INVERTED, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_input_drops_the_inversion_when_not_asked(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	// Already an input without pull-up: only IPOL changes
+	expect_i2c_read8_8b(IODIR_008, 0x08, 0);
+	expect_i2c_read8_8b(GPPU_008, 0x00, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x88, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IPOL_008, 0x80, 0);
+
+	TEST_ASSERT_EQUAL_INT(
+		0, mcp230xx_set_input(TEST_I2C, mcp, 3, MCP230XX_NO_PULLUP, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_input_returns_1_when_already_inverted(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	expect_i2c_read8_8b(IODIR_008, 0x08, 0);
+	expect_i2c_read8_8b(GPPU_008, 0x08, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x08, 0);
+
+	TEST_ASSERT_EQUAL_INT(
+		1,
+		mcp230xx_set_input(
+			TEST_I2C, mcp, 3, MCP230XX_PULLUP_INVERTED, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_input_uses_the_b_side_ipol_for_high_indices(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
+
+	// GPIO 9 is bit 1 of port B
+	expect_i2c_read8_8b(IODIR_B_017, 0x02, 0);
+	expect_i2c_read8_8b(GPPU_B_017, 0x00, 0);
+	expect_i2c_read8_8b(IPOL_B_017, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, IPOL_B_017, 0x02, 0);
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		mcp230xx_set_input(
+			TEST_I2C, mcp, 9, MCP230XX_NO_PULLUP_INVERTED, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_input_fails_when_reading_the_ipol_reg_fails(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	// Nothing is written
+	expect_i2c_read8_8b(IODIR_008, 0x00, 0);
+	expect_i2c_read8_8b(GPPU_008, 0x00, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, -1);
+
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_input(
+			TEST_I2C, mcp, 3, MCP230XX_NO_PULLUP_INVERTED, 1000));
+
+	destroy_mcp(mcp);
+}
+
+void test_mcp230xx_set_input_fails_when_writing_the_ipol_reg_fails(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+
+	// IODIR isn't written, so it doesn't become an input
+	expect_i2c_read8_8b(IODIR_008, 0x00, 0);
+	expect_i2c_read8_8b(GPPU_008, 0x00, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IPOL_008, 0x08, -1);
+
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		mcp230xx_set_input(
+			TEST_I2C, mcp, 3, MCP230XX_NO_PULLUP_INVERTED, 1000));
 
 	destroy_mcp(mcp);
 }
@@ -1530,6 +1665,7 @@ void test_mcp230xx_set_input_fails_when_writing_the_iodir_reg_fails(void)
 
 	expect_i2c_read8_8b(IODIR_008, 0x10, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x20, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, GPPU_008, 0x21, 0);
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IODIR_008, 0x11, -1);
 
@@ -1981,12 +2117,15 @@ void test_mcp230xx_fuzzes_every_gpio_index_to_its_register_and_bit(void)
 							    IODIR_B_017);
 			const uint8_t gppu = expected_addr(
 				type, index, GPPU_008, GPPU_A_017, GPPU_B_017);
+			const uint8_t ipol = expected_addr(
+				type, index, IPOL_008, IPOL_A_017, IPOL_B_017);
 			const uint8_t iodir_mark =
 				(uint8_t)(1 << ((index + 1) % 8));
 			const uint8_t gppu_mark =
 				(uint8_t)(1 << ((index + 2) % 8));
 			expect_i2c_read8_8b(iodir, iodir_mark, 0);
 			expect_i2c_read8_8b(gppu, gppu_mark, 0);
+			expect_i2c_read8_8b(ipol, 0x00, 0);
 			i2c_write8_8b_ExpectAndReturn(TEST_I2C,
 						      TEST_ADDR,
 						      gppu,
@@ -2350,6 +2489,7 @@ void test_mcp230xx_set_input_when_protected_locks_and_unlocks(void)
 	plc_mutex_acquire_IgnoreArg_mutex();
 	expect_i2c_read8_8b(IODIR_008, 0xFF, 0);
 	expect_i2c_read8_8b(GPPU_008, 0x81, 0);
+	expect_i2c_read8_8b(IPOL_008, 0x00, 0);
 	plc_mutex_release_ExpectAndReturn(NULL, 0);
 	plc_mutex_release_IgnoreArg_mutex();
 

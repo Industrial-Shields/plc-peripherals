@@ -527,7 +527,7 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
 		       MCP230XX_INPUT_CONFIG config,
 		       uint32_t timeout_ms)
 {
-	uint8_t iodir_reg, gppu_reg;
+	uint8_t iodir_reg, gppu_reg, ipol_reg;
 	int result;
 
 	if (mcp == NULL) {
@@ -539,7 +539,9 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (config != MCP230XX_NO_PULLUP && config != MCP230XX_PULLUP) {
+	if (config != MCP230XX_NO_PULLUP && config != MCP230XX_PULLUP &&
+	    config != MCP230XX_NO_PULLUP_INVERTED &&
+	    config != MCP230XX_PULLUP_INVERTED) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -548,36 +550,50 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
 		return -1;
 	}
 
+	const bool pullup = config == MCP230XX_PULLUP ||
+			    config == MCP230XX_PULLUP_INVERTED;
+	const bool inverted = config == MCP230XX_NO_PULLUP_INVERTED ||
+			      config == MCP230XX_PULLUP_INVERTED;
+
 	const uint8_t pin_mask = GPIO_PIN_MASK(index);
 	const uint8_t iodir_addr = GPIO_REG_ADDR(mcp, IODIR_REG, index);
 	const uint8_t gppu_addr = GPIO_REG_ADDR(mcp, GPPU_REG, index);
+	const uint8_t ipol_addr = GPIO_REG_ADDR(mcp, IPOL_REG, index);
 
 	if (mcp230xx_lock(MCP(mcp), timeout_ms) != 0) {
 		return -1;
 	}
 
 	if (i2c_read8_8b(i2c, MCP(mcp)->addr, iodir_addr, &iodir_reg) != 0 ||
-	    i2c_read8_8b(i2c, MCP(mcp)->addr, gppu_addr, &gppu_reg) != 0) {
+	    i2c_read8_8b(i2c, MCP(mcp)->addr, gppu_addr, &gppu_reg) != 0 ||
+	    i2c_read8_8b(i2c, MCP(mcp)->addr, ipol_addr, &ipol_reg) != 0) {
 		result = -1;
 		goto set_input_error_cleanup;
 	}
 
 	const uint8_t new_iodir = iodir_reg | pin_mask;
-	const uint8_t new_gppu = config == MCP230XX_PULLUP ?
-					 gppu_reg | pin_mask :
-					 gppu_reg & ~pin_mask;
+	const uint8_t new_gppu = pullup ? gppu_reg | pin_mask :
+					  gppu_reg & ~pin_mask;
+	const uint8_t new_ipol = inverted ? ipol_reg | pin_mask :
+					    ipol_reg & ~pin_mask;
 
-	if (new_iodir == iodir_reg && new_gppu == gppu_reg) {
+	if (new_iodir == iodir_reg && new_gppu == gppu_reg &&
+	    new_ipol == ipol_reg) {
 		result = 1;
 		goto set_input_error_cleanup;
 	}
 
 	/*
-	 * Update the GPPU before the IODIR register, ensure no
-	 * accidental pull-ups.
+	 * Update the GPPU and IPOL before the IODIR register, ensure no
+	 * accidental pull-ups, and no input read with the wrong polarity.
 	 */
 	if (new_gppu != gppu_reg &&
 	    i2c_write8_8b(i2c, MCP(mcp)->addr, gppu_addr, new_gppu) != 0) {
+		result = -1;
+		goto set_input_error_cleanup;
+	}
+	if (new_ipol != ipol_reg &&
+	    i2c_write8_8b(i2c, MCP(mcp)->addr, ipol_addr, new_ipol) != 0) {
 		result = -1;
 		goto set_input_error_cleanup;
 	}

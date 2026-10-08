@@ -88,6 +88,8 @@ typedef enum {
 typedef enum {
 	MCP230XX_NO_PULLUP = 0,
 	MCP230XX_PULLUP = 1,
+	MCP230XX_NO_PULLUP_INVERTED = 2,
+	MCP230XX_PULLUP_INVERTED = 3,
 } MCP230XX_INPUT_CONFIG;
 
 /*
@@ -386,13 +388,14 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *   mcp (mcp230xx_t*)              - The MCP230XX to interact with.
  *   index (uint8_t)                - The GPIO you want to set as input.
  *   config (MCP230XX_INPUT_CONFIG) - Used to enable/disable the pull-up of the
- *                                    input.
+ *                                    input, and whether its level reads
+ *                                    inverted.
  *   timeout_ms (uint32_t)          - The maximum time to wait to configure
  *                                    the pin. Only applicable when the
  *                                    MCP230XX is protected.
  * Returns:
- *   int - 0 if successful, 1 if it was already an input and the pull-up was
- *         correctly configured, otherwise -1.
+ *   int - 0 if successful, 1 if it was already an input and the pull-up and
+ *         the polarity were correctly configured, otherwise -1.
  *
  * Errors:
  *   errno set to:
