@@ -127,7 +127,7 @@ static inline int16_t ads101x_conversion_reg_to_value(uint16_t read_value)
 static int ads101x_convert_signed_to_unsigned(int16_t signed_read_value,
 					      uint16_t* return_value)
 {
-	if (signed_read_value < -8) {
+	if (signed_read_value < -7) {
 		/*
 		 * Quote from the ADS101X datasheet (SBAS473F, section 7.5.4):
 		 * Single-ended signal measurements, where VAINN = 0V and VAINP = 0V to +FS, only use

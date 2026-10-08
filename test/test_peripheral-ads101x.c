@@ -1163,14 +1163,14 @@ void test_ads101x_unsigned_single_read_clamps_a_small_negative_reading_to_0(void
 	destroy_ads(ads);
 }
 
-// Regression test for the -8 threshold itself...
-void test_ads101x_unsigned_single_read_clamps_exactly_minus_8_to_0(void)
+// Regression test for the -7 threshold itself...
+void test_ads101x_unsigned_single_read_clamps_exactly_minus_7_to_0(void)
 {
 	ads101x_t* ads = create_ads(false);
 
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
-	expect_i2c_read8_16b(CONVERSION_REG, 0xFF80, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0xFF90, 0); // -> -7
 
 	uint16_t value;
 	TEST_ASSERT_EQUAL_INT(
@@ -1183,13 +1183,13 @@ void test_ads101x_unsigned_single_read_clamps_exactly_minus_8_to_0(void)
 }
 
 // ... and the other side of the same boundary.
-void test_ads101x_unsigned_single_read_fails_with_erange_at_minus_9(void)
+void test_ads101x_unsigned_single_read_fails_with_erange_at_minus_8(void)
 {
 	ads101x_t* ads = create_ads(false);
 
 	i2c_write8_16b_ExpectAndReturn(
 		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
-	expect_i2c_read8_16b(CONVERSION_REG, 0xFF70, 0); // -> -9
+	expect_i2c_read8_16b(CONVERSION_REG, 0xFF80, 0); // -> -8
 
 	uint16_t value;
 	errno = 0;
@@ -1202,7 +1202,7 @@ void test_ads101x_unsigned_single_read_fails_with_erange_at_minus_9(void)
 	destroy_ads(ads);
 }
 
-void test_ads101x_unsigned_single_read_fails_with_erange_below_minus_8(void)
+void test_ads101x_unsigned_single_read_fails_with_erange_below_minus_7(void)
 {
 	ads101x_t* ads = create_ads(false);
 
@@ -1487,7 +1487,7 @@ void test_ads101x_unsigned_continuous_read_passes_through_a_positive_reading(
 	destroy_ads(ads);
 }
 
-void test_ads101x_unsigned_continuous_read_fails_with_erange_below_minus_8(void)
+void test_ads101x_unsigned_continuous_read_fails_with_erange_below_minus_7(void)
 {
 	ads101x_t* ads = create_ads(true);
 

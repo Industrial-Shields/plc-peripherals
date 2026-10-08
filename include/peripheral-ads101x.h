@@ -401,8 +401,8 @@ int ads101x_single_read(const i2c_interface_t* i2c,
  * returns the reading as an unsigned number.
  *
  * Because of the device offset, a single-ended input close to 0V can still read
- * slightly negative (SBAS473F, section 7.5.4). Readings from -8 to -1 are
- * returned as 0. Readings below -8 are an error.
+ * slightly negative (SBAS473F, section 7.5.4). Readings from -7 to -1 (three
+ * bits of error) are returned as 0. Readings below -7 are an error.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
@@ -423,7 +423,7 @@ int ads101x_single_read(const i2c_interface_t* i2c,
  *                  initialized in continuous mode, or i2c is not on the bus
  *                  the ADS101X was initialized on.
  *     - ERANGE   : The conversion result is invalid, or the reading is less
- *                  than -8.
+ *                  than -7.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
@@ -491,8 +491,8 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
  * continuous_mode=true).
  *
  * Because of the device offset, a single-ended input close to 0V can still read
- * slightly negative (SBAS473F, section 7.5.4). Readings from -8 to -1 are
- * stored as 0. Readings below -8 are an error.
+ * slightly negative (SBAS473F, section 7.5.4). Readings from -7 to -1 (three
+ * bits of error) are stored as 0. Readings below -7 are an error.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
@@ -513,7 +513,7 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
  *                  initialized in single-shot mode, or i2c is not on the bus
  *                  the ADS101X was initialized on.
  *     - ERANGE   : The conversion result is invalid, or the reading is less
- *                  than -8.
+ *                  than -7.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
  *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
