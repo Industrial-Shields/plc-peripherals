@@ -116,9 +116,9 @@ i2c_init_return_null:
 	return NULL;
 }
 
-int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
+int i2c_deinit(i2c_interface_t* i2c, bool deinit_i2c_bus)
 {
-	if (interface == NULL) {
+	if (i2c == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
@@ -127,9 +127,9 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 		return -1;
 	}
 
-	int fd = interface->fd;
+	int fd = i2c->fd;
 
-	free(interface);
+	free(i2c);
 
 	/*
 	 * On Linux, close(2) releases the descriptor even when it reports an

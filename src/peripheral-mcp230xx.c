@@ -189,7 +189,7 @@ static bool mcp230xx_config_is_valid(const mcp230xx_config_t* cfg)
 		return false;
 	}
 
-	// If it's a MCP230XX_017, it cannot have mirrored INT
+	// If it's not a MCP230XX_017, it has a single INT and cannot mirror it
 	if (cfg->type != MCP230XX_017 && cfg->mirror == MCP230XX_MIRRORED_INT) {
 		return false;
 	}

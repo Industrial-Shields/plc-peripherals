@@ -142,8 +142,8 @@ typedef struct {
 /**
  * mcp230xx_int_regs_t
  *
- * What mcp230xx_read_interrupt read. Bit i is GPIO i, as indexed by
- * mcp230xx_read_gpio. On an MCP23008, bits 8 to 15 are 0.
+ * What mcp230xx_read_interrupt read. Bit i is GPIO i. On an MCP23008, bits 8
+ * to 15 are 0.
  *
  *   intf (uint16_t)      - Which GPIOs caused the interrupt (INTF). 0 if none
  *                          was pending.
@@ -461,8 +461,8 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
  * mcp230xx_read_all_gpios
  *
  * Read the level of every GPIO of MCP230XX "mcp" at once, in a single I2C
- * transfer. Bit i is GPIO i, as indexed by mcp230xx_read_gpio. On an MCP23008,
- * bits 8 to 15 are 0. A GPIO declared as output reads the level of its pin.
+ * transfer. Bit i is GPIO i. On an MCP23008, bits 8 to 15 are 0. A GPIO
+ * declared as output reads the level of its pin.
  *
  * WARNING: The read clears the interrupts pending on every port, if any
  * (datasheet, INTCAP register), and saves the levels as the last ones read. So
@@ -537,7 +537,7 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   modes (uint16_t)             - MCP230XX_INPUT or MCP230XX_OUTPUT per
- *                                  GPIO.
+ *                                  GPIO. Bit i is GPIO i.
  *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
  *                                  pins. Only applicable when the MCP230XX is
  *                                  protected.
@@ -605,7 +605,8 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
- *   to_write (uint16_t)          - 0 sets a GPIO low, 1 high.
+ *   to_write (uint16_t)          - 0 sets a GPIO low, 1 high. Bit i is GPIO
+ *                                  i.
  *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
  *                                  applicable when the MCP230XX is protected.
  * Returns:
@@ -727,8 +728,8 @@ int mcp230xx_disable_interrupt(const i2c_interface_t* i2c,
  *
  * Read which GPIOs of MCP230XX "mcp" caused the pending interrupt, the level
  * of every GPIO when it happened, and their level now (datasheet, INTF, INTCAP
- * and GPIO registers), in a single I2C transfer. Bit i is GPIO i, as indexed by
- * mcp230xx_read_gpio. On an MCP23008, bits 8 to 15 are 0.
+ * and GPIO registers), in a single I2C transfer. Bit i is GPIO i. On an
+ * MCP23008, bits 8 to 15 are 0.
  *
  * Reading INTCAP and GPIO clears the pending interrupts, so the INT output
  * deactivates (unless an input enabled with MCP230XX_INT_WHILE_HIGH or

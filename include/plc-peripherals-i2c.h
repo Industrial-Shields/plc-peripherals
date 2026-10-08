@@ -76,7 +76,8 @@ int i2c_write8_8b(const i2c_interface_t* i2c,
 /**
  * i2c_write8_16b
  *
- * Write a byte to a register of the given I2C address.
+ * Write a 16-bit value, most significant byte first, to a register of the
+ * given I2C address.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*)  - I2C interface to write to.
@@ -102,8 +103,8 @@ int i2c_write8_16b(const i2c_interface_t* i2c,
  * Read a one-byte register from the given I2C address.
  *
  * Parameters:
- *   i2c (const i2c_interface_t*)  - I2C interface to read to.
- *   addr (plc_i2c_addr_t)         - I2C address to read to.
+ *   i2c (const i2c_interface_t*)  - I2C interface to read from.
+ *   addr (plc_i2c_addr_t)         - I2C address to read from.
  *   reg (uint8_t)                 - Register address.
  *   to_read (uint8_t*)            - Pointer to save the register value.
  *
@@ -123,11 +124,12 @@ int i2c_read8_8b(const i2c_interface_t* i2c,
 /**
  * i2c_read8_16b
  *
- * Read a one-byte register from the given I2C address.
+ * Read a 16-bit register, sent most significant byte first, from the given I2C
+ * address.
  *
  * Parameters:
- *   i2c (const i2c_interface_t*)  - I2C interface to read to.
- *   addr (plc_i2c_addr_t)         - I2C address to read to.
+ *   i2c (const i2c_interface_t*)  - I2C interface to read from.
+ *   addr (plc_i2c_addr_t)         - I2C address to read from.
  *   reg (uint8_t)                 - Register address.
  *   to_read (uint16_t*)           - Pointer to save the register value.
  *

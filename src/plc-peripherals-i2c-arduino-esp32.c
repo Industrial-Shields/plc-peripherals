@@ -118,21 +118,21 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 	return 0;
 }
 
-int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
+int i2c_deinit(i2c_interface_t* i2c, bool deinit_i2c_bus)
 {
-	if (interface == NULL) {
+	if (i2c == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
 	if (deinit_i2c_bus) {
-		esp_err_t deinit_result = i2cDeinit(interface->bus_number);
+		esp_err_t deinit_result = i2cDeinit(i2c->bus_number);
 		if (deinit_result != ESP_OK) {
 			// Report an error if bus is still initialized
-			if (i2cIsInit(interface->bus_number)) {
+			if (i2cIsInit(i2c->bus_number)) {
 				ESP_LOGE(TAG,
 					 "Can't de-initialize I2C bus %u: %s",
-					 interface->bus_number,
+					 i2c->bus_number,
 					 esp_err_to_name(deinit_result));
 				errno = EIO;
 				return -1;
@@ -140,16 +140,16 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus)
 
 			ESP_LOGW(TAG,
 				 "I2C bus %u was already de-initialized: %s",
-				 interface->bus_number,
+				 i2c->bus_number,
 				 esp_err_to_name(deinit_result));
 		}
 	}
 
 	ESP_LOGD(TAG,
 		 "I2C bus %u interface released%s",
-		 interface->bus_number,
+		 i2c->bus_number,
 		 deinit_i2c_bus ? ", and the bus de-initialized" : "");
-	free(interface);
+	free(i2c);
 	return 0;
 }
 

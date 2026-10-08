@@ -55,8 +55,14 @@ typedef uint16_t plc_i2c_addr_t;
  *
  * Parameters:
  *   bus (uint8_t) - I2C bus number.
- *   sda (int32_t) - SDA GPIO number (if needed).
- *   scl (int32_t) - SCL GPIO number (if needed).
+ *   sda (int32_t) - SDA GPIO number. Required on ESP32, where a negative
+ *                   number fails with EIO (there are no default pins). Must
+ *                   be negative on Linux.
+ *   scl (int32_t) - SCL GPIO number. Same as sda.
+ *
+ * On ESP32, if the bus is already initialized (by this library or by Wire,
+ * for example), it is kept as it is: sda and scl are ignored, and only a
+ * warning is logged.
  *
  * Returns:
  *   i2c_interface_t* - Pointer to the initialized interface on success.
@@ -98,7 +104,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed i2c_interface or bus is NULL.
+ *     - EFAULT : Passed i2c or bus is NULL.
  */
 int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
 
@@ -120,7 +126,7 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
  *
  * Errors:
  *   errno set to:
- *     - EFAULT        : Passed i2c_interface is NULL.
+ *     - EFAULT        : Passed i2c is NULL.
  *     - ESP32 specific:
  *       - EIO         : i2cDeinit function reported some error, and the bus
  *                       is still initialized.
@@ -128,7 +134,7 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
  *       - ENOTSUP     : deinit_i2c_bus was true. This function only closes
  *                       the interface, it doesn't take down the I2C bus.
  */
-int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
+int i2c_deinit(i2c_interface_t* i2c, bool deinit_i2c_bus);
 
 /**
  * i2c_write
@@ -151,10 +157,10 @@ int i2c_deinit(i2c_interface_t* interface, bool deinit_i2c_bus);
  * Errors:
  *   errno set to:
  *     - EFAULT               : A NULL pointer was given.
- *     - EINVAL               : The address, or the passed i2c_interface, is
+ *     - EINVAL               : The address, or the passed i2c, is
  *                              invalid.
  *     - ENOTSUP              : The address asks for 10-bit addressing, which
- *                              this platform does not support.
+ *                              the adapter does not support.
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error. The
@@ -191,10 +197,9 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  * Parameters:
  *   i2c (const i2c_interface_t*)  - I2C interface to read from.
  *   addr (plc_i2c_addr_t)         - I2C address to read from.
- *   to_read (const uint8_t*)      - Array of bytes to read from the passed I2C address.
- *   to_read_len (uint16_t)        - Number of bytes to read. It must be equal or
- *                                   greater than the array length. It can't
- *                                   be 0.
+ *   to_read (uint8_t*)            - Array to store the bytes read from the passed I2C address.
+ *   to_read_len (uint16_t)        - Number of bytes to read. The array must be
+ *                                   at least this long. It can't be 0.
  *
  * Returns:
  *   ssize_t - The number of bytes read, or -1 if an error happens.
@@ -202,10 +207,10 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  * Errors:
  *   errno set to:
  *     - EFAULT               : A NULL pointer was given.
- *     - EINVAL               : The address, or the passed i2c_interface, is
+ *     - EINVAL               : The address, or the passed i2c, is
  *                              invalid, or to_read_len is 0.
  *     - ENOTSUP              : The address asks for 10-bit addressing, which
- *                              this platform does not support.
+ *                              the adapter does not support.
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cRead function reported some error.
@@ -232,29 +237,32 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  * It's a platform-specific function.
  *
  * First write "to_write_len" bytes from "to_write" to "addr". Then read
- * "to_read_bytes" bytes to "to_read" from the same transaction.
+ * "to_read_len" bytes to "to_read" from the same transaction.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*)  - I2C interface to read from.
  *   addr (plc_i2c_addr_t)         - I2C address to read from.
- *   to_write (const uint8_t*)     - Array of bytes to write from the passed I2C address.
+ *   to_write (const uint8_t*)     - Array of bytes to write to the passed I2C address.
  *   to_write_len (uint16_t)       - Number of bytes to write. It can't be 0.
- *   to_read (const uint8_t*)      - Array of bytes to read from the passed I2C address.
- *   to_read_len (uint16_t)        - Number of bytes to read. It must be equal or
- *                                   greater than the array length. It can't
- *                                   be 0.
- *   read_bytes (uint16_t*)        - Pointer to save the real number of read bytes.
+ *   to_read (uint8_t*)            - Array to store the bytes read from the passed I2C address.
+ *   to_read_len (uint16_t)        - Number of bytes to read. The array must be
+ *                                   at least this long. It can't be 0.
+ *   read_bytes (uint16_t*)        - Pointer to save the real number of read
+ *                                   bytes. It can be less than to_read_len
+ *                                   even on success, if the write went out
+ *                                   but the read came back short.
  *
  * Returns:
- *   ssize_t - The number of bytes written, or -1 if an error happens.
+ *   ssize_t - The number of bytes written, or -1 if an error happens. On
+ *             success, check read_bytes for the number of bytes read.
  *
  * Errors:
  *   errno set to:
  *     - EFAULT               : A NULL pointer was given.
- *     - EINVAL               : The address, or the passed i2c_interface, is
+ *     - EINVAL               : The address, or the passed i2c, is
  *                              invalid, or to_write_len or to_read_len is 0.
  *     - ENOTSUP              : The address asks for 10-bit addressing, which
- *                              this platform does not support.
+ *                              the adapter does not support.
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cWriteReadNonStop function reported some
