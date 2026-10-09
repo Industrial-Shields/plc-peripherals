@@ -2390,6 +2390,39 @@ void test_mcp230xx_fuzzes_every_gpio_index_to_its_register_and_bit(void)
 	}
 }
 
+/* ---------------------------- mcp230xx_get_type --------------------------- */
+
+void test_mcp230xx_get_type_returns_the_type_of_the_init(void)
+{
+	const MCP230XX_TYPE types[] = { MCP230XX_008, MCP230XX_017 };
+
+	for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
+		mcp230xx_t* mcp = create_mcp(types[i]);
+		MCP230XX_TYPE type;
+
+		TEST_ASSERT_EQUAL_INT(0, mcp230xx_get_type(mcp, &type));
+		TEST_ASSERT_EQUAL_INT(types[i], type);
+
+		destroy_mcp(mcp);
+	}
+}
+
+void test_mcp230xx_get_type_fails_with_efault_for_null(void)
+{
+	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
+	MCP230XX_TYPE type;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(NULL, &type));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(mcp, NULL));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	destroy_mcp(mcp);
+}
+
 /* ----------------------- mcp230xx_protect / unprotect --------------------- */
 
 void test_mcp230xx_protect_fails_with_efault_for_null(void)

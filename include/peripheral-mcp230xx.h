@@ -381,6 +381,24 @@ int mcp230xx_protect(const i2c_interface_t* i2c,
 int mcp230xx_unprotect(mcp230xx_t* mcp);
 
 /**
+ * mcp230xx_get_type
+ *
+ * Get the chip type the MCP230XX handle was initialized with.
+ *
+ * Parameters:
+ *   mcp (const mcp230xx_t*) - The MCP230XX to get the type from.
+ *   type (MCP230XX_TYPE*)   - Pointer to store the type in.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT : Passed mcp230xx_t or type is NULL.
+ */
+int mcp230xx_get_type(const mcp230xx_t* mcp, MCP230XX_TYPE* type);
+
+/**
  * mcp230xx_set_input
  *
  * Set a GPIO of the MCP230XX "mcp" as an input.

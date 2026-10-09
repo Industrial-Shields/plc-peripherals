@@ -521,6 +521,17 @@ int mcp230xx_unprotect(mcp230xx_t* mcp)
 	return 0;
 }
 
+int mcp230xx_get_type(const mcp230xx_t* mcp, MCP230XX_TYPE* type)
+{
+	if (mcp == NULL || type == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	*type = MCP(mcp)->type;
+	return 0;
+}
+
 int mcp230xx_set_input(const i2c_interface_t* i2c,
 		       mcp230xx_t* mcp,
 		       uint8_t index,
