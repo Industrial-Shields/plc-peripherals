@@ -65,16 +65,12 @@
 #define PRE_SCALE_REG                                  0xFE
 #define   PRE_SCALE_REG_RESET_VALUE                    0x1E
 
-#define PCA9685_OSC_HZ                                 25000000UL
-#define PCA9685_PWM_STEPS                              4096UL
-
 // The oscillator is up at most 500 us after leaving sleep
 #define PCA9685_OSC_STARTUP_US                         500
 // clang-format on
 
 #define LED_ON_L_REG(index) (LED0_ON_L_REG + (index) * LED_REGS_PER_OUTPUT)
 #define UINT8T_ARR(arr) arr, sizeof(arr)
-#define DIV_ROUND_CLOSEST(n, d) (((n) + (d) / 2) / (d))
 
 typedef struct {
 	plc_mutex_t mutex;
@@ -584,11 +580,8 @@ int pca9685_set_frequency(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	const uint32_t divisor = PCA9685_PWM_STEPS * freq_hz;
-	const uint8_t prescale =
-		(uint8_t)(DIV_ROUND_CLOSEST(PCA9685_OSC_HZ, divisor) - 1);
-
-	return pca9685_set_prescaler(i2c, pca, prescale, timeout_ms);
+	return pca9685_set_prescaler(
+		i2c, pca, (uint8_t)PCA9685_PRESCALER(freq_hz), timeout_ms);
 }
 
 int pca9685_set_output(const i2c_interface_t* i2c,

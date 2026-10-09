@@ -35,7 +35,18 @@ extern "C" {
 #define PCA9685_MAX_FREQ_HZ    1526
 #define PCA9685_MIN_PRESCALER  3
 #define PCA9685_MAX_PRESCALER  255
+#define PCA9685_OSC_HZ         25000000UL // Internal oscillator
 // clang-format on
+
+/*
+ * The PRE_SCALE value for a PWM frequency of freq_hz, rounded to the closest
+ * one (datasheet, equation 1). Only valid from PCA9685_MIN_FREQ_HZ to
+ * PCA9685_MAX_FREQ_HZ.
+ */
+#define PCA9685_PRESCALER(freq_hz)                              \
+	((PCA9685_OSC_HZ + 2048UL * (unsigned long)(freq_hz)) / \
+		 (4096UL * (unsigned long)(freq_hz)) -          \
+	 1)
 
 /*
  * Sized for the private handle in peripheral-pca9685.c: its mutex, the I2C
