@@ -274,7 +274,7 @@ int ltc2309_protect(const i2c_interface_t* i2c,
 int ltc2309_unprotect(ltc2309_t* ltc);
 
 /**
- * ltc2309_read_single_ended_unsigned
+ * ltc2309_unsigned_single_ended_read
  *
  * Perform a single-ended unipolar conversion, and store the 12-bit result as
  * straight binary (0 to 4095).
@@ -307,14 +307,14 @@ int ltc2309_unprotect(ltc2309_t* ltc);
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
-int ltc2309_read_single_ended_unsigned(const i2c_interface_t* i2c,
+int ltc2309_unsigned_single_ended_read(const i2c_interface_t* i2c,
 				       ltc2309_t* ltc,
 				       LTC2309_INPUT index,
 				       uint16_t* read_value,
 				       uint32_t timeout_ms);
 
 /**
- * ltc2309_read_single_ended_signed
+ * ltc2309_single_ended_read
  *
  * Perform a single-ended bipolar conversion, and store the 12-bit result as
  * 2's complement (-2048 to 2047), sign-extended to int16_t.
@@ -347,14 +347,14 @@ int ltc2309_read_single_ended_unsigned(const i2c_interface_t* i2c,
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
-int ltc2309_read_single_ended_signed(const i2c_interface_t* i2c,
-				     ltc2309_t* ltc,
-				     LTC2309_INPUT index,
-				     int16_t* read_value,
-				     uint32_t timeout_ms);
+int ltc2309_single_ended_read(const i2c_interface_t* i2c,
+			      ltc2309_t* ltc,
+			      LTC2309_INPUT index,
+			      int16_t* read_value,
+			      uint32_t timeout_ms);
 
 /**
- * ltc2309_read_differential_unsigned
+ * ltc2309_unsigned_differential_read
  *
  * Perform a differential unipolar conversion, and store the 12-bit result as
  * straight binary (0 to 4095).
@@ -386,14 +386,14 @@ int ltc2309_read_single_ended_signed(const i2c_interface_t* i2c,
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
-int ltc2309_read_differential_unsigned(const i2c_interface_t* i2c,
+int ltc2309_unsigned_differential_read(const i2c_interface_t* i2c,
 				       ltc2309_t* ltc,
 				       LTC2309_DIFF_INPUT index,
 				       uint16_t* read_value,
 				       uint32_t timeout_ms);
 
 /**
- * ltc2309_read_differential_signed
+ * ltc2309_differential_read
  *
  * Perform a differential bipolar conversion, and store the 12-bit result as
  * 2's complement (-2048 to 2047), sign-extended to int16_t.
@@ -425,11 +425,11 @@ int ltc2309_read_differential_unsigned(const i2c_interface_t* i2c,
  *                  plc-mutex.h). EOWNERDEAD is never reported, because the
  *                  driver recovers from it.
  */
-int ltc2309_read_differential_signed(const i2c_interface_t* i2c,
-				     ltc2309_t* ltc,
-				     LTC2309_DIFF_INPUT index,
-				     int16_t* read_value,
-				     uint32_t timeout_ms);
+int ltc2309_differential_read(const i2c_interface_t* i2c,
+			      ltc2309_t* ltc,
+			      LTC2309_DIFF_INPUT index,
+			      int16_t* read_value,
+			      uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

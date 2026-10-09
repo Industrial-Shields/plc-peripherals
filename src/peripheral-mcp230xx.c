@@ -95,9 +95,9 @@ _Static_assert(PLC_PERIPHERAL_INTERNAL_ALIGNOF(mcp230xx_t) ==
 #define REG_B(reg, type) ((type) == MCP230XX_017 ? ((reg) << 1) + 1 : (reg) + 1)
 
 #define GPIO_REG_ADDR(mcp, reg, index)                              \
-	((index) < MCP23008_MAX_GPIOS ? REG_A(reg, MCP_TYPE(mcp)) : \
+	((index) < MCP23008_NUM_GPIOS ? REG_A(reg, MCP_TYPE(mcp)) : \
 					REG_B(reg, MCP_TYPE(mcp)))
-#define GPIO_PIN_MASK(index) ((uint8_t)(1 << ((index) % MCP23008_MAX_GPIOS)))
+#define GPIO_PIN_MASK(index) ((uint8_t)(1 << ((index) % MCP23008_NUM_GPIOS)))
 
 static int mcp230xx_lock(mcp230xx_internal_t* mcp, uint32_t timeout_ms)
 {
@@ -128,10 +128,10 @@ static int mcp230xx_check_gpio(const mcp230xx_t* mcp, uint8_t index)
 {
 	assert(mcp != NULL);
 
-	const uint8_t max_gpios = MCP_TYPE(mcp) == MCP230XX_017 ?
-					  MCP23017_MAX_GPIOS :
-					  MCP23008_MAX_GPIOS;
-	if (index >= max_gpios) {
+	const uint8_t num_gpios = MCP_TYPE(mcp) == MCP230XX_017 ?
+					  MCP23017_NUM_GPIOS :
+					  MCP23008_NUM_GPIOS;
+	if (index >= num_gpios) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -444,7 +444,7 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
 
 int mcp230xx_static_deinit(const i2c_interface_t* i2c,
 			   mcp230xx_t* mcp,
-			   bool restart)
+			   bool shutdown)
 {
 	if (mcp == NULL) {
 		errno = EFAULT;
@@ -459,7 +459,7 @@ int mcp230xx_static_deinit(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (restart &&
+	if (shutdown &&
 	    mcp230xx_reset(i2c, MCP(mcp)->addr, MCP_TYPE(mcp)) != 0) {
 		return -1;
 	}
@@ -467,9 +467,9 @@ int mcp230xx_static_deinit(const i2c_interface_t* i2c,
 	return 0;
 }
 
-int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart)
+int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool shutdown)
 {
-	if (mcp230xx_static_deinit(i2c, mcp, restart) != 0) {
+	if (mcp230xx_static_deinit(i2c, mcp, shutdown) != 0) {
 		return -1;
 	}
 
@@ -521,8 +521,10 @@ int mcp230xx_unprotect(mcp230xx_t* mcp)
 	return 0;
 }
 
-int mcp230xx_get_type(const mcp230xx_t* mcp, MCP230XX_TYPE* type)
+int mcp230xx_get_type(mcp230xx_t* mcp, MCP230XX_TYPE* type, uint32_t timeout_ms)
 {
+	(void)timeout_ms;
+
 	if (mcp == NULL || type == NULL) {
 		errno = EFAULT;
 		return -1;
@@ -652,7 +654,7 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 			      &gpio_reg);
 	if (result == 0) {
 		if (MCP_TYPE(mcp) == MCP230XX_017) {
-			if (index < MCP23008_MAX_GPIOS) {
+			if (index < MCP23008_NUM_GPIOS) {
 				MCP(mcp)->last_gpio.gpio_017 =
 					(MCP(mcp)->last_gpio.gpio_017 &
 					 0xFF00) |
@@ -679,10 +681,10 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 	return 0;
 }
 
-int mcp230xx_read_all_gpios(const i2c_interface_t* i2c,
-			    mcp230xx_t* mcp,
-			    uint16_t* return_value,
-			    uint32_t timeout_ms)
+int mcp230xx_read_all(const i2c_interface_t* i2c,
+		      mcp230xx_t* mcp,
+		      uint16_t* return_value,
+		      uint32_t timeout_ms)
 {
 	uint16_t gpio_regs_017;
 	uint8_t gpio_reg_008;

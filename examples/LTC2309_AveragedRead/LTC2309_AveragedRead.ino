@@ -31,7 +31,7 @@
  *   SDA / SCL            -- the I2C bus given by I2C_BUS below
  *   AD0 / AD1            -- tied to GND here, giving I2C address 0x08
  *
- * ltc2309_read_single_ended_unsigned() (see src/peripheral-ltc2309.c) writes a
+ * ltc2309_unsigned_single_ended_read() (see src/peripheral-ltc2309.c) writes a
  * new command byte, which triggers a fresh conversion, whenever the channel or
  * the range changes. This example changes the channel on every call.
  *
@@ -39,10 +39,10 @@
  * code is 0..4095, mapping to roughly 0..4.096V. Other functions in this
  * driver (see include/peripheral-ltc2309.h), not used here since this example
  * only focuses on reading:
- *   ltc2309_read_single_ended_signed
+ *   ltc2309_single_ended_read
  *     - Single-ended bipolar conversions (COM midway between GND and
  *       REFCOMP), returned as a sign-extended int16_t.
- *   ltc2309_read_differential_unsigned / ltc2309_read_differential_signed
+ *   ltc2309_unsigned_differential_read / ltc2309_differential_read
  *     - Differential conversions, in unipolar or bipolar range.
  *   ltc2309_protect / ltc2309_unprotect
  *     - Guard the device with the resource protector's mutex, so concurrent
@@ -120,12 +120,12 @@ int main()
 		// unsigned variant is the natural fit here.
 		uint8_t sampled_channel = current_channel;
 		uint16_t raw;
-		if (ltc2309_read_single_ended_unsigned(i2c,
+		if (ltc2309_unsigned_single_ended_read(i2c,
 			    ltc, CHANNELS[sampled_channel], &raw, 0) == 0) {
 			sample_sum[sampled_channel] += raw;
 			sample_count[sampled_channel]++;
 		} else {
-			printf("ltc2309_read_single_ended_unsigned failed on %-6s, errno=%d\n",
+			printf("ltc2309_unsigned_single_ended_read failed on %-6s, errno=%d\n",
 			       CHANNEL_NAMES[sampled_channel], errno);
 		}
 

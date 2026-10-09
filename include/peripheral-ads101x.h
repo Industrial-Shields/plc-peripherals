@@ -27,6 +27,10 @@
 extern "C" {
 #endif
 
+// clang-format off
+#define ADS1015_NUM_INPUTS  4 // AIN0 to AIN3
+// clang-format on
+
 /*
  * Sized for the private handle in peripheral-ads101x.c: its mutex, the I2C
  * address, two copies of the CONFIG register, the bus number and two flags.

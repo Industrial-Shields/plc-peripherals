@@ -584,11 +584,11 @@ int pca9685_set_frequency(const i2c_interface_t* i2c,
 		i2c, pca, (uint8_t)PCA9685_PRESCALER(freq_hz), timeout_ms);
 }
 
-int pca9685_set_output(const i2c_interface_t* i2c,
-		       pca9685_t* pca,
-		       uint8_t index,
-		       uint16_t value,
-		       uint32_t timeout_ms)
+int pca9685_write_output(const i2c_interface_t* i2c,
+			 pca9685_t* pca,
+			 uint8_t index,
+			 uint16_t value,
+			 uint32_t timeout_ms)
 {
 	uint8_t buffer[1 + LED_REGS_PER_OUTPUT];
 	int result;
@@ -621,10 +621,10 @@ int pca9685_set_output(const i2c_interface_t* i2c,
 	return result;
 }
 
-int pca9685_set_all_outputs(const i2c_interface_t* i2c,
-			    pca9685_t* pca,
-			    const uint16_t values[PCA9685_NUM_OUTPUTS],
-			    uint32_t timeout_ms)
+int pca9685_write_all(const i2c_interface_t* i2c,
+		      pca9685_t* pca,
+		      const uint16_t values[PCA9685_NUM_OUTPUTS],
+		      uint32_t timeout_ms)
 {
 	uint8_t buffer[1 + PCA9685_NUM_OUTPUTS * LED_REGS_PER_OUTPUT];
 	int result;
@@ -662,11 +662,11 @@ int pca9685_set_all_outputs(const i2c_interface_t* i2c,
 	return result;
 }
 
-int pca9685_get_output(const i2c_interface_t* i2c,
-		       pca9685_t* pca,
-		       uint8_t index,
-		       uint16_t* value,
-		       uint32_t timeout_ms)
+int pca9685_read_output(const i2c_interface_t* i2c,
+			pca9685_t* pca,
+			uint8_t index,
+			uint16_t* value,
+			uint32_t timeout_ms)
 {
 	uint8_t regs[LED_REGS_PER_OUTPUT];
 	int result;
@@ -702,10 +702,10 @@ int pca9685_get_output(const i2c_interface_t* i2c,
 	return 0;
 }
 
-int pca9685_get_all_outputs(const i2c_interface_t* i2c,
-			    pca9685_t* pca,
-			    uint16_t values[PCA9685_NUM_OUTPUTS],
-			    uint32_t timeout_ms)
+int pca9685_read_all(const i2c_interface_t* i2c,
+		     pca9685_t* pca,
+		     uint16_t values[PCA9685_NUM_OUTPUTS],
+		     uint32_t timeout_ms)
 {
 	uint8_t regs[PCA9685_NUM_OUTPUTS * LED_REGS_PER_OUTPUT];
 	int result;

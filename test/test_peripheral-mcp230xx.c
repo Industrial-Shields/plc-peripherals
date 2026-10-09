@@ -958,7 +958,7 @@ void test_mcp230xx_deinit_fails_with_efault_for_null_mcp(void)
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_mcp230xx_deinit_without_restart_just_frees(void)
+void test_mcp230xx_deinit_without_shutdown_just_frees(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
@@ -968,7 +968,7 @@ void test_mcp230xx_deinit_without_restart_just_frees(void)
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
 }
 
-void test_mcp230xx_deinit_with_restart_resets_the_registers(void)
+void test_mcp230xx_deinit_with_shutdown_resets_the_registers(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
 
@@ -1032,8 +1032,7 @@ void test_mcp230xx_rejects_an_interface_for_another_bus(void)
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
-		-1,
-		mcp230xx_read_all_gpios(TEST_I2C, mcp, &(uint16_t){ 0 }, 0));
+		-1, mcp230xx_read_all(TEST_I2C, mcp, &(uint16_t){ 0 }, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	errno = 0;
@@ -1045,7 +1044,8 @@ void test_mcp230xx_rejects_an_interface_for_another_bus(void)
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
-		-1, mcp230xx_disable_interrupt(
+		-1,
+		mcp230xx_disable_interrupt(
 			TEST_I2C, mcp, 0, &(mcp230xx_int_regs_t){ 0 }, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
@@ -1143,7 +1143,7 @@ void test_mcp230xx_static_init_keeps_the_chip_type_of_an_mcp23017(void)
 		0, mcp230xx_static_deinit(TEST_I2C, &storage, false));
 }
 
-void test_mcp230xx_static_deinit_with_restart_resets_the_chip(void)
+void test_mcp230xx_static_deinit_with_shutdown_resets_the_chip(void)
 {
 	static mcp230xx_t storage;
 	mcp230xx_config_t cfg;
@@ -1333,7 +1333,7 @@ void test_mcp230xx_set_input_fails_with_einval_for_out_of_range_index(void)
 	TEST_ASSERT_EQUAL_INT(-1,
 			      mcp230xx_set_input(TEST_I2C,
 						 mcp,
-						 MCP23008_MAX_GPIOS,
+						 MCP23008_NUM_GPIOS,
 						 MCP230XX_PULLUP,
 						 1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
@@ -1595,7 +1595,8 @@ void test_mcp230xx_set_input_drops_the_inversion_when_not_asked(void)
 	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IPOL_008, 0x80, 0);
 
 	TEST_ASSERT_EQUAL_INT(
-		0, mcp230xx_set_input(TEST_I2C, mcp, 3, MCP230XX_NO_PULLUP, 1000));
+		0,
+		mcp230xx_set_input(TEST_I2C, mcp, 3, MCP230XX_NO_PULLUP, 1000));
 
 	destroy_mcp(mcp);
 }
@@ -1624,8 +1625,7 @@ void test_mcp230xx_set_input_uses_the_b_side_ipol_for_high_indices(void)
 	expect_i2c_read8_8b(IODIR_B_017, 0x02, 0);
 	expect_i2c_read8_8b(GPPU_B_017, 0x00, 0);
 	expect_i2c_read8_8b(IPOL_B_017, 0x00, 0);
-	i2c_write8_8b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, IPOL_B_017, 0x02, 0);
+	i2c_write8_8b_ExpectAndReturn(TEST_I2C, TEST_ADDR, IPOL_B_017, 0x02, 0);
 
 	TEST_ASSERT_EQUAL_INT(
 		0,
@@ -1719,7 +1719,7 @@ void test_mcp230xx_read_gpio_fails_with_einval_for_out_of_range_index(void)
 	TEST_ASSERT_EQUAL_INT(
 		-1,
 		mcp230xx_read_gpio(
-			TEST_I2C, mcp, MCP23008_MAX_GPIOS, &value, 1000));
+			TEST_I2C, mcp, MCP23008_NUM_GPIOS, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_mcp(mcp);
@@ -1783,31 +1783,30 @@ void test_mcp230xx_read_gpio_fails_when_reading_the_gpio_reg_fails(void)
 	destroy_mcp(mcp);
 }
 
-/* ----------------------- mcp230xx_read_all_gpios -------------------------- */
+/* --------------------------- mcp230xx_read_all ---------------------------- */
 
-void test_mcp230xx_read_all_gpios_fails_with_efault_for_null_mcp(void)
+void test_mcp230xx_read_all_fails_with_efault_for_null_mcp(void)
 {
 	uint16_t value;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, mcp230xx_read_all_gpios(TEST_I2C, NULL, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(-1,
+			      mcp230xx_read_all(TEST_I2C, NULL, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_mcp230xx_read_all_gpios_fails_with_efault_for_null_return_value(void)
+void test_mcp230xx_read_all_fails_with_efault_for_null_return_value(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, mcp230xx_read_all_gpios(TEST_I2C, mcp, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_read_all(TEST_I2C, mcp, NULL, 1000));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_all_gpios_reads_the_gpio_reg_of_an_mcp23008(void)
+void test_mcp230xx_read_all_reads_the_gpio_reg_of_an_mcp23008(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 
@@ -1815,15 +1814,15 @@ void test_mcp230xx_read_all_gpios_reads_the_gpio_reg_of_an_mcp23008(void)
 
 	uint16_t value;
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		0, mcp230xx_read_all_gpios(TEST_I2C, mcp, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_read_all(TEST_I2C, mcp, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(0, errno);
 	TEST_ASSERT_EQUAL_HEX16(0x00A5, value);
 
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_all_gpios_reads_both_ports_of_an_mcp23017_at_once(void)
+void test_mcp230xx_read_all_reads_both_ports_of_an_mcp23017_at_once(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
 
@@ -1832,8 +1831,8 @@ void test_mcp230xx_read_all_gpios_reads_both_ports_of_an_mcp23017_at_once(void)
 
 	uint16_t value;
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		0, mcp230xx_read_all_gpios(TEST_I2C, mcp, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_read_all(TEST_I2C, mcp, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(0, errno);
 	// GPIOs 0 to 7 are port A
 	TEST_ASSERT_EQUAL_HEX16(0x3412, value);
@@ -1841,7 +1840,7 @@ void test_mcp230xx_read_all_gpios_reads_both_ports_of_an_mcp23017_at_once(void)
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_all_gpios_bits_match_mcp230xx_read_gpio_indices(void)
+void test_mcp230xx_read_all_bits_match_mcp230xx_read_gpio_indices(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
 
@@ -1851,8 +1850,7 @@ void test_mcp230xx_read_all_gpios_bits_match_mcp230xx_read_gpio_indices(void)
 
 	uint16_t all;
 	uint8_t one;
-	TEST_ASSERT_EQUAL_INT(
-		0, mcp230xx_read_all_gpios(TEST_I2C, mcp, &all, 1000));
+	TEST_ASSERT_EQUAL_INT(0, mcp230xx_read_all(TEST_I2C, mcp, &all, 1000));
 	TEST_ASSERT_EQUAL_INT(
 		0, mcp230xx_read_gpio(TEST_I2C, mcp, 12, &one, 1000));
 	TEST_ASSERT_EQUAL_HEX16(1 << 12, all);
@@ -1861,21 +1859,21 @@ void test_mcp230xx_read_all_gpios_bits_match_mcp230xx_read_gpio_indices(void)
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_all_gpios_fails_without_writing_when_the_read_fails(void)
+void test_mcp230xx_read_all_fails_without_writing_when_the_read_fails(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
 
 	expect_i2c_read8_16b(GPIO_A_017, 0, -1);
 
 	uint16_t value = 0xBEEF;
-	TEST_ASSERT_EQUAL_INT(
-		-1, mcp230xx_read_all_gpios(TEST_I2C, mcp, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(-1,
+			      mcp230xx_read_all(TEST_I2C, mcp, &value, 1000));
 	TEST_ASSERT_EQUAL_HEX16(0xBEEF, value);
 
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_all_gpios_when_protected_locks_and_unlocks(void)
+void test_mcp230xx_read_all_when_protected_locks_and_unlocks(void)
 {
 	mcp230xx_t* mcp = create_protected_mcp(MCP230XX_008);
 
@@ -1886,8 +1884,8 @@ void test_mcp230xx_read_all_gpios_when_protected_locks_and_unlocks(void)
 	plc_mutex_release_IgnoreArg_mutex();
 
 	uint16_t value;
-	TEST_ASSERT_EQUAL_INT(
-		0, mcp230xx_read_all_gpios(TEST_I2C, mcp, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(0,
+			      mcp230xx_read_all(TEST_I2C, mcp, &value, 1000));
 	TEST_ASSERT_EQUAL_HEX16(0x0001, value);
 
 	destroy_protected_mcp(mcp);
@@ -1909,7 +1907,7 @@ void test_mcp230xx_set_output_fails_with_einval_for_out_of_range_index(void)
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		mcp230xx_set_output(TEST_I2C, mcp, MCP23008_MAX_GPIOS, 1000));
+		mcp230xx_set_output(TEST_I2C, mcp, MCP23008_NUM_GPIOS, 1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_mcp(mcp);
@@ -2094,7 +2092,7 @@ void test_mcp230xx_write_gpio_fails_with_einval_for_out_of_range_index(void)
 	TEST_ASSERT_EQUAL_INT(-1,
 			      mcp230xx_write_gpio(TEST_I2C,
 						  mcp,
-						  MCP23008_MAX_GPIOS,
+						  MCP23008_NUM_GPIOS,
 						  MCP230XX_HIGH,
 						  1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
@@ -2400,7 +2398,7 @@ void test_mcp230xx_get_type_returns_the_type_of_the_init(void)
 		mcp230xx_t* mcp = create_mcp(types[i]);
 		MCP230XX_TYPE type;
 
-		TEST_ASSERT_EQUAL_INT(0, mcp230xx_get_type(mcp, &type));
+		TEST_ASSERT_EQUAL_INT(0, mcp230xx_get_type(mcp, &type, 0));
 		TEST_ASSERT_EQUAL_INT(types[i], type);
 
 		destroy_mcp(mcp);
@@ -2413,11 +2411,11 @@ void test_mcp230xx_get_type_fails_with_efault_for_null(void)
 	MCP230XX_TYPE type;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(NULL, &type));
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(NULL, &type, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(mcp, NULL));
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(mcp, NULL, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	destroy_mcp(mcp);
@@ -2629,8 +2627,7 @@ void test_mcp230xx_fails_when_the_mutex_cant_be_taken(void)
 
 	errno = 0;
 	uint16_t all;
-	TEST_ASSERT_EQUAL_INT(
-		-1, mcp230xx_read_all_gpios(TEST_I2C, mcp, &all, 1000));
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_read_all(TEST_I2C, mcp, &all, 1000));
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
 
 	errno = 0;
@@ -2642,7 +2639,8 @@ void test_mcp230xx_fails_when_the_mutex_cant_be_taken(void)
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
-		-1, mcp230xx_disable_interrupt(
+		-1,
+		mcp230xx_disable_interrupt(
 			TEST_I2C, mcp, 9, &(mcp230xx_int_regs_t){ 0 }, 1000));
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
 
@@ -2714,7 +2712,7 @@ void test_mcp230xx_rejects_bad_arguments_without_taking_the_mutex(void)
 	TEST_ASSERT_EQUAL_INT(-1,
 			      mcp230xx_set_input(TEST_I2C,
 						 mcp,
-						 MCP23008_MAX_GPIOS,
+						 MCP23008_NUM_GPIOS,
 						 MCP230XX_PULLUP,
 						 1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
@@ -2816,7 +2814,7 @@ void test_mcp230xx_enable_interrupt_fails_with_einval_for_out_of_range_index(
 	TEST_ASSERT_EQUAL_INT(-1,
 			      mcp230xx_enable_interrupt(TEST_I2C,
 							mcp,
-							MCP23008_MAX_GPIOS,
+							MCP23008_NUM_GPIOS,
 							MCP230XX_INT_ON_CHANGE,
 							1000));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
@@ -3193,7 +3191,7 @@ void test_mcp230xx_read_interrupt_gives_the_port_read_gpio_saved(void)
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_interrupt_gives_what_read_all_gpios_saved(void)
+void test_mcp230xx_read_interrupt_gives_what_read_all_saved(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_017);
 	mcp230xx_int_regs_t regs;
@@ -3201,8 +3199,7 @@ void test_mcp230xx_read_interrupt_gives_what_read_all_gpios_saved(void)
 
 	// GPIOA (0x12), then GPIOB (0x34)
 	expect_i2c_read8_16b(GPIO_A_017, 0x1234, 0);
-	TEST_ASSERT_EQUAL_INT(0,
-			      mcp230xx_read_all_gpios(TEST_I2C, mcp, &all, 0));
+	TEST_ASSERT_EQUAL_INT(0, mcp230xx_read_all(TEST_I2C, mcp, &all, 0));
 
 	answer_interrupt_read(
 		(const uint8_t[]){ 0x00, 0x00, 0x00, 0x00, 0x12, 0x34 }, 6);
@@ -3212,8 +3209,7 @@ void test_mcp230xx_read_interrupt_gives_what_read_all_gpios_saved(void)
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_interrupt_gives_what_read_gpio_saved_on_an_mcp23008(
-	void)
+void test_mcp230xx_read_interrupt_gives_what_read_gpio_saved_on_an_mcp23008(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 	mcp230xx_int_regs_t regs;
@@ -3230,16 +3226,14 @@ void test_mcp230xx_read_interrupt_gives_what_read_gpio_saved_on_an_mcp23008(
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_interrupt_gives_what_read_all_gpios_saved_on_an_mcp23008(
-	void)
+void test_mcp230xx_read_interrupt_gives_what_read_all_saved_on_an_mcp23008(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 	mcp230xx_int_regs_t regs;
 	uint16_t all;
 
 	expect_i2c_read8_8b(GPIO_008, 0xA5, 0);
-	TEST_ASSERT_EQUAL_INT(0,
-			      mcp230xx_read_all_gpios(TEST_I2C, mcp, &all, 0));
+	TEST_ASSERT_EQUAL_INT(0, mcp230xx_read_all(TEST_I2C, mcp, &all, 0));
 
 	answer_interrupt_read((const uint8_t[]){ 0x00, 0x00, 0xA5 }, 3);
 	TEST_ASSERT_EQUAL_INT(0, read_interrupt(mcp, &regs));
@@ -3266,16 +3260,14 @@ void test_mcp230xx_read_interrupt_keeps_the_save_when_read_gpio_fails(void)
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_read_interrupt_keeps_the_save_when_read_all_gpios_fails(
-	void)
+void test_mcp230xx_read_interrupt_keeps_the_save_when_read_all_fails(void)
 {
 	mcp230xx_t* mcp = create_mcp_reading_gpio(MCP230XX_017, 0xAB05);
 	mcp230xx_int_regs_t regs;
 	uint16_t all;
 
 	expect_i2c_read8_16b(GPIO_A_017, 0, -1);
-	TEST_ASSERT_EQUAL_INT(-1,
-			      mcp230xx_read_all_gpios(TEST_I2C, mcp, &all, 0));
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_read_all(TEST_I2C, mcp, &all, 0));
 
 	answer_interrupt_read(
 		(const uint8_t[]){ 0x00, 0x00, 0x00, 0x00, 0x05, 0xAB }, 6);
@@ -3358,9 +3350,8 @@ void test_mcp230xx_read_interrupt_when_protected_locks_and_unlocks(void)
 
 /* ---------------------- mcp230xx_disable_interrupt ------------------------ */
 
-static int disable_interrupt(mcp230xx_t* mcp,
-			     uint8_t index,
-			     mcp230xx_int_regs_t* regs)
+static int
+disable_interrupt(mcp230xx_t* mcp, uint8_t index, mcp230xx_int_regs_t* regs)
 {
 	return mcp230xx_disable_interrupt(TEST_I2C, mcp, index, regs, 1000);
 }
@@ -3392,15 +3383,14 @@ void test_mcp230xx_disable_interrupt_fails_with_einval_for_out_of_range_index(
 	mcp230xx_int_regs_t regs;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1,
-			      disable_interrupt(mcp, MCP23008_MAX_GPIOS, &regs));
+	TEST_ASSERT_EQUAL_INT(
+		-1, disable_interrupt(mcp, MCP23008_NUM_GPIOS, &regs));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	destroy_mcp(mcp);
 }
 
-void test_mcp230xx_disable_interrupt_clears_only_the_gpinten_bit_then_reads(
-	void)
+void test_mcp230xx_disable_interrupt_clears_only_the_gpinten_bit_then_reads(void)
 {
 	mcp230xx_t* mcp = create_mcp(MCP230XX_008);
 	mcp230xx_int_regs_t regs;

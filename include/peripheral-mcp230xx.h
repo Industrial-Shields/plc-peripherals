@@ -28,8 +28,8 @@ extern "C" {
 #endif
 
 // clang-format off
-#define MCP23008_MAX_GPIOS     8
-#define MCP23017_MAX_GPIOS     16
+#define MCP23008_NUM_GPIOS     8
+#define MCP23017_NUM_GPIOS     16
 #define MCP230XX_HIGH          1
 #define MCP230XX_LOW           0
 #define MCP230XX_INPUT         1
@@ -218,16 +218,17 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
  *
  * WARNINGS:
  *   - Never use this on an mcp230xx_static_init handle.
- *   - If the handle is protected, its mutex is destroyed first. If the reset
- *     write fails after that, the handle is not freed, but it is no longer
- *     protected.
+ *   - If the handle is protected, its mutex is destroyed first. If the
+ *     shutdown write fails after that, the handle is not freed, but it is no
+ *     longer protected.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
- *   restart (bool)               - true if you want to reset the peripheral
- *                                  (that is, set the registers to its default
- *                                  values) before releasing it.
+ *   shutdown (bool)              - true if you want to set every register
+ *                                  to its power-on value before releasing
+ *                                  it, so every GPIO is an input again and
+ *                                  nothing is driven.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
@@ -241,7 +242,7 @@ mcp230xx_t* mcp230xx_init(const i2c_interface_t* i2c,
  *                  while protected (see plc-mutex.h). If the mutex can't be
  *                  destroyed, the handle is left as it was.
  */
-int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool restart);
+int mcp230xx_deinit(const i2c_interface_t* i2c, mcp230xx_t* mcp, bool shutdown);
 
 /**
  * mcp230xx_static_init
@@ -304,16 +305,17 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
  *
  * WARNINGS:
  *   - Never use this on an mcp230xx_init handle.
- *   - If the handle is protected, its mutex is destroyed first. If the reset
- *     write fails after that, the handle is still initialized, but it is no
- *     longer protected.
+ *   - If the handle is protected, its mutex is destroyed first. If the
+ *     shutdown write fails after that, the handle is still initialized, but
+ *     it is no longer protected.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
- *   restart (bool)               - true if you want to reset the peripheral
- *                                  (that is, set the registers to its default
- *                                  values) before releasing it.
+ *   shutdown (bool)              - true if you want to set every register
+ *                                  to its power-on value before releasing
+ *                                  it, so every GPIO is an input again and
+ *                                  nothing is driven.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
@@ -329,7 +331,7 @@ int mcp230xx_static_init(const i2c_interface_t* i2c,
  */
 int mcp230xx_static_deinit(const i2c_interface_t* i2c,
 			   mcp230xx_t* mcp,
-			   bool restart);
+			   bool shutdown);
 
 /**
  * mcp230xx_protect
@@ -386,8 +388,10 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  * Get the chip type the MCP230XX handle was initialized with.
  *
  * Parameters:
- *   mcp (const mcp230xx_t*) - The MCP230XX to get the type from.
- *   type (MCP230XX_TYPE*)   - Pointer to store the type in.
+ *   mcp (mcp230xx_t*)     - The MCP230XX to get the type from.
+ *   type (MCP230XX_TYPE*) - Pointer to store the type in.
+ *   timeout_ms (uint32_t) - Ignored. The type never changes, so no lock is
+ *                           taken; it's there to match the other getters.
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
@@ -396,7 +400,9 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  *   errno set to:
  *     - EFAULT : Passed mcp230xx_t or type is NULL.
  */
-int mcp230xx_get_type(const mcp230xx_t* mcp, MCP230XX_TYPE* type);
+int mcp230xx_get_type(mcp230xx_t* mcp,
+		      MCP230XX_TYPE* type,
+		      uint32_t timeout_ms);
 
 /**
  * mcp230xx_set_input
@@ -476,7 +482,7 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
 		       uint32_t timeout_ms);
 
 /**
- * mcp230xx_read_all_gpios
+ * mcp230xx_read_all
  *
  * Read the level of every GPIO of MCP230XX "mcp" at once, in a single I2C
  * transfer. Bit i is GPIO i. On an MCP23008, bits 8 to 15 are 0. A GPIO
@@ -508,10 +514,10 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
  *                  protected (see plc-mutex.h). EOWNERDEAD is never
  *                  reported, because the driver recovers from it.
  */
-int mcp230xx_read_all_gpios(const i2c_interface_t* i2c,
-			    mcp230xx_t* mcp,
-			    uint16_t* return_value,
-			    uint32_t timeout_ms);
+int mcp230xx_read_all(const i2c_interface_t* i2c,
+		      mcp230xx_t* mcp,
+		      uint16_t* return_value,
+		      uint32_t timeout_ms);
 
 /**
  * mcp230xx_set_output
@@ -657,7 +663,7 @@ int mcp230xx_write_all(const i2c_interface_t* i2c,
  * It configures DEFVAL and INTCON before setting GPINTEN, so the interrupt is
  * never enabled with a comparison it wasn't asked for.
  *
- * WARNING: Changes that mcp230xx_read_gpio and mcp230xx_read_all_gpios clear
+ * WARNING: Changes that mcp230xx_read_gpio and mcp230xx_read_all clear
  * aren't reported by mcp230xx_read_interrupt (see mcp230xx_read_interrupt).
  *
  * Parameters:
@@ -757,7 +763,7 @@ int mcp230xx_disable_interrupt(const i2c_interface_t* i2c,
  *   - A port's bits in intcap are only meaningful when one of its GPIOs is set
  *     in intf. Otherwise, they hold the port's level at its previous
  *     interrupt, or an unknown value if it never had one.
- *   - mcp230xx_read_gpio and mcp230xx_read_all_gpios also clear the pending
+ *   - mcp230xx_read_gpio and mcp230xx_read_all also clear the pending
  *     interrupts and save the levels, so the changes that happened before
  *     them aren't reported here.
  *   - A GPIO that changes and goes back to its level before it is read leaves

@@ -792,19 +792,18 @@ void test_pca9685_rejects_an_interface_for_another_bus(void)
 			      pca9685_set_prescaler(TEST_I2C, pca, 0x1E, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_output(TEST_I2C, pca, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_output(TEST_I2C, pca, 0, 0, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_set_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_output(TEST_I2C, pca, 0, &value, 0));
+			      pca9685_read_output(TEST_I2C, pca, 0, &value, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_get_all_outputs(TEST_I2C, pca, all_values, 0));
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_read_all(TEST_I2C, pca, all_values, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1, pca9685_protect(TEST_I2C, pca, TEST_SCOPE));
@@ -833,7 +832,7 @@ void test_pca9685_static_init_and_static_deinit_use_the_callers_storage(void)
 
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
 	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_set_output(TEST_I2C, &storage, 3, 4096, 0));
+		0, pca9685_write_output(TEST_I2C, &storage, 3, 4096, 0));
 
 	TEST_ASSERT_EQUAL_INT(0,
 			      pca9685_static_deinit(TEST_I2C, &storage, false));
@@ -939,7 +938,7 @@ void test_pca9685_static_deinit_fails_with_efault_for_null(void)
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-/* ------------------------ pca9685_set_frequency --------------------------- */
+/* ------------------------- pca9685_set_frequency -------------------------- */
 
 void test_pca9685_set_frequency_fails_with_efault_for_null_pca(void)
 {
@@ -1122,7 +1121,7 @@ void test_pca9685_set_frequency_fails_when_waking_up_fails(void)
 	destroy_pca(pca);
 }
 
-/* ------------------------ pca9685_set_prescaler -------------------------- */
+/* ------------------------- pca9685_set_prescaler -------------------------- */
 
 void test_pca9685_set_prescaler_fails_with_efault_for_null_pca(void)
 {
@@ -1198,69 +1197,73 @@ void test_pca9685_set_prescaler_fails_when_writing_the_prescale_fails(void)
 	destroy_pca(pca);
 }
 
-/* -------------------------- pca9685_set_output ---------------------------- */
+/* -------------------------- pca9685_write_output -------------------------- */
 
-void test_pca9685_set_output_fails_with_efault_for_null_pca(void)
+void test_pca9685_write_output_fails_with_efault_for_null_pca(void)
 {
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_output(TEST_I2C, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_write_output(TEST_I2C, NULL, 0, 0, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_pca9685_set_output_fails_with_einval_for_out_of_range_index(void)
+void test_pca9685_write_output_fails_with_einval_for_out_of_range_index(void)
 {
 	pca9685_t* pca = create_pca();
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		pca9685_set_output(TEST_I2C, pca, PCA9685_NUM_OUTPUTS, 0, 0));
+		pca9685_write_output(TEST_I2C, pca, PCA9685_NUM_OUTPUTS, 0, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_output_fails_with_einval_above_full_on(void)
+void test_pca9685_write_output_fails_with_einval_above_full_on(void)
 {
 	pca9685_t* pca = create_pca();
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		pca9685_set_output(TEST_I2C, pca, 0, PCA9685_OUTPUT_ON + 1, 0));
+		pca9685_write_output(
+			TEST_I2C, pca, 0, PCA9685_OUTPUT_ON + 1, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_output_turns_it_fully_off_at_0(void)
+void test_pca9685_write_output_turns_it_fully_off_at_0(void)
 {
 	pca9685_t* pca = create_pca();
 	const uint8_t expected[] = { 0x06, 0x00, 0x00, 0x00, 0x10 };
 
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
 	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_set_output(TEST_I2C, pca, 0, PCA9685_OUTPUT_OFF, 0));
+		0,
+		pca9685_write_output(TEST_I2C, pca, 0, PCA9685_OUTPUT_OFF, 0));
 	TEST_ASSERT_EQUAL_UINT(OUTPUT_WRITE_LEN, fake_i2c_write_op.len);
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(
 		expected, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_output_turns_it_fully_on_at_4096(void)
+void test_pca9685_write_output_turns_it_fully_on_at_4096(void)
 {
 	pca9685_t* pca = create_pca();
 	const uint8_t expected[] = { 0x06, 0x00, 0x10, 0x00, 0x00 };
 
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
 	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_set_output(TEST_I2C, pca, 0, PCA9685_OUTPUT_ON, 0));
+		0,
+		pca9685_write_output(TEST_I2C, pca, 0, PCA9685_OUTPUT_ON, 0));
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(
 		expected, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_output_turns_it_off_at_the_count_in_between(void)
+void test_pca9685_write_output_turns_it_off_at_the_count_in_between(void)
 {
 	pca9685_t* pca = create_pca();
 	const uint8_t expected_1[] = { 0x06, 0x00, 0x00, 0x01, 0x00 };
@@ -1268,21 +1271,23 @@ void test_pca9685_set_output_turns_it_off_at_the_count_in_between(void)
 	const uint8_t expected_4095[] = { 0x06, 0x00, 0x00, 0xFF, 0x0F };
 
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
-	TEST_ASSERT_EQUAL_INT(0, pca9685_set_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(
 		expected_1, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
 
-	TEST_ASSERT_EQUAL_INT(0, pca9685_set_output(TEST_I2C, pca, 0, 2048, 0));
+	TEST_ASSERT_EQUAL_INT(0,
+			      pca9685_write_output(TEST_I2C, pca, 0, 2048, 0));
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(
 		expected_2048, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
 
-	TEST_ASSERT_EQUAL_INT(0, pca9685_set_output(TEST_I2C, pca, 0, 4095, 0));
+	TEST_ASSERT_EQUAL_INT(0,
+			      pca9685_write_output(TEST_I2C, pca, 0, 4095, 0));
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(
 		expected_4095, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_output_never_writes_equal_on_and_off_counts(void)
+void test_pca9685_write_output_never_writes_equal_on_and_off_counts(void)
 {
 	pca9685_t* pca = create_pca();
 
@@ -1292,7 +1297,7 @@ void test_pca9685_set_output_never_writes_equal_on_and_off_counts(void)
 
 		TEST_ASSERT_EQUAL_INT(
 			0,
-			pca9685_set_output(
+			pca9685_write_output(
 				TEST_I2C, pca, 0, (uint16_t)value, 0));
 
 		const uint8_t* regs = &fake_i2c_write_op.bytes[1];
@@ -1307,14 +1312,14 @@ void test_pca9685_set_output_never_writes_equal_on_and_off_counts(void)
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_output_writes_each_index_to_its_registers(void)
+void test_pca9685_write_output_writes_each_index_to_its_registers(void)
 {
 	pca9685_t* pca = create_pca();
 
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
 	for (uint8_t i = 0; i < PCA9685_NUM_OUTPUTS; i++) {
 		TEST_ASSERT_EQUAL_INT(
-			0, pca9685_set_output(TEST_I2C, pca, i, 100, 0));
+			0, pca9685_write_output(TEST_I2C, pca, i, 100, 0));
 		TEST_ASSERT_EQUAL_HEX8(led_on_l_of(i),
 				       fake_i2c_write_op.bytes[0]);
 	}
@@ -1322,59 +1327,57 @@ void test_pca9685_set_output_writes_each_index_to_its_registers(void)
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_output_fails_when_the_write_is_short(void)
+void test_pca9685_write_output_fails_when_the_write_is_short(void)
 {
 	pca9685_t* pca = create_pca();
 
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN - 1;
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
 	TEST_ASSERT_EQUAL_INT(EIO, errno);
 
 	// The HAL can report nothing written as success
 	fake_i2c_write_op.retval = 0;
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
 	TEST_ASSERT_EQUAL_INT(EIO, errno);
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_output_passes_a_failed_write_through(void)
+void test_pca9685_write_output_passes_a_failed_write_through(void)
 {
 	pca9685_t* pca = create_pca();
 
 	// errno as the HAL would have set it
 	fake_i2c_write_op.retval = -1;
 	errno = ENXIO;
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
 	TEST_ASSERT_EQUAL_INT(ENXIO, errno);
 	destroy_pca(pca);
 }
 
-/* ----------------------- pca9685_set_all_outputs -------------------------- */
+/* --------------------------- pca9685_write_all ---------------------------- */
 
-void test_pca9685_set_all_outputs_fails_with_efault_for_null_pca(void)
+void test_pca9685_write_all_fails_with_efault_for_null_pca(void)
 {
 	const uint16_t values[PCA9685_NUM_OUTPUTS] = { 0 };
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_set_all_outputs(TEST_I2C, NULL, values, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_all(TEST_I2C, NULL, values, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_pca9685_set_all_outputs_fails_with_efault_for_null_values(void)
+void test_pca9685_write_all_fails_with_efault_for_null_values(void)
 {
 	pca9685_t* pca = create_pca();
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_set_all_outputs(TEST_I2C, pca, NULL, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_all(TEST_I2C, pca, NULL, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_all_outputs_writes_nothing_if_any_value_is_invalid(void)
+void test_pca9685_write_all_writes_nothing_if_any_value_is_invalid(void)
 {
 	pca9685_t* pca = create_pca();
 	uint16_t values[PCA9685_NUM_OUTPUTS] = { 0 };
@@ -1382,14 +1385,13 @@ void test_pca9685_set_all_outputs_writes_nothing_if_any_value_is_invalid(void)
 	values[PCA9685_NUM_OUTPUTS - 1] = PCA9685_OUTPUT_ON + 1;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_set_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_all_outputs_writes_every_output_in_one_write(void)
+void test_pca9685_write_all_writes_every_output_in_one_write(void)
 {
 	pca9685_t* pca = create_pca();
 	uint16_t values[PCA9685_NUM_OUTPUTS];
@@ -1404,8 +1406,7 @@ void test_pca9685_set_all_outputs_writes_every_output_in_one_write(void)
 			     &expected[1 + 4 * (PCA9685_NUM_OUTPUTS - 1)]);
 
 	fake_i2c_write_op.retval = ALL_OUTPUTS_WRITE_LEN;
-	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_set_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
 	TEST_ASSERT_EQUAL_UINT(ALL_OUTPUTS_WRITE_LEN, fake_i2c_write_op.len);
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(
@@ -1413,20 +1414,19 @@ void test_pca9685_set_all_outputs_writes_every_output_in_one_write(void)
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_all_outputs_fails_when_the_write_is_short(void)
+void test_pca9685_write_all_fails_when_the_write_is_short(void)
 {
 	pca9685_t* pca = create_pca();
 	const uint16_t values[PCA9685_NUM_OUTPUTS] = { 0 };
 
 	fake_i2c_write_op.retval = ALL_OUTPUTS_WRITE_LEN - 1;
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_set_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_INT(EIO, errno);
 	destroy_pca(pca);
 }
 
-/* -------------------------- pca9685_get_output ---------------------------- */
+/* -------------------------- pca9685_read_output --------------------------- */
 
 // Arms the fake with the four LEDn registers, ON then OFF.
 static void chip_has_counts(uint16_t on, uint16_t off)
@@ -1441,37 +1441,37 @@ static void chip_has_counts(uint16_t on, uint16_t off)
 	fake_i2c_answers(regs, sizeof(regs));
 }
 
-static uint16_t get_output(pca9685_t* pca, uint8_t index)
+static uint16_t read_output(pca9685_t* pca, uint8_t index)
 {
 	uint16_t value = 0xBEEF;
 
 	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_get_output(TEST_I2C, pca, index, &value, 0));
+		0, pca9685_read_output(TEST_I2C, pca, index, &value, 0));
 	return value;
 }
 
-void test_pca9685_get_output_fails_with_efault_for_null_pca(void)
+void test_pca9685_read_output_fails_with_efault_for_null_pca(void)
 {
 	uint16_t value;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_output(TEST_I2C, NULL, 0, &value, 0));
+	TEST_ASSERT_EQUAL_INT(
+		-1, pca9685_read_output(TEST_I2C, NULL, 0, &value, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_pca9685_get_output_fails_with_efault_for_null_value(void)
+void test_pca9685_read_output_fails_with_efault_for_null_value(void)
 {
 	pca9685_t* pca = create_pca();
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_output(TEST_I2C, pca, 0, NULL, 0));
+			      pca9685_read_output(TEST_I2C, pca, 0, NULL, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_fails_with_einval_for_out_of_range_index(void)
+void test_pca9685_read_output_fails_with_einval_for_out_of_range_index(void)
 {
 	pca9685_t* pca = create_pca();
 	uint16_t value;
@@ -1479,20 +1479,20 @@ void test_pca9685_get_output_fails_with_einval_for_out_of_range_index(void)
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
 		-1,
-		pca9685_get_output(
+		pca9685_read_output(
 			TEST_I2C, pca, PCA9685_NUM_OUTPUTS, &value, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_transfer_op.calls);
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_reads_the_four_registers_of_the_index(void)
+void test_pca9685_read_output_reads_the_four_registers_of_the_index(void)
 {
 	pca9685_t* pca = create_pca();
 
 	for (uint8_t i = 0; i < PCA9685_NUM_OUTPUTS; i++) {
 		chip_has_counts(0, 100);
-		TEST_ASSERT_EQUAL_UINT16(100, get_output(pca, i));
+		TEST_ASSERT_EQUAL_UINT16(100, read_output(pca, i));
 		TEST_ASSERT_EQUAL_UINT(1, fake_i2c_transfer_op.len);
 		TEST_ASSERT_EQUAL_HEX8(led_on_l_of(i),
 				       fake_i2c_transfer_op.bytes[0]);
@@ -1502,34 +1502,34 @@ void test_pca9685_get_output_reads_the_four_registers_of_the_index(void)
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_reads_full_off_as_0(void)
+void test_pca9685_read_output_reads_full_off_as_0(void)
 {
 	pca9685_t* pca = create_pca();
 
 	chip_has_counts(0x0000, 0x1000);
-	TEST_ASSERT_EQUAL_UINT16(PCA9685_OUTPUT_OFF, get_output(pca, 0));
+	TEST_ASSERT_EQUAL_UINT16(PCA9685_OUTPUT_OFF, read_output(pca, 0));
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_reads_full_on_as_4096(void)
+void test_pca9685_read_output_reads_full_on_as_4096(void)
 {
 	pca9685_t* pca = create_pca();
 
 	chip_has_counts(0x1000, 0x0000);
-	TEST_ASSERT_EQUAL_UINT16(PCA9685_OUTPUT_ON, get_output(pca, 0));
+	TEST_ASSERT_EQUAL_UINT16(PCA9685_OUTPUT_ON, read_output(pca, 0));
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_gives_full_off_precedence_over_full_on(void)
+void test_pca9685_read_output_gives_full_off_precedence_over_full_on(void)
 {
 	pca9685_t* pca = create_pca();
 
 	chip_has_counts(0x1000, 0x1000);
-	TEST_ASSERT_EQUAL_UINT16(PCA9685_OUTPUT_OFF, get_output(pca, 0));
+	TEST_ASSERT_EQUAL_UINT16(PCA9685_OUTPUT_OFF, read_output(pca, 0));
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_reads_back_every_value_set_output_writes(void)
+void test_pca9685_read_output_reads_back_every_value_write_output_writes(void)
 {
 	pca9685_t* pca = create_pca();
 
@@ -1537,15 +1537,15 @@ void test_pca9685_get_output_reads_back_every_value_set_output_writes(void)
 	for (uint32_t value = 0; value <= PCA9685_OUTPUT_ON; value++) {
 		TEST_ASSERT_EQUAL_INT(
 			0,
-			pca9685_set_output(
+			pca9685_write_output(
 				TEST_I2C, pca, 7, (uint16_t)value, 0));
 		fake_i2c_answers(&fake_i2c_write_op.bytes[1], 4);
-		TEST_ASSERT_EQUAL_UINT16((uint16_t)value, get_output(pca, 7));
+		TEST_ASSERT_EQUAL_UINT16((uint16_t)value, read_output(pca, 7));
 	}
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_fails_when_the_transfer_fails(void)
+void test_pca9685_read_output_fails_when_the_transfer_fails(void)
 {
 	pca9685_t* pca = create_pca();
 	uint16_t value = 0xBEEF;
@@ -1555,13 +1555,14 @@ void test_pca9685_get_output_fails_when_the_transfer_fails(void)
 	// errno as the HAL would have set it
 	errno = ENXIO;
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_output(TEST_I2C, pca, 0, &value, 0));
+			      pca9685_read_output(TEST_I2C, pca, 0, &value, 0));
 	TEST_ASSERT_EQUAL_INT(ENXIO, errno);
 	TEST_ASSERT_EQUAL_UINT16(0xBEEF, value);
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_fails_with_eio_when_the_address_is_not_written(void)
+void test_pca9685_read_output_fails_with_eio_when_the_address_is_not_written(
+	void)
 {
 	pca9685_t* pca = create_pca();
 	uint16_t value = 0xBEEF;
@@ -1572,13 +1573,13 @@ void test_pca9685_get_output_fails_with_eio_when_the_address_is_not_written(void
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_output(TEST_I2C, pca, 0, &value, 0));
+			      pca9685_read_output(TEST_I2C, pca, 0, &value, 0));
 	TEST_ASSERT_EQUAL_INT(EIO, errno);
 	TEST_ASSERT_EQUAL_UINT16(0xBEEF, value);
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_output_fails_with_eio_when_the_read_is_short(void)
+void test_pca9685_read_output_fails_with_eio_when_the_read_is_short(void)
 {
 	pca9685_t* pca = create_pca();
 	uint16_t value = 0xBEEF;
@@ -1588,13 +1589,13 @@ void test_pca9685_get_output_fails_with_eio_when_the_read_is_short(void)
 
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_output(TEST_I2C, pca, 0, &value, 0));
+			      pca9685_read_output(TEST_I2C, pca, 0, &value, 0));
 	TEST_ASSERT_EQUAL_INT(EIO, errno);
 	TEST_ASSERT_EQUAL_UINT16(0xBEEF, value);
 	destroy_pca(pca);
 }
 
-/* ------------------------ pca9685_get_all_outputs ------------------------ */
+/* ---------------------------- pca9685_read_all ---------------------------- */
 
 // Arms the fake with all 64 LEDn registers, output 0 first.
 static void chip_has_all_counts(const uint16_t on[PCA9685_NUM_OUTPUTS],
@@ -1612,29 +1613,27 @@ static void chip_has_all_counts(const uint16_t on[PCA9685_NUM_OUTPUTS],
 	fake_i2c_answers(regs, sizeof(regs));
 }
 
-void test_pca9685_get_all_outputs_fails_with_efault_for_null_pca(void)
+void test_pca9685_read_all_fails_with_efault_for_null_pca(void)
 {
 	uint16_t values[PCA9685_NUM_OUTPUTS];
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_get_all_outputs(TEST_I2C, NULL, values, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_read_all(TEST_I2C, NULL, values, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 }
 
-void test_pca9685_get_all_outputs_fails_with_efault_for_null_values(void)
+void test_pca9685_read_all_fails_with_efault_for_null_values(void)
 {
 	pca9685_t* pca = create_pca();
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_all_outputs(TEST_I2C, pca, NULL, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_read_all(TEST_I2C, pca, NULL, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_transfer_op.calls);
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_all_outputs_reads_every_output_in_one_transfer(void)
+void test_pca9685_read_all_reads_every_output_in_one_transfer(void)
 {
 	pca9685_t* pca = create_pca();
 	uint16_t on[PCA9685_NUM_OUTPUTS], off[PCA9685_NUM_OUTPUTS];
@@ -1668,8 +1667,7 @@ void test_pca9685_get_all_outputs_reads_every_output_in_one_transfer(void)
 	}
 	chip_has_all_counts(on, off);
 
-	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_get_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(0, pca9685_read_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_transfer_op.calls);
 	TEST_ASSERT_EQUAL_UINT(1, fake_i2c_transfer_op.len);
 	TEST_ASSERT_EQUAL_HEX8(LED0_ON_L, fake_i2c_transfer_op.bytes[0]);
@@ -1679,7 +1677,7 @@ void test_pca9685_get_all_outputs_reads_every_output_in_one_transfer(void)
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_all_outputs_reads_back_what_set_all_outputs_writes(void)
+void test_pca9685_read_all_reads_back_what_write_all_writes(void)
 {
 	pca9685_t* pca = create_pca();
 	uint16_t written[PCA9685_NUM_OUTPUTS];
@@ -1691,17 +1689,15 @@ void test_pca9685_get_all_outputs_reads_back_what_set_all_outputs_writes(void)
 	written[PCA9685_NUM_OUTPUTS - 1] = PCA9685_OUTPUT_ON;
 
 	fake_i2c_write_op.retval = ALL_OUTPUTS_WRITE_LEN;
-	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_set_all_outputs(TEST_I2C, pca, written, 0));
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_all(TEST_I2C, pca, written, 0));
 	fake_i2c_answers(&fake_i2c_write_op.bytes[1], ALL_OUTPUTS_READ_LEN);
 
-	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_get_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(0, pca9685_read_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_UINT16_ARRAY(written, values, PCA9685_NUM_OUTPUTS);
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_all_outputs_fails_when_the_transfer_fails(void)
+void test_pca9685_read_all_fails_when_the_transfer_fails(void)
 {
 	pca9685_t* pca = create_pca();
 	const uint8_t regs[ALL_OUTPUTS_READ_LEN] = { 0 };
@@ -1715,15 +1711,13 @@ void test_pca9685_get_all_outputs_fails_when_the_transfer_fails(void)
 
 	// errno as the HAL would have set it
 	errno = ENXIO;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_get_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_read_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_INT(ENXIO, errno);
 	TEST_ASSERT_EQUAL_UINT16_ARRAY(untouched, values, PCA9685_NUM_OUTPUTS);
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_all_outputs_fails_with_eio_when_the_address_is_not_written(
-	void)
+void test_pca9685_read_all_fails_with_eio_when_the_address_is_not_written(void)
 {
 	pca9685_t* pca = create_pca();
 	const uint8_t regs[ALL_OUTPUTS_READ_LEN] = { 0 };
@@ -1737,14 +1731,13 @@ void test_pca9685_get_all_outputs_fails_with_eio_when_the_address_is_not_written
 	fake_i2c_transfer_op.retval = 0;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_get_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_read_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_INT(EIO, errno);
 	TEST_ASSERT_EQUAL_UINT16_ARRAY(untouched, values, PCA9685_NUM_OUTPUTS);
 	destroy_pca(pca);
 }
 
-void test_pca9685_get_all_outputs_fails_with_eio_when_the_read_is_short(void)
+void test_pca9685_read_all_fails_with_eio_when_the_read_is_short(void)
 {
 	pca9685_t* pca = create_pca();
 	const uint8_t regs[ALL_OUTPUTS_READ_LEN] = { 0 };
@@ -1757,8 +1750,7 @@ void test_pca9685_get_all_outputs_fails_with_eio_when_the_read_is_short(void)
 	fake_i2c_transfer_op.reported_read_len = ALL_OUTPUTS_READ_LEN - 1;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_get_all_outputs(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_read_all(TEST_I2C, pca, values, 0));
 	TEST_ASSERT_EQUAL_INT(EIO, errno);
 	TEST_ASSERT_EQUAL_UINT16_ARRAY(untouched, values, PCA9685_NUM_OUTPUTS);
 	destroy_pca(pca);
@@ -1805,7 +1797,8 @@ void test_pca9685_protect_leaves_the_handle_unprotected_when_it_fails(void)
 
 	// No mutex is taken, and none is destroyed
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
-	TEST_ASSERT_EQUAL_INT(0, pca9685_set_output(TEST_I2C, pca, 0, 1, 1000));
+	TEST_ASSERT_EQUAL_INT(0,
+			      pca9685_write_output(TEST_I2C, pca, 0, 1, 1000));
 	destroy_pca(pca);
 }
 
@@ -1878,7 +1871,7 @@ void test_pca9685_static_deinit_destroys_the_mutex_when_protected(void)
 
 /* --------------------------- protected calls ------------------------------ */
 
-void test_pca9685_get_all_outputs_when_protected_locks_and_unlocks(void)
+void test_pca9685_read_all_when_protected_locks_and_unlocks(void)
 {
 	pca9685_t* pca = create_protected_pca();
 	const uint8_t regs[ALL_OUTPUTS_READ_LEN] = { 0 };
@@ -1887,8 +1880,7 @@ void test_pca9685_get_all_outputs_when_protected_locks_and_unlocks(void)
 	expect_mutex_acquired();
 	expect_mutex_released();
 	fake_i2c_answers(regs, sizeof(regs));
-	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_get_all_outputs(TEST_I2C, pca, values, 1000));
+	TEST_ASSERT_EQUAL_INT(0, pca9685_read_all(TEST_I2C, pca, values, 1000));
 
 	destroy_protected_pca(pca);
 }
@@ -1918,19 +1910,20 @@ void test_pca9685_set_frequency_when_protected_locks_and_unlocks(void)
 	destroy_protected_pca(pca);
 }
 
-void test_pca9685_set_output_when_protected_locks_and_unlocks(void)
+void test_pca9685_write_output_when_protected_locks_and_unlocks(void)
 {
 	pca9685_t* pca = create_protected_pca();
 
 	expect_mutex_acquired();
 	expect_mutex_released();
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
-	TEST_ASSERT_EQUAL_INT(0, pca9685_set_output(TEST_I2C, pca, 0, 1, 1000));
+	TEST_ASSERT_EQUAL_INT(0,
+			      pca9685_write_output(TEST_I2C, pca, 0, 1, 1000));
 
 	destroy_protected_pca(pca);
 }
 
-void test_pca9685_set_all_outputs_when_protected_locks_and_unlocks(void)
+void test_pca9685_write_all_when_protected_locks_and_unlocks(void)
 {
 	pca9685_t* pca = create_protected_pca();
 	const uint16_t values[PCA9685_NUM_OUTPUTS] = { 0 };
@@ -1938,13 +1931,13 @@ void test_pca9685_set_all_outputs_when_protected_locks_and_unlocks(void)
 	expect_mutex_acquired();
 	expect_mutex_released();
 	fake_i2c_write_op.retval = ALL_OUTPUTS_WRITE_LEN;
-	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_set_all_outputs(TEST_I2C, pca, values, 1000));
+	TEST_ASSERT_EQUAL_INT(0,
+			      pca9685_write_all(TEST_I2C, pca, values, 1000));
 
 	destroy_protected_pca(pca);
 }
 
-void test_pca9685_get_output_when_protected_locks_and_unlocks(void)
+void test_pca9685_read_output_when_protected_locks_and_unlocks(void)
 {
 	pca9685_t* pca = create_protected_pca();
 	uint16_t value;
@@ -1953,7 +1946,7 @@ void test_pca9685_get_output_when_protected_locks_and_unlocks(void)
 	expect_mutex_released();
 	chip_has_counts(0, 100);
 	TEST_ASSERT_EQUAL_INT(
-		0, pca9685_get_output(TEST_I2C, pca, 0, &value, 1000));
+		0, pca9685_read_output(TEST_I2C, pca, 0, &value, 1000));
 
 	destroy_protected_pca(pca);
 }
@@ -1976,19 +1969,19 @@ void test_pca9685_fails_when_the_mutex_cant_be_taken(void)
 			      pca9685_set_prescaler(TEST_I2C, pca, 0x79, 10));
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_output(TEST_I2C, pca, 0, 1, 10));
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_write_output(TEST_I2C, pca, 0, 1, 10));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_all(TEST_I2C, pca, values, 10));
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_set_all_outputs(TEST_I2C, pca, values, 10));
+		-1, pca9685_read_output(TEST_I2C, pca, 0, &value, 10));
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
 	errno = 0;
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_output(TEST_I2C, pca, 0, &value, 10));
-	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_get_all_outputs(TEST_I2C, pca, all_values, 10));
+			      pca9685_read_all(TEST_I2C, pca, all_values, 10));
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
 
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
@@ -2005,7 +1998,7 @@ void test_pca9685_goes_on_after_an_owner_died(void)
 	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(0, pca9685_set_output(TEST_I2C, pca, 0, 1, 10));
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_output(TEST_I2C, pca, 0, 1, 10));
 	TEST_ASSERT_EQUAL_INT(0, errno);
 	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
 
@@ -2037,22 +2030,22 @@ void test_pca9685_releases_the_mutex_when_the_transfer_fails(void)
 	expect_mutex_acquired();
 	expect_mutex_released();
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_set_output(TEST_I2C, pca, 0, 1, 1000));
+			      pca9685_write_output(TEST_I2C, pca, 0, 1, 1000));
+
+	expect_mutex_acquired();
+	expect_mutex_released();
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_write_all(TEST_I2C, pca, values, 1000));
 
 	expect_mutex_acquired();
 	expect_mutex_released();
 	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_set_all_outputs(TEST_I2C, pca, values, 1000));
+		-1, pca9685_read_output(TEST_I2C, pca, 0, &value, 1000));
 
 	expect_mutex_acquired();
 	expect_mutex_released();
 	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_get_output(TEST_I2C, pca, 0, &value, 1000));
-
-	expect_mutex_acquired();
-	expect_mutex_released();
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_get_all_outputs(TEST_I2C, pca, all_values, 1000));
+		-1, pca9685_read_all(TEST_I2C, pca, all_values, 1000));
 
 	destroy_protected_pca(pca);
 }
@@ -2066,15 +2059,14 @@ void test_pca9685_rejects_bad_arguments_without_taking_the_mutex(void)
 
 	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_frequency(TEST_I2C, pca, 0, 10));
 	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_prescaler(TEST_I2C, pca, 2, 10));
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_output(TEST_I2C, pca, 16, 1, 10));
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_set_output(TEST_I2C, pca, 0, 4097, 10));
-	TEST_ASSERT_EQUAL_INT(
-		-1, pca9685_set_all_outputs(TEST_I2C, pca, values, 10));
+			      pca9685_write_output(TEST_I2C, pca, 16, 1, 10));
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_output(TEST_I2C, pca, 0, NULL, 10));
+			      pca9685_write_output(TEST_I2C, pca, 0, 4097, 10));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_all(TEST_I2C, pca, values, 10));
 	TEST_ASSERT_EQUAL_INT(-1,
-			      pca9685_get_all_outputs(TEST_I2C, pca, NULL, 10));
+			      pca9685_read_output(TEST_I2C, pca, 0, NULL, 10));
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_read_all(TEST_I2C, pca, NULL, 10));
 
 	destroy_protected_pca(pca);
 }

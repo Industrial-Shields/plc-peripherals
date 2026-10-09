@@ -328,7 +328,7 @@ static int ltc2309_read_unsigned(const i2c_interface_t* i2c,
 	return 0;
 }
 
-int ltc2309_read_single_ended_unsigned(const i2c_interface_t* i2c,
+int ltc2309_unsigned_single_ended_read(const i2c_interface_t* i2c,
 				       ltc2309_t* ltc,
 				       LTC2309_INPUT index,
 				       uint16_t* read_value,
@@ -338,17 +338,17 @@ int ltc2309_read_single_ended_unsigned(const i2c_interface_t* i2c,
 		i2c, ltc, (uint8_t)index, false, read_value, timeout_ms);
 }
 
-int ltc2309_read_single_ended_signed(const i2c_interface_t* i2c,
-				     ltc2309_t* ltc,
-				     LTC2309_INPUT index,
-				     int16_t* read_value,
-				     uint32_t timeout_ms)
+int ltc2309_single_ended_read(const i2c_interface_t* i2c,
+			      ltc2309_t* ltc,
+			      LTC2309_INPUT index,
+			      int16_t* read_value,
+			      uint32_t timeout_ms)
 {
 	return ltc2309_read_signed(
 		i2c, ltc, (uint8_t)index, false, read_value, timeout_ms);
 }
 
-int ltc2309_read_differential_unsigned(const i2c_interface_t* i2c,
+int ltc2309_unsigned_differential_read(const i2c_interface_t* i2c,
 				       ltc2309_t* ltc,
 				       LTC2309_DIFF_INPUT index,
 				       uint16_t* read_value,
@@ -358,11 +358,11 @@ int ltc2309_read_differential_unsigned(const i2c_interface_t* i2c,
 		i2c, ltc, (uint8_t)index, true, read_value, timeout_ms);
 }
 
-int ltc2309_read_differential_signed(const i2c_interface_t* i2c,
-				     ltc2309_t* ltc,
-				     LTC2309_DIFF_INPUT index,
-				     int16_t* read_value,
-				     uint32_t timeout_ms)
+int ltc2309_differential_read(const i2c_interface_t* i2c,
+			      ltc2309_t* ltc,
+			      LTC2309_DIFF_INPUT index,
+			      int16_t* read_value,
+			      uint32_t timeout_ms)
 {
 	return ltc2309_read_signed(
 		i2c, ltc, (uint8_t)index, true, read_value, timeout_ms);

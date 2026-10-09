@@ -42,7 +42,7 @@
 #include <plc-peripherals-i2c-hal.h>
 #include <plc-peripherals-i2c.h>
 
-// The longest write is pca9685_set_all_outputs: a register address, 64 bytes.
+// The longest write is pca9685_write_all: a register address, 64 bytes.
 #define FAKE_I2C_MAX_WIRE_BYTES 65
 
 /*

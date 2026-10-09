@@ -425,7 +425,7 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
 			  uint32_t timeout_ms);
 
 /**
- * pca9685_set_output
+ * pca9685_write_output
  *
  * Set the duty cycle of an output of the PCA9685 "pca", in 1/4096 steps of the
  * PWM period.
@@ -456,17 +456,17 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
  *                  protected (see plc-mutex.h). EOWNERDEAD is never
  *                  reported, because the driver recovers from it.
  */
-int pca9685_set_output(const i2c_interface_t* i2c,
-		       pca9685_t* pca,
-		       uint8_t index,
-		       uint16_t value,
-		       uint32_t timeout_ms);
+int pca9685_write_output(const i2c_interface_t* i2c,
+			 pca9685_t* pca,
+			 uint8_t index,
+			 uint16_t value,
+			 uint32_t timeout_ms);
 
 /**
- * pca9685_set_all_outputs
+ * pca9685_write_all
  *
  * Set the duty cycle of every output of the PCA9685 "pca" in a single I2C
- * write, so they all change at once. Each value is as in pca9685_set_output.
+ * write, so they all change at once. Each value is as in pca9685_write_output.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -491,16 +491,16 @@ int pca9685_set_output(const i2c_interface_t* i2c,
  *                  protected (see plc-mutex.h). EOWNERDEAD is never
  *                  reported, because the driver recovers from it.
  */
-int pca9685_set_all_outputs(const i2c_interface_t* i2c,
-			    pca9685_t* pca,
-			    const uint16_t values[PCA9685_NUM_OUTPUTS],
-			    uint32_t timeout_ms);
+int pca9685_write_all(const i2c_interface_t* i2c,
+		      pca9685_t* pca,
+		      const uint16_t values[PCA9685_NUM_OUTPUTS],
+		      uint32_t timeout_ms);
 
 /**
- * pca9685_get_output
+ * pca9685_read_output
  *
  * Read the duty cycle of an output of the PCA9685 "pca" from the chip, in the
- * same scale as pca9685_set_output.
+ * same scale as pca9685_write_output.
  *
  * It assumes the output has no phase offset (LEDn_ON count at 0), as this
  * driver never uses phasing. If something else gave it one, the value read is
@@ -530,17 +530,17 @@ int pca9685_set_all_outputs(const i2c_interface_t* i2c,
  *                  protected (see plc-mutex.h). EOWNERDEAD is never
  *                  reported, because the driver recovers from it.
  */
-int pca9685_get_output(const i2c_interface_t* i2c,
-		       pca9685_t* pca,
-		       uint8_t index,
-		       uint16_t* value,
-		       uint32_t timeout_ms);
+int pca9685_read_output(const i2c_interface_t* i2c,
+			pca9685_t* pca,
+			uint8_t index,
+			uint16_t* value,
+			uint32_t timeout_ms);
 
 /**
- * pca9685_get_all_outputs
+ * pca9685_read_all
  *
  * Read the duty cycle of every output of the PCA9685 "pca" from the chip in a
- * single I2C transfer. Each value is as in pca9685_get_output, and makes the
+ * single I2C transfer. Each value is as in pca9685_read_output, and makes the
  * same assumption about phase offsets.
  *
  * Parameters:
@@ -566,10 +566,10 @@ int pca9685_get_output(const i2c_interface_t* i2c,
  *                  protected (see plc-mutex.h). EOWNERDEAD is never
  *                  reported, because the driver recovers from it.
  */
-int pca9685_get_all_outputs(const i2c_interface_t* i2c,
-			    pca9685_t* pca,
-			    uint16_t values[PCA9685_NUM_OUTPUTS],
-			    uint32_t timeout_ms);
+int pca9685_read_all(const i2c_interface_t* i2c,
+		     pca9685_t* pca,
+		     uint16_t values[PCA9685_NUM_OUTPUTS],
+		     uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }
