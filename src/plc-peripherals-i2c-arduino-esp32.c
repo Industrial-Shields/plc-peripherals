@@ -62,7 +62,8 @@ static int check_i2c_address(plc_i2c_addr_t addr)
 
 i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 {
-	esp_err_t init_result = i2cInit(bus, sda, scl, 0);
+	esp_err_t init_result =
+		i2cInit(bus, sda, scl, PLC_I2C_DEFAULT_CLOCK_HZ);
 	if (init_result != ESP_OK) {
 		// Report an error if bus isn't initialized
 		if (!i2cIsInit(bus)) {

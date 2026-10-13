@@ -32,6 +32,8 @@
 #include <sys/types.h>
 #include <stdbool.h>
 
+#include "plc-peripherals-platform.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -48,6 +50,23 @@ typedef uint16_t plc_i2c_addr_t;
 // The fastest I2C clock i2c_set_clock accepts (Fast-mode Plus)
 #define PLC_I2C_MAX_CLOCK_HZ 1000000UL
 
+/*
+ * The clock i2c_init starts a bus at. Define it in the build flags
+ * (-DPLC_I2C_DEFAULT_CLOCK_HZ=400000) to change it. If it isn't defined, it
+ * will pick up a safe value depending on the platform.
+ */
+#ifndef PLC_I2C_DEFAULT_CLOCK_HZ
+#define PLC_I2C_DEFAULT_CLOCK_HZ 100000UL
+#endif
+
+#if PLC_I2C_DEFAULT_CLOCK_HZ > PLC_I2C_MAX_CLOCK_HZ
+#error "PLC_I2C_DEFAULT_CLOCK_HZ must not be above PLC_I2C_MAX_CLOCK_HZ"
+#endif
+
+#if PLC_I2C_DEFAULT_CLOCK_HZ == 0 && PLC_ENVIRONMENT != PLC_ARDUINO_ESP32
+#error "PLC_I2C_DEFAULT_CLOCK_HZ can only be 0 on Arduino-ESP32"
+#endif
+
 /**
  * i2c_init
  *
@@ -63,9 +82,10 @@ typedef uint16_t plc_i2c_addr_t;
  *                   be negative on Linux.
  *   scl (int32_t) - SCL GPIO number. Same as sda.
  *
- * On ESP32, if the bus is already initialized (by this library or by Wire,
- * for example), it is kept as it is: sda and scl are ignored, and only a
- * warning is logged.
+ * On ESP32, the bus starts at PLC_I2C_DEFAULT_CLOCK_HZ. If it is already
+ * initialized (by this library or by Wire, for example), it is kept as it is:
+ * sda, scl and PLC_I2C_DEFAULT_CLOCK_HZ are ignored, and only a warning is
+ * logged. i2c_set_clock changes the clock afterwards.
  *
  * Returns:
  *   i2c_interface_t* - Pointer to the initialized interface on success.
