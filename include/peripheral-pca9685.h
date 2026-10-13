@@ -53,12 +53,13 @@ extern "C" {
 
 /*
  * Sized for the private handle in peripheral-pca9685.c: its mutex, the I2C
- * address, the bus number and a flag.
+ * address, the bus number and two flags.
  */
 #define PCA9685_INTERNAL_ALIGN PLC_MUTEX_ALIGN
 #define PCA9685_INTERNAL_SIZE                                                 \
 	PLC_PERIPHERAL_INTERNAL_PAD(PLC_MUTEX_SIZE + sizeof(plc_i2c_addr_t) + \
-					    sizeof(uint8_t) + sizeof(bool),   \
+					    sizeof(uint8_t) +                 \
+					    2 * sizeof(bool),                 \
 				    PCA9685_INTERNAL_ALIGN)
 
 /*
@@ -359,7 +360,8 @@ int pca9685_unprotect(pca9685_t* pca);
  *
  * To change the frequency, the chip goes to sleep for a moment, which stops the
  * outputs for at least 500 us. They automatically resume with the values they
- * had.
+ * had. If the call fails after the chip went to sleep, the outputs stay stopped
+ * until the next successful set, write or read call on this PCA9685 wakes it.
  *
  * WARNING: It assumes the chip runs on its internal 25 MHz oscillator, as this
  * driver never switches it to the external clock. If something else did
@@ -405,7 +407,8 @@ int pca9685_set_frequency(const i2c_interface_t* i2c,
  *
  * To change the prescale, the chip goes to sleep for a moment, which stops the
  * outputs for at least 500 us. They automatically resume with the values they
- * had.
+ * had. If the call fails after the chip went to sleep, the outputs stay stopped
+ * until the next successful set, write or read call on this PCA9685 wakes it.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -443,6 +446,9 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
  * PWM period. Each pulse starts at the beginning of the period; see
  * pca9685_write_output_phase to start it later.
  *
+ * If a failed pca9685_set_frequency or pca9685_set_prescaler left the chip
+ * asleep, it is woken up first, which resumes the outputs.
+ *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
  *   pca (pca9685_t*)             - The PCA9685 to interact with.
@@ -465,9 +471,10 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
  *     - EIO      : The chip did not take every byte written.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
- *                  protected (see plc-mutex.h). EOWNERDEAD is never
- *                  reported, because the driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int pca9685_write_output(const i2c_interface_t* i2c,
 			 pca9685_t* pca,
@@ -482,6 +489,9 @@ int pca9685_write_output(const i2c_interface_t* i2c,
  * after the period's start instead of at it, wrapping around into the next
  * period if it doesn't fit. Giving outputs different phases staggers when they
  * switch on, which spreads their load on the supply over the period.
+ *
+ * If a failed pca9685_set_frequency or pca9685_set_prescaler left the chip
+ * asleep, it is woken up first, which resumes the outputs.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -507,9 +517,10 @@ int pca9685_write_output(const i2c_interface_t* i2c,
  *     - EIO      : The chip did not take every byte written.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
- *                  protected (see plc-mutex.h). EOWNERDEAD is never
- *                  reported, because the driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int pca9685_write_output_phase(const i2c_interface_t* i2c,
 			       pca9685_t* pca,
@@ -523,6 +534,9 @@ int pca9685_write_output_phase(const i2c_interface_t* i2c,
  *
  * Set the duty cycle of every output of the PCA9685 "pca" in a single I2C
  * write, so they all change at once. Each value is as in pca9685_write_output.
+ *
+ * If a failed pca9685_set_frequency or pca9685_set_prescaler left the chip
+ * asleep, it is woken up first, which resumes the outputs.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -543,9 +557,10 @@ int pca9685_write_output_phase(const i2c_interface_t* i2c,
  *     - EIO      : The chip did not take every byte written.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
- *                  protected (see plc-mutex.h). EOWNERDEAD is never
- *                  reported, because the driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int pca9685_write_all(const i2c_interface_t* i2c,
 		      pca9685_t* pca,
@@ -559,6 +574,9 @@ int pca9685_write_all(const i2c_interface_t* i2c,
  * same scale as pca9685_write_output. It's the duty cycle whatever the phase
  * the output was written with (see pca9685_write_output_phase); see
  * pca9685_read_output_phase to read the phase too.
+ *
+ * If a failed pca9685_set_frequency or pca9685_set_prescaler left the chip
+ * asleep, it is woken up first, which resumes the outputs.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -580,9 +598,10 @@ int pca9685_write_all(const i2c_interface_t* i2c,
  *                  return exactly 4 bytes.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
- *                  protected (see plc-mutex.h). EOWNERDEAD is never
- *                  reported, because the driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int pca9685_read_output(const i2c_interface_t* i2c,
 			pca9685_t* pca,
@@ -595,6 +614,9 @@ int pca9685_read_output(const i2c_interface_t* i2c,
  *
  * Like pca9685_read_output, but also reads when each pulse starts, as written
  * with pca9685_write_output_phase. It's the same single I2C transfer.
+ *
+ * If a failed pca9685_set_frequency or pca9685_set_prescaler left the chip
+ * asleep, it is woken up first, which resumes the outputs.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -620,9 +642,10 @@ int pca9685_read_output(const i2c_interface_t* i2c,
  *                  return exactly 4 bytes.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
- *                  protected (see plc-mutex.h). EOWNERDEAD is never
- *                  reported, because the driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int pca9685_read_output_phase(const i2c_interface_t* i2c,
 			      pca9685_t* pca,
@@ -636,6 +659,9 @@ int pca9685_read_output_phase(const i2c_interface_t* i2c,
  *
  * Read the duty cycle of every output of the PCA9685 "pca" from the chip in a
  * single I2C transfer. Each value is as in pca9685_read_output.
+ *
+ * If a failed pca9685_set_frequency or pca9685_set_prescaler left the chip
+ * asleep, it is woken up first, which resumes the outputs.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -656,9 +682,10 @@ int pca9685_read_output_phase(const i2c_interface_t* i2c,
  *                  return exactly 64 bytes.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
- *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
- *                  protected (see plc-mutex.h). EOWNERDEAD is never
- *                  reported, because the driver recovers from it.
+ *                  plc-peripherals-i2c-hal.h), plc_delay_us (see
+ *                  plc-delay.h), or plc_mutex_acquire while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
  */
 int pca9685_read_all(const i2c_interface_t* i2c,
 		     pca9685_t* pca,

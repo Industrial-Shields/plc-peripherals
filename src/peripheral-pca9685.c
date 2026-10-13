@@ -77,6 +77,7 @@ typedef struct {
 	plc_i2c_addr_t addr;
 	uint8_t bus;
 	bool is_protected;
+	bool needs_wake;
 } pca9685_internal_t;
 
 _Static_assert(sizeof(pca9685_t) == sizeof(pca9685_internal_t),
@@ -283,6 +284,34 @@ pca9685_wake(const i2c_interface_t* i2c, plc_i2c_addr_t addr, uint8_t mode1)
 }
 
 /*
+ * Wake the chip if a failed pca9685_set_prescaler may have left it asleep,
+ * which stops every output. Waking it before touching the PWM registers keeps
+ * the RESTART that resumes the outputs from being cleared by the write.
+ *
+ * The caller must hold the lock before calling it (if protected).
+ */
+static int pca9685_wake_if_needed(const i2c_interface_t* i2c,
+				  pca9685_internal_t* pca)
+{
+	uint8_t mode1_reg;
+
+	if (pca->needs_wake) {
+		if (i2c_read8_8b(i2c, pca->addr, MODE1_REG, &mode1_reg) != 0) {
+			return -1;
+		}
+
+		if ((mode1_reg & MODE1_REG_SLEEP) &&
+		    pca9685_wake(i2c, pca->addr, mode1_reg) != 0) {
+			return -1;
+		}
+
+		pca->needs_wake = false;
+	}
+
+	return 0;
+}
+
+/*
  * Set every register to its power-on value (Table 4), which leaves the chip
  * asleep with every output fully off.
  */
@@ -434,6 +463,7 @@ int pca9685_static_init(const i2c_interface_t* i2c,
 	PCA(pca)->addr = addr;
 	PCA(pca)->bus = bus;
 	PCA(pca)->is_protected = false;
+	PCA(pca)->needs_wake = false;
 
 	if (pca9685_set_frequency(i2c, pca, cfg->freq_hz, 0) < 0) {
 		return -1;
@@ -572,7 +602,7 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
 		goto set_prescaler_cleanup;
 	}
 
-	if (prescale_reg == prescale) {
+	if (prescale_reg == prescale && !PCA(pca)->needs_wake) {
 		result = 1;
 		goto set_prescaler_cleanup;
 	}
@@ -582,18 +612,39 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
 		goto set_prescaler_cleanup;
 	}
 
-	// PRE_SCALE can only be written while asleep (Table 4, note 1)
-	if (pca9685_sleep(i2c, PCA(pca)->addr, mode1_reg) != 0) {
+	if (prescale_reg != prescale) {
+		/*
+		 * PRE_SCALE can only be written while asleep (Table 4, note 1).
+		 * A call that failed after the chip went to sleep leaves it
+		 * asleep, so it doesn't need to be sent to sleep again.
+		 */
+		PCA(pca)->needs_wake = true;
+		if (!(mode1_reg & MODE1_REG_SLEEP) &&
+		    pca9685_sleep(i2c, PCA(pca)->addr, mode1_reg) != 0) {
+			result = -1;
+			goto set_prescaler_cleanup;
+		}
+
+		if (i2c_write8_8b(
+			    i2c, PCA(pca)->addr, PRE_SCALE_REG, prescale) !=
+		    0) {
+			result = -1;
+			goto set_prescaler_cleanup;
+		}
+	} else if (!(mode1_reg & MODE1_REG_SLEEP)) {
+		// The call that failed never got the chip to sleep
+		PCA(pca)->needs_wake = false;
+		result = 1;
+		goto set_prescaler_cleanup;
+	}
+
+	if (pca9685_wake(i2c, PCA(pca)->addr, mode1_reg) != 0) {
 		result = -1;
 		goto set_prescaler_cleanup;
 	}
 
-	if (i2c_write8_8b(i2c, PCA(pca)->addr, PRE_SCALE_REG, prescale) != 0) {
-		result = -1;
-		goto set_prescaler_cleanup;
-	}
-
-	result = pca9685_wake(i2c, PCA(pca)->addr, mode1_reg);
+	PCA(pca)->needs_wake = false;
+	result = 0;
 
 set_prescaler_cleanup:
 	pca9685_unlock(PCA(pca));
@@ -650,7 +701,11 @@ int pca9685_write_output_phase(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	result = pca9685_write_block(i2c, PCA(pca)->addr, UINT8T_ARR(buffer));
+	result = pca9685_wake_if_needed(i2c, PCA(pca));
+	if (result == 0) {
+		result = pca9685_write_block(
+			i2c, PCA(pca)->addr, UINT8T_ARR(buffer));
+	}
 
 	pca9685_unlock(PCA(pca));
 
@@ -702,7 +757,11 @@ int pca9685_write_all(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	result = pca9685_write_block(i2c, PCA(pca)->addr, UINT8T_ARR(buffer));
+	result = pca9685_wake_if_needed(i2c, PCA(pca));
+	if (result == 0) {
+		result = pca9685_write_block(
+			i2c, PCA(pca)->addr, UINT8T_ARR(buffer));
+	}
 
 	pca9685_unlock(PCA(pca));
 
@@ -737,8 +796,13 @@ int pca9685_read_output_phase(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	result = pca9685_read_block(
-		i2c, PCA(pca)->addr, LED_ON_L_REG(index), UINT8T_ARR(regs));
+	result = pca9685_wake_if_needed(i2c, PCA(pca));
+	if (result == 0) {
+		result = pca9685_read_block(i2c,
+					    PCA(pca)->addr,
+					    LED_ON_L_REG(index),
+					    UINT8T_ARR(regs));
+	}
 
 	pca9685_unlock(PCA(pca));
 
@@ -784,8 +848,11 @@ int pca9685_read_all(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	result = pca9685_read_block(
-		i2c, PCA(pca)->addr, LED_ON_L_REG(0), UINT8T_ARR(regs));
+	result = pca9685_wake_if_needed(i2c, PCA(pca));
+	if (result == 0) {
+		result = pca9685_read_block(
+			i2c, PCA(pca)->addr, LED_ON_L_REG(0), UINT8T_ARR(regs));
+	}
 
 	pca9685_unlock(PCA(pca));
 

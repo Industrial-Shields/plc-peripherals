@@ -1280,6 +1280,75 @@ void test_pca9685_set_prescaler_fails_when_writing_the_prescale_fails(void)
 	destroy_pca(pca);
 }
 
+void test_pca9685_set_prescaler_wakes_the_chip_a_failed_wake_left_asleep(void)
+{
+	pca9685_t* pca = create_pca();
+
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI | MODE1_SLEEP, 0);
+	expect_i2c_write8_8b(PRE_SCALE, 0x79, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI, -1);
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+
+	// PRE_SCALE already matches, but the chip is still asleep: only wake
+	expect_i2c_read8_8b(PRE_SCALE, 0x79, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI | MODE1_SLEEP | MODE1_RESTART, 0);
+	expect_wake_from_sleep(MODE1_AI);
+	TEST_ASSERT_EQUAL_INT(0, pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+	TEST_ASSERT_EQUAL_size_t(1, fake_delay.len);
+
+	// Awake again, so back to a single read
+	expect_i2c_read8_8b(PRE_SCALE, 0x79, 0);
+	TEST_ASSERT_EQUAL_INT(1, pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+	destroy_pca(pca);
+}
+
+void test_pca9685_set_prescaler_retries_a_failed_prescale_write_without_sleeping_again(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI | MODE1_SLEEP, 0);
+	expect_i2c_write8_8b(PRE_SCALE, 0x79, -1);
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI | MODE1_SLEEP, 0);
+	expect_i2c_write8_8b(PRE_SCALE, 0x79, 0);
+	expect_wake_from_sleep(MODE1_AI);
+	TEST_ASSERT_EQUAL_INT(0, pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+	destroy_pca(pca);
+}
+
+void test_pca9685_set_prescaler_does_not_wake_a_chip_a_failed_sleep_left_awake(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI | MODE1_SLEEP, -1);
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+
+	// MODE1 says it never went to sleep, so there is nothing to write
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	TEST_ASSERT_EQUAL_INT(
+		1, pca9685_set_prescaler(TEST_I2C, pca, PRE_SCALE_POR, 0));
+
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	TEST_ASSERT_EQUAL_INT(
+		1, pca9685_set_prescaler(TEST_I2C, pca, PRE_SCALE_POR, 0));
+	TEST_ASSERT_EQUAL_size_t(0, fake_delay.len);
+	destroy_pca(pca);
+}
+
 /* -------------------------- pca9685_write_output -------------------------- */
 
 void test_pca9685_write_output_fails_with_efault_for_null_pca(void)
@@ -2016,6 +2085,137 @@ void test_pca9685_read_all_fails_with_eio_when_the_read_is_short(void)
 	TEST_ASSERT_EQUAL_INT(EIO, errno);
 	TEST_ASSERT_EQUAL_UINT16_ARRAY(untouched, values, PCA9685_NUM_OUTPUTS);
 	destroy_pca(pca);
+}
+
+/* ------------------- after a failed prescale change ---------------------- */
+
+// A prescale change whose wake fails, which leaves the chip asleep
+static void fail_a_prescale_change_after_sleeping(pca9685_t* pca)
+{
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI | MODE1_SLEEP, 0);
+	expect_i2c_write8_8b(PRE_SCALE, 0x79, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI, -1);
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+}
+
+static void expect_wake_of_a_sleeping_chip(void)
+{
+	expect_i2c_read8_8b(MODE1, MODE1_AI | MODE1_SLEEP | MODE1_RESTART, 0);
+	expect_wake_from_sleep(MODE1_AI);
+}
+
+void test_pca9685_write_output_wakes_a_chip_a_failed_prescale_change_left_asleep(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	fail_a_prescale_change_after_sleeping(pca);
+
+	expect_wake_of_a_sleeping_chip();
+	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
+	TEST_ASSERT_EQUAL_size_t(1, fake_delay.len);
+
+	// Awake again, so only the write
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_UINT32(2, fake_i2c_write_op.calls);
+	destroy_pca(pca);
+}
+
+void test_pca9685_write_all_wakes_a_chip_a_failed_prescale_change_left_asleep(
+	void)
+{
+	pca9685_t* pca = create_pca();
+	const uint16_t values[PCA9685_NUM_OUTPUTS] = { 0 };
+
+	fail_a_prescale_change_after_sleeping(pca);
+
+	expect_wake_of_a_sleeping_chip();
+	fake_i2c_write_op.retval = ALL_OUTPUTS_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_all(TEST_I2C, pca, values, 0));
+	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
+	destroy_pca(pca);
+}
+
+void test_pca9685_read_output_wakes_a_chip_a_failed_prescale_change_left_asleep(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	fail_a_prescale_change_after_sleeping(pca);
+
+	expect_wake_of_a_sleeping_chip();
+	chip_has_counts(0, 100);
+	TEST_ASSERT_EQUAL_UINT16(100, read_output(pca, 0));
+	destroy_pca(pca);
+}
+
+void test_pca9685_read_all_wakes_a_chip_a_failed_prescale_change_left_asleep(
+	void)
+{
+	pca9685_t* pca = create_pca();
+	uint8_t regs[ALL_OUTPUTS_READ_LEN] = { 0 };
+	uint16_t values[PCA9685_NUM_OUTPUTS];
+
+	fail_a_prescale_change_after_sleeping(pca);
+
+	expect_wake_of_a_sleeping_chip();
+	fake_i2c_answers(regs, sizeof(regs));
+	TEST_ASSERT_EQUAL_INT(0, pca9685_read_all(TEST_I2C, pca, values, 0));
+	destroy_pca(pca);
+}
+
+void test_pca9685_write_output_does_not_wake_a_chip_a_failed_sleep_left_awake(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI | MODE1_SLEEP, -1);
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+
+	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
+	TEST_ASSERT_EQUAL_size_t(0, fake_delay.len);
+	destroy_pca(pca);
+}
+
+void test_pca9685_write_output_does_not_write_when_the_wake_fails_and_retries_it(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	fail_a_prescale_change_after_sleeping(pca);
+
+	expect_i2c_read8_8b(MODE1, 0, -1);
+	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(-1, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+
+	expect_wake_of_a_sleeping_chip();
+	TEST_ASSERT_EQUAL_INT(0, pca9685_write_output(TEST_I2C, pca, 0, 1, 0));
+	TEST_ASSERT_EQUAL_UINT32(1, fake_i2c_write_op.calls);
+	destroy_pca(pca);
+}
+
+void test_pca9685_deinit_without_shutdown_leaves_a_chip_a_failed_prescale_change_left_asleep(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	fail_a_prescale_change_after_sleeping(pca);
+
+	// Without shutdown, the chip is left as it is: no wake, no transfer
+	TEST_ASSERT_EQUAL_INT(0, pca9685_deinit(TEST_I2C, pca, false));
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 }
 
 /* ----------------------- pca9685_(un)protect ------------------------------ */
