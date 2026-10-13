@@ -31,6 +31,8 @@ extern "C" {
 #define PCA9685_NUM_OUTPUTS    16
 #define PCA9685_OUTPUT_OFF     0
 #define PCA9685_OUTPUT_ON      4096
+#define PCA9685_MIN_PHASE      0
+#define PCA9685_MAX_PHASE      4095
 #define PCA9685_MIN_FREQ_HZ    24
 #define PCA9685_MAX_FREQ_HZ    1526
 #define PCA9685_FREQ_NO_CHANGE 0
@@ -438,7 +440,8 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
  * pca9685_write_output
  *
  * Set the duty cycle of an output of the PCA9685 "pca", in 1/4096 steps of the
- * PWM period.
+ * PWM period. Each pulse starts at the beginning of the period; see
+ * pca9685_write_output_phase to start it later.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -471,6 +474,49 @@ int pca9685_write_output(const i2c_interface_t* i2c,
 			 uint8_t index,
 			 uint16_t value,
 			 uint32_t timeout_ms);
+
+/**
+ * pca9685_write_output_phase
+ *
+ * Like pca9685_write_output, but the pulse of each period starts "phase" steps
+ * after the period's start instead of at it, wrapping around into the next
+ * period if it doesn't fit. Giving outputs different phases staggers when they
+ * switch on, which spreads their load on the supply over the period.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
+ *   pca (pca9685_t*)             - The PCA9685 to interact with.
+ *   index (uint8_t)              - The output you want to set.
+ *   value (uint16_t)             - The duty cycle, as in pca9685_write_output.
+ *   phase (uint16_t)             - When each pulse starts, in 1/4096 steps of
+ *                                  the period: from PCA9685_MIN_PHASE (as
+ *                                  pca9685_write_output) to
+ *                                  PCA9685_MAX_PHASE. It doesn't matter when
+ *                                  the output is fully off or fully on.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
+ *                                  applicable when the PCA9685 is protected.
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed pca9685_t or i2c is NULL.
+ *     - EINVAL   : index is not below PCA9685_NUM_OUTPUTS, value is above
+ *                  PCA9685_OUTPUT_ON, phase is above PCA9685_MAX_PHASE, or
+ *                  i2c is not on the bus the PCA9685 was initialized on.
+ *     - EIO      : The chip did not take every byte written.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
+ */
+int pca9685_write_output_phase(const i2c_interface_t* i2c,
+			       pca9685_t* pca,
+			       uint8_t index,
+			       uint16_t value,
+			       uint16_t phase,
+			       uint32_t timeout_ms);
 
 /**
  * pca9685_write_all
@@ -510,11 +556,9 @@ int pca9685_write_all(const i2c_interface_t* i2c,
  * pca9685_read_output
  *
  * Read the duty cycle of an output of the PCA9685 "pca" from the chip, in the
- * same scale as pca9685_write_output.
- *
- * It assumes the output has no phase offset (LEDn_ON count at 0), as this
- * driver never uses phasing. If something else gave it one, the value read is
- * the count at which the output turns off, not its duty cycle.
+ * same scale as pca9685_write_output. It's the duty cycle whatever the phase
+ * the output was written with (see pca9685_write_output_phase); see
+ * pca9685_read_output_phase to read the phase too.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
@@ -547,11 +591,51 @@ int pca9685_read_output(const i2c_interface_t* i2c,
 			uint32_t timeout_ms);
 
 /**
+ * pca9685_read_output_phase
+ *
+ * Like pca9685_read_output, but also reads when each pulse starts, as written
+ * with pca9685_write_output_phase. It's the same single I2C transfer.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
+ *   pca (pca9685_t*)             - The PCA9685 to interact with.
+ *   index (uint8_t)              - The output you want to read.
+ *   value (uint16_t*)            - Where the duty cycle is stored, as in
+ *                                  pca9685_read_output.
+ *   phase (uint16_t*)            - Where the phase is stored, from
+ *                                  PCA9685_MIN_PHASE to PCA9685_MAX_PHASE. A
+ *                                  fully on output has none, so it reads as
+ *                                  PCA9685_MIN_PHASE.
+ *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *                                  applicable when the PCA9685 is protected.
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed pca9685_t, value, phase or i2c is NULL.
+ *     - EINVAL   : index is not below PCA9685_NUM_OUTPUTS, or i2c is not on
+ *                  the bus the PCA9685 was initialized on.
+ *     - EIO      : The chip did not take the register address, or did not
+ *                  return exactly 4 bytes.
+ *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
+ *                  transfer (see plc-peripherals-i2c.h and
+ *                  plc-peripherals-i2c-hal.h), or plc_mutex_acquire while
+ *                  protected (see plc-mutex.h). EOWNERDEAD is never
+ *                  reported, because the driver recovers from it.
+ */
+int pca9685_read_output_phase(const i2c_interface_t* i2c,
+			      pca9685_t* pca,
+			      uint8_t index,
+			      uint16_t* value,
+			      uint16_t* phase,
+			      uint32_t timeout_ms);
+
+/**
  * pca9685_read_all
  *
  * Read the duty cycle of every output of the PCA9685 "pca" from the chip in a
- * single I2C transfer. Each value is as in pca9685_read_output, and makes the
- * same assumption about phase offsets.
+ * single I2C transfer. Each value is as in pca9685_read_output.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.

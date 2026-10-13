@@ -136,9 +136,12 @@ static bool pca9685_config_is_valid(const pca9685_config_t* cfg)
 	return true;
 }
 
-static void pca9685_encode_output(uint16_t value, uint8_t regs[4])
+static void
+pca9685_encode_output(uint16_t value, uint16_t phase, uint8_t regs[4])
 {
-	uint16_t on = 0, off = value;
+	// The pulse starts at "phase", and ends "value" counts later
+	uint16_t off = (uint16_t)((phase + value) & LED_COUNT_MASK);
+	uint16_t on = phase;
 
 	if (value == PCA9685_OUTPUT_OFF) {
 		off = LED_FULL;
@@ -172,7 +175,19 @@ static uint16_t pca9685_decode_output(const uint8_t regs[4])
 		return PCA9685_OUTPUT_ON;
 	}
 
-	return (uint16_t)(off & LED_COUNT_MASK);
+	return (uint16_t)((off - on) & LED_COUNT_MASK);
+}
+
+static uint16_t pca9685_decode_phase(const uint8_t regs[4])
+{
+	const uint16_t on = (uint16_t)(regs[0] | (regs[1] << 8));
+
+	// Fully on writes no phase (see pca9685_encode_output)
+	if (on & LED_FULL) {
+		return PCA9685_MIN_PHASE;
+	}
+
+	return (uint16_t)(on & LED_COUNT_MASK);
 }
 
 /*
@@ -603,11 +618,12 @@ int pca9685_set_frequency(const i2c_interface_t* i2c,
 		i2c, pca, (uint8_t)PCA9685_PRESCALER(freq_hz), timeout_ms);
 }
 
-int pca9685_write_output(const i2c_interface_t* i2c,
-			 pca9685_t* pca,
-			 uint8_t index,
-			 uint16_t value,
-			 uint32_t timeout_ms)
+int pca9685_write_output_phase(const i2c_interface_t* i2c,
+			       pca9685_t* pca,
+			       uint8_t index,
+			       uint16_t value,
+			       uint16_t phase,
+			       uint32_t timeout_ms)
 {
 	uint8_t buffer[1 + LED_REGS_PER_OUTPUT];
 	int result;
@@ -617,7 +633,8 @@ int pca9685_write_output(const i2c_interface_t* i2c,
 		return -1;
 	}
 
-	if (index >= PCA9685_NUM_OUTPUTS || value > PCA9685_OUTPUT_ON) {
+	if (index >= PCA9685_NUM_OUTPUTS || value > PCA9685_OUTPUT_ON ||
+	    phase > PCA9685_MAX_PHASE) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -627,7 +644,7 @@ int pca9685_write_output(const i2c_interface_t* i2c,
 	}
 
 	buffer[0] = LED_ON_L_REG(index);
-	pca9685_encode_output(value, &buffer[1]);
+	pca9685_encode_output(value, phase, &buffer[1]);
 
 	if (pca9685_lock(PCA(pca), timeout_ms) != 0) {
 		return -1;
@@ -638,6 +655,16 @@ int pca9685_write_output(const i2c_interface_t* i2c,
 	pca9685_unlock(PCA(pca));
 
 	return result;
+}
+
+int pca9685_write_output(const i2c_interface_t* i2c,
+			 pca9685_t* pca,
+			 uint8_t index,
+			 uint16_t value,
+			 uint32_t timeout_ms)
+{
+	return pca9685_write_output_phase(
+		i2c, pca, index, value, PCA9685_MIN_PHASE, timeout_ms);
 }
 
 int pca9685_write_all(const i2c_interface_t* i2c,
@@ -667,6 +694,7 @@ int pca9685_write_all(const i2c_interface_t* i2c,
 	buffer[0] = LED_ON_L_REG(0);
 	for (uint8_t i = 0; i < PCA9685_NUM_OUTPUTS; i++) {
 		pca9685_encode_output(values[i],
+				      PCA9685_MIN_PHASE,
 				      &buffer[1 + i * LED_REGS_PER_OUTPUT]);
 	}
 
@@ -681,16 +709,17 @@ int pca9685_write_all(const i2c_interface_t* i2c,
 	return result;
 }
 
-int pca9685_read_output(const i2c_interface_t* i2c,
-			pca9685_t* pca,
-			uint8_t index,
-			uint16_t* value,
-			uint32_t timeout_ms)
+int pca9685_read_output_phase(const i2c_interface_t* i2c,
+			      pca9685_t* pca,
+			      uint8_t index,
+			      uint16_t* value,
+			      uint16_t* phase,
+			      uint32_t timeout_ms)
 {
 	uint8_t regs[LED_REGS_PER_OUTPUT];
 	int result;
 
-	if (pca == NULL || value == NULL) {
+	if (pca == NULL || value == NULL || phase == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
@@ -718,7 +747,20 @@ int pca9685_read_output(const i2c_interface_t* i2c,
 	}
 
 	*value = pca9685_decode_output(regs);
+	*phase = pca9685_decode_phase(regs);
 	return 0;
+}
+
+int pca9685_read_output(const i2c_interface_t* i2c,
+			pca9685_t* pca,
+			uint8_t index,
+			uint16_t* value,
+			uint32_t timeout_ms)
+{
+	uint16_t phase;
+
+	return pca9685_read_output_phase(
+		i2c, pca, index, value, &phase, timeout_ms);
 }
 
 int pca9685_read_all(const i2c_interface_t* i2c,

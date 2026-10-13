@@ -1370,6 +1370,105 @@ void test_pca9685_write_output_turns_it_off_at_the_count_in_between(void)
 	destroy_pca(pca);
 }
 
+void test_pca9685_write_output_phase_starts_the_pulse_at_the_phase(void)
+{
+	pca9685_t* pca = create_pca();
+	// ON = 500 (0x01F4), OFF = 500 + 1000 = 1500 (0x05DC)
+	const uint8_t expected[] = { 0x06, 0xF4, 0x01, 0xDC, 0x05 };
+
+	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(
+		0, pca9685_write_output_phase(TEST_I2C, pca, 0, 1000, 500, 0));
+	TEST_ASSERT_EQUAL_HEX8_ARRAY(
+		expected, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
+	destroy_pca(pca);
+}
+
+void test_pca9685_write_output_phase_wraps_the_end_into_the_next_period(void)
+{
+	pca9685_t* pca = create_pca();
+	// ON = 3500 (0x0DAC), OFF = 3500 + 1000 - 4096 = 404 (0x0194)
+	const uint8_t expected[] = { 0x06, 0xAC, 0x0D, 0x94, 0x01 };
+
+	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(
+		0, pca9685_write_output_phase(TEST_I2C, pca, 0, 1000, 3500, 0));
+	TEST_ASSERT_EQUAL_HEX8_ARRAY(
+		expected, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
+	destroy_pca(pca);
+}
+
+void test_pca9685_write_output_phase_keeps_full_off_and_full_on(void)
+{
+	pca9685_t* pca = create_pca();
+	const uint8_t expected_on[] = { 0x06, 0x00, 0x10, 0x00, 0x00 };
+
+	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		pca9685_write_output_phase(
+			TEST_I2C, pca, 0, PCA9685_OUTPUT_OFF, 500, 0));
+	// The full OFF bit, which takes precedence over any count
+	TEST_ASSERT_EQUAL_HEX8(0x10, fake_i2c_write_op.bytes[4]);
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		pca9685_write_output_phase(
+			TEST_I2C, pca, 0, PCA9685_OUTPUT_ON, 500, 0));
+	TEST_ASSERT_EQUAL_HEX8_ARRAY(
+		expected_on, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
+	destroy_pca(pca);
+}
+
+void test_pca9685_write_output_phase_0_writes_as_write_output(void)
+{
+	pca9685_t* pca = create_pca();
+	uint8_t written[OUTPUT_WRITE_LEN];
+
+	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(0,
+			      pca9685_write_output(TEST_I2C, pca, 3, 2048, 0));
+	memcpy(written, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		pca9685_write_output_phase(
+			TEST_I2C, pca, 3, 2048, PCA9685_MIN_PHASE, 0));
+	TEST_ASSERT_EQUAL_HEX8_ARRAY(
+		written, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
+	destroy_pca(pca);
+}
+
+void test_pca9685_write_output_phase_accepts_the_max_phase(void)
+{
+	pca9685_t* pca = create_pca();
+	// ON = 4095 (0x0FFF), OFF = 4095 + 1 - 4096 = 0
+	const uint8_t expected[] = { 0x06, 0xFF, 0x0F, 0x00, 0x00 };
+
+	fake_i2c_write_op.retval = OUTPUT_WRITE_LEN;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		pca9685_write_output_phase(
+			TEST_I2C, pca, 0, 1, PCA9685_MAX_PHASE, 0));
+	TEST_ASSERT_EQUAL_HEX8_ARRAY(
+		expected, fake_i2c_write_op.bytes, OUTPUT_WRITE_LEN);
+	destroy_pca(pca);
+}
+
+void test_pca9685_write_output_phase_fails_with_einval_above_the_max_phase(void)
+{
+	pca9685_t* pca = create_pca();
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		pca9685_write_output_phase(
+			TEST_I2C, pca, 0, 1000, PCA9685_MAX_PHASE + 1, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+	destroy_pca(pca);
+}
+
 void test_pca9685_write_output_never_writes_equal_on_and_off_counts(void)
 {
 	pca9685_t* pca = create_pca();
@@ -1582,6 +1681,86 @@ void test_pca9685_read_output_reads_the_four_registers_of_the_index(void)
 		TEST_ASSERT_EQUAL_UINT(4,
 				       fake_i2c_transfer_op.requested_read_len);
 	}
+	destroy_pca(pca);
+}
+
+void test_pca9685_read_output_reads_the_duty_cycle_of_a_phase_shifted_pulse(void)
+{
+	pca9685_t* pca = create_pca();
+
+	chip_has_counts(500, 1500);
+	TEST_ASSERT_EQUAL_UINT16(1000, read_output(pca, 0));
+
+	// The pulse wraps into the next period: OFF is below ON
+	chip_has_counts(3500, 404);
+	TEST_ASSERT_EQUAL_UINT16(1000, read_output(pca, 0));
+	destroy_pca(pca);
+}
+
+static void read_output_phase(pca9685_t* pca, uint16_t* value, uint16_t* phase)
+{
+	*value = 0xBEEF;
+	*phase = 0xBEEF;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		pca9685_read_output_phase(TEST_I2C, pca, 0, value, phase, 0));
+}
+
+void test_pca9685_read_output_phase_reads_the_duty_cycle_and_the_phase(void)
+{
+	pca9685_t* pca = create_pca();
+	uint16_t value, phase;
+
+	chip_has_counts(500, 1500);
+	read_output_phase(pca, &value, &phase);
+	TEST_ASSERT_EQUAL_UINT16(1000, value);
+	TEST_ASSERT_EQUAL_UINT16(500, phase);
+	TEST_ASSERT_EQUAL_UINT(1, fake_i2c_transfer_op.len);
+	TEST_ASSERT_EQUAL_UINT(4, fake_i2c_transfer_op.requested_read_len);
+
+	// The pulse wraps into the next period: OFF is below ON
+	chip_has_counts(3500, 404);
+	read_output_phase(pca, &value, &phase);
+	TEST_ASSERT_EQUAL_UINT16(1000, value);
+	TEST_ASSERT_EQUAL_UINT16(3500, phase);
+	destroy_pca(pca);
+}
+
+void test_pca9685_read_output_phase_keeps_the_phase_of_a_full_off(void)
+{
+	pca9685_t* pca = create_pca();
+	uint16_t value, phase;
+
+	chip_has_counts(500, 0x1000);
+	read_output_phase(pca, &value, &phase);
+	TEST_ASSERT_EQUAL_UINT16(PCA9685_OUTPUT_OFF, value);
+	TEST_ASSERT_EQUAL_UINT16(500, phase);
+	destroy_pca(pca);
+}
+
+void test_pca9685_read_output_phase_reads_no_phase_for_a_full_on(void)
+{
+	pca9685_t* pca = create_pca();
+	uint16_t value, phase;
+
+	chip_has_counts(0x1000, 0x0000);
+	read_output_phase(pca, &value, &phase);
+	TEST_ASSERT_EQUAL_UINT16(PCA9685_OUTPUT_ON, value);
+	TEST_ASSERT_EQUAL_UINT16(PCA9685_MIN_PHASE, phase);
+	destroy_pca(pca);
+}
+
+void test_pca9685_read_output_phase_fails_with_efault_for_null_phase(void)
+{
+	pca9685_t* pca = create_pca();
+	uint16_t value;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		pca9685_read_output_phase(TEST_I2C, pca, 0, &value, NULL, 0));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+	TEST_ASSERT_EQUAL_UINT(0, fake_i2c_transfer_op.calls);
 	destroy_pca(pca);
 }
 
