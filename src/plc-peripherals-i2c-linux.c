@@ -33,6 +33,7 @@
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
 #include <sys/stat.h>
+#include <arpa/inet.h>
 
 // The kernel doesn't define it...
 #define I2C_M_SEVEN 0
@@ -152,6 +153,62 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 	}
 
 	*bus = i2c->bus;
+	return 0;
+}
+
+int i2c_set_clock(const i2c_interface_t* i2c, uint32_t clock_hz)
+{
+	if (i2c == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (clock_hz == 0 || clock_hz > PLC_I2C_MAX_CLOCK_HZ) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	// The device tree sets it
+	errno = ENOTSUP;
+	return -1;
+}
+
+int i2c_get_clock(const i2c_interface_t* i2c, uint32_t* clock_hz)
+{
+	ssize_t read_bytes;
+	char path[64];
+	int fd;
+
+	if (i2c == NULL || clock_hz == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	snprintf(path,
+		 sizeof(path),
+		 "/sys/bus/i2c/devices/i2c-%u/of_node/clock-frequency",
+		 i2c->bus);
+	fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd < 0) {
+		// No device tree, or no frequency in it
+		errno = errno == ENOENT ? ENOTSUP : EIO;
+		return -1;
+	}
+
+	read_bytes = read(fd, clock_hz, sizeof(*clock_hz));
+	close(fd);
+
+	if (read_bytes < 0) {
+		errno = EIO;
+		return -1;
+	}
+
+	if (read_bytes != sizeof(*clock_hz)) {
+		errno = ENOTSUP;
+		return -1;
+	}
+
+	*clock_hz = ntohl(*clock_hz);
 	return 0;
 }
 

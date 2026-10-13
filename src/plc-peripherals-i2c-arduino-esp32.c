@@ -118,6 +118,60 @@ int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus)
 	return 0;
 }
 
+int i2c_set_clock(const i2c_interface_t* i2c, uint32_t clock_hz)
+{
+	uint32_t current_hz;
+
+	if (i2c == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (clock_hz == 0 || clock_hz > PLC_I2C_MAX_CLOCK_HZ) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (i2cGetClock(i2c->bus_number, &current_hz) == ESP_OK &&
+	    current_hz == clock_hz) {
+		return 1;
+	}
+
+	const esp_err_t set_result = i2cSetClock(i2c->bus_number, clock_hz);
+	/*
+	 * i2cSetClock reports ESP_FAIL when no device was used on the bus yet,
+	 * even though it changed the frequency. So check it.
+	 */
+	if (set_result != ESP_OK &&
+	    (i2cGetClock(i2c->bus_number, &current_hz) != ESP_OK ||
+	     current_hz != clock_hz)) {
+		ESP_LOGE(TAG,
+			 "Can't set the I2C bus %u clock to %lu Hz: %s",
+			 i2c->bus_number,
+			 clock_hz,
+			 esp_err_to_name(set_result));
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
+}
+
+int i2c_get_clock(const i2c_interface_t* i2c, uint32_t* clock_hz)
+{
+	if (i2c == NULL || clock_hz == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	if (i2cGetClock(i2c->bus_number, clock_hz) != ESP_OK) {
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
+}
+
 int i2c_deinit(i2c_interface_t* i2c, bool deinit_i2c_bus)
 {
 	if (i2c == NULL) {

@@ -45,6 +45,9 @@ typedef struct _i2c_interface_t i2c_interface_t;
 // Type alias for I2C addresses
 typedef uint16_t plc_i2c_addr_t;
 
+// The fastest I2C clock i2c_set_clock accepts (Fast-mode Plus)
+#define PLC_I2C_MAX_CLOCK_HZ 1000000UL
+
 /**
  * i2c_init
  *
@@ -107,6 +110,55 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl);
  *     - EFAULT : Passed i2c or bus is NULL.
  */
 int i2c_get_bus(const i2c_interface_t* i2c, uint8_t* bus);
+
+/**
+ * i2c_set_clock
+ *
+ * It's a platform-specific function.
+ *
+ * Set the clock frequency of the I2C bus of the given interface. It applies to
+ * everything on that bus, including what other code (Wire, for example) uses
+ * it for.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - I2C interface whose bus to set.
+ *   clock_hz (uint32_t)          - The clock frequency, in Hz. From 1 to
+ *                                  PLC_I2C_MAX_CLOCK_HZ.
+ *
+ * Returns:
+ *   int - 0 if successful, 1 if the bus was already at that frequency,
+ *         otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT  : Passed i2c is NULL.
+ *     - EINVAL  : clock_hz is 0 or above PLC_I2C_MAX_CLOCK_HZ.
+ *     - ENOTSUP : The platform doesn't support the set operation.
+ *     - EIO     : The frequency couldn't be set.
+ */
+int i2c_set_clock(const i2c_interface_t* i2c, uint32_t clock_hz);
+
+/**
+ * i2c_get_clock
+ *
+ * It's a platform-specific function.
+ *
+ * Get the clock frequency of the I2C bus of the given interface.
+ *
+ * Parameters:
+ *   i2c (const i2c_interface_t*) - I2C interface whose bus to read.
+ *   clock_hz (uint32_t*)         - Pointer to store the frequency in, in Hz.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT  : Passed i2c or clock_hz is NULL.
+ *     - ENOTSUP : The platform doesn't support the get operation.
+ *     - EIO     : The frequency couldn't be obtained correctly.
+ */
+int i2c_get_clock(const i2c_interface_t* i2c, uint32_t* clock_hz);
 
 /**
  * i2c_deinit
