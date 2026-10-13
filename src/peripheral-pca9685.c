@@ -111,6 +111,11 @@ static void pca9685_unlock(pca9685_internal_t* pca)
 	}
 }
 
+static bool pca9685_freq_is_valid(uint16_t freq_hz)
+{
+	return freq_hz >= PCA9685_MIN_FREQ_HZ && freq_hz <= PCA9685_MAX_FREQ_HZ;
+}
+
 static bool pca9685_config_is_valid(const pca9685_config_t* cfg)
 {
 	if (cfg->drive != PCA9685_OPEN_DRAIN &&
@@ -120,6 +125,11 @@ static bool pca9685_config_is_valid(const pca9685_config_t* cfg)
 
 	if (cfg->logic != PCA9685_NOT_INVERTED &&
 	    cfg->logic != PCA9685_INVERTED) {
+		return false;
+	}
+
+	if (cfg->freq_hz != PCA9685_FREQ_NO_CHANGE &&
+	    !pca9685_freq_is_valid(cfg->freq_hz)) {
 		return false;
 	}
 
@@ -409,6 +419,11 @@ int pca9685_static_init(const i2c_interface_t* i2c,
 	PCA(pca)->addr = addr;
 	PCA(pca)->bus = bus;
 	PCA(pca)->is_protected = false;
+
+	if (pca9685_set_frequency(i2c, pca, cfg->freq_hz, 0) < 0) {
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -575,7 +590,11 @@ int pca9685_set_frequency(const i2c_interface_t* i2c,
 			  uint16_t freq_hz,
 			  uint32_t timeout_ms)
 {
-	if (freq_hz < PCA9685_MIN_FREQ_HZ || freq_hz > PCA9685_MAX_FREQ_HZ) {
+	if (freq_hz == PCA9685_FREQ_NO_CHANGE) {
+		return 1;
+	}
+
+	if (!pca9685_freq_is_valid(freq_hz)) {
 		errno = EINVAL;
 		return -1;
 	}

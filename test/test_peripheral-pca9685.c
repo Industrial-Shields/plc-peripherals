@@ -604,6 +604,81 @@ void test_pca9685_init_fails_with_einval_for_an_invalid_logic(void)
 	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
 }
 
+void test_pca9685_init_fails_with_einval_for_an_out_of_range_frequency(void)
+{
+	const uint16_t freqs[] = { PCA9685_MIN_FREQ_HZ - 1,
+				   PCA9685_MAX_FREQ_HZ + 1 };
+
+	for (size_t i = 0; i < sizeof(freqs) / sizeof(freqs[0]); i++) {
+		const pca9685_config_t cfg = {
+			.drive = PCA9685_TOTEM_POLE,
+			.logic = PCA9685_NOT_INVERTED,
+			.freq_hz = freqs[i],
+		};
+
+		errno = 0;
+		TEST_ASSERT_NULL(init_pca_cfg(true, &cfg));
+		TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+		TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_write_op.calls);
+	}
+}
+
+void test_pca9685_init_with_restart_sets_the_configured_frequency(void)
+{
+	const pca9685_config_t cfg = {
+		.drive = PCA9685_TOTEM_POLE,
+		.logic = PCA9685_NOT_INVERTED,
+		.allcall = true,
+		.freq_hz = 1000,
+	};
+
+	expect_init_restart();
+	expect_frequency_change(MODE1_AI | MODE1_ALLCALL,
+				(uint8_t)PCA9685_PRESCALER(1000));
+
+	pca9685_t* pca = init_pca_cfg(true, &cfg);
+
+	TEST_ASSERT_NOT_NULL(pca);
+	destroy_pca(pca);
+}
+
+void test_pca9685_init_without_restart_keeps_a_frequency_the_chip_has(void)
+{
+	const pca9685_config_t cfg = {
+		.drive = PCA9685_TOTEM_POLE,
+		.logic = PCA9685_NOT_INVERTED,
+		.allcall = true,
+		.freq_hz = 200, // PRE_SCALE_POR
+	};
+
+	expect_i2c_read8_8b(MODE1, MODE1_ALLCALL, 0);
+	expect_i2c_write8_8b(MODE2, MODE2_OUTDRV, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI | MODE1_ALLCALL, 0);
+	// Already at it: the outputs aren't stopped
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+
+	pca9685_t* pca = init_pca_cfg(false, &cfg);
+
+	TEST_ASSERT_NOT_NULL(pca);
+	TEST_ASSERT_EQUAL_size_t(0, fake_delay.len);
+	destroy_pca(pca);
+}
+
+void test_pca9685_init_fails_when_setting_the_frequency_fails(void)
+{
+	const pca9685_config_t cfg = {
+		.drive = PCA9685_TOTEM_POLE,
+		.logic = PCA9685_NOT_INVERTED,
+		.allcall = true,
+		.freq_hz = 1000,
+	};
+
+	expect_init_restart();
+	expect_i2c_read8_8b(PRE_SCALE, 0, -1);
+
+	TEST_ASSERT_NULL(init_pca_cfg(true, &cfg));
+}
+
 void test_pca9685_init_passes_the_bus_lookup_error_through(void)
 {
 	fake_i2c_bus_retval = -1;
@@ -958,10 +1033,18 @@ void test_pca9685_set_frequency_fails_with_einval_below_the_minimum(void)
 		pca9685_set_frequency(
 			TEST_I2C, pca, PCA9685_MIN_FREQ_HZ - 1, 0));
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	destroy_pca(pca);
+}
 
-	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_frequency(TEST_I2C, pca, 0, 0));
-	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+void test_pca9685_set_frequency_returns_1_without_touching_the_chip_for_no_change(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	// No I2C expectation queued: any transfer here is a bug
+	TEST_ASSERT_EQUAL_INT(
+		1,
+		pca9685_set_frequency(TEST_I2C, pca, PCA9685_FREQ_NO_CHANGE, 0));
 	destroy_pca(pca);
 }
 
@@ -2057,7 +2140,10 @@ void test_pca9685_rejects_bad_arguments_without_taking_the_mutex(void)
 
 	values[0] = PCA9685_OUTPUT_ON + 1;
 
-	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_frequency(TEST_I2C, pca, 0, 10));
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		pca9685_set_frequency(
+			TEST_I2C, pca, PCA9685_MIN_FREQ_HZ - 1, 10));
 	TEST_ASSERT_EQUAL_INT(-1, pca9685_set_prescaler(TEST_I2C, pca, 2, 10));
 	TEST_ASSERT_EQUAL_INT(-1,
 			      pca9685_write_output(TEST_I2C, pca, 16, 1, 10));

@@ -33,6 +33,7 @@ extern "C" {
 #define PCA9685_OUTPUT_ON      4096
 #define PCA9685_MIN_FREQ_HZ    24
 #define PCA9685_MAX_FREQ_HZ    1526
+#define PCA9685_FREQ_NO_CHANGE 0
 #define PCA9685_MIN_PRESCALER  3
 #define PCA9685_MAX_PRESCALER  255
 #define PCA9685_OSC_HZ         25000000UL // Internal oscillator
@@ -105,6 +106,12 @@ typedef enum {
  *                                  power-on).
  *   subcall3 (bool)              - The same for Sub Call address 3 (0x74 at
  *                                  power-on).
+ *   freq_hz (uint16_t)           - The PWM frequency, set as
+ *                                  pca9685_set_frequency does, from
+ *                                  PCA9685_MIN_FREQ_HZ to
+ *                                  PCA9685_MAX_FREQ_HZ, or
+ *                                  PCA9685_FREQ_NO_CHANGE to keep the
+ *                                  chip's.
  */
 typedef struct {
 	PCA9685_OUTPUT_DRIVE drive;
@@ -113,6 +120,7 @@ typedef struct {
 	bool subcall1;
 	bool subcall2;
 	bool subcall3;
+	uint16_t freq_hz;
 } pca9685_config_t;
 
 /**
@@ -153,8 +161,8 @@ typedef struct {
  * Errors:
  *   errno set to:
  *     - EFAULT   : Passed cfg or i2c is NULL.
- *     - EINVAL   : drive is not a PCA9685_OUTPUT_DRIVE value, or logic is not
- *                  a PCA9685_OUTPUT_LOGIC value.
+ *     - EINVAL   : drive is not a PCA9685_OUTPUT_DRIVE value, logic is not a
+ *                  PCA9685_OUTPUT_LOGIC value, or freq_hz is out of range.
  *     - EIO      : With restart, the chip did not take every byte written.
  *     - ENOMEM   : Out of memory during allocation.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
@@ -240,8 +248,8 @@ int pca9685_deinit(const i2c_interface_t* i2c, pca9685_t* pca, bool shutdown);
  *   errno set to:
  *     - EFAULT   : Passed storage is NULL or not PCA9685_ALIGN aligned, or
  *                  cfg or i2c is NULL.
- *     - EINVAL   : drive is not a PCA9685_OUTPUT_DRIVE value, or logic is not
- *                  a PCA9685_OUTPUT_LOGIC value.
+ *     - EINVAL   : drive is not a PCA9685_OUTPUT_DRIVE value, logic is not a
+ *                  PCA9685_OUTPUT_LOGIC value, or freq_hz is out of range.
  *     - EIO      : With restart, the chip did not take every byte written.
  *     - (others) : Whatever the I2C layer reports, for the bus lookup or the
  *                  transfer (see plc-peripherals-i2c.h and
@@ -359,7 +367,9 @@ int pca9685_unprotect(pca9685_t* pca);
  *   i2c (const i2c_interface_t*) - The I2C interface the PCA9685 is on.
  *   pca (pca9685_t*)             - The PCA9685 to interact with.
  *   freq_hz (uint16_t)           - The PWM frequency, in Hz. From
- *                                  PCA9685_MIN_FREQ_HZ to PCA9685_MAX_FREQ_HZ.
+ *                                  PCA9685_MIN_FREQ_HZ to PCA9685_MAX_FREQ_HZ,
+ *                                  or PCA9685_FREQ_NO_CHANGE to keep the
+ *                                  current one.
  *   timeout_ms (uint32_t)        - The maximum time to wait to set it. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
