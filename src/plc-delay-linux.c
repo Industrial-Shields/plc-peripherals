@@ -57,8 +57,8 @@ static void pick_delay_clock(void)
 
 static int delay_monotonic(uint32_t us)
 {
-	int saved_errno = errno;
 	struct timespec deadline;
+	int saved_errno = errno;
 	int local_errno;
 
 	// clock_gettime sets errno, instead of returning it.

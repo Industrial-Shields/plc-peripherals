@@ -348,6 +348,7 @@
   :suppressions:
     - missingIncludeSystem
     - unusedFunction
+    - variableScope # Declarations go at the top, in reverse christmas tree order
   :options:
     - --force
     - --inconclusive
