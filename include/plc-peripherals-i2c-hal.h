@@ -236,9 +236,12 @@ int i2c_deinit(i2c_interface_t* i2c, bool deinit_i2c_bus);
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cWrite function reported some error. The
- *                              device didn't acknowledge the address or a
- *                              byte, the bus isn't initialized, or the
- *                              transfer failed.
+ *                              device didn't acknowledge the address or a byte,
+ *                              the bus isn't initialized, or the transfer
+ *                              failed.  On cores built on ESP-IDF 5.4 or later,
+ *                              a transfer that timed out is reported as EIO
+ *                              too, since the driver returns the same error for
+ *                              a timeout and a missing acknowledge.
  *     - Linux specific       :
  *       - ENOTSUP            : to_write_len is 0, and the adapter can't send
  *                              zero-length messages.
@@ -285,7 +288,11 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
  *                              the adapter does not support.
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
- *       - EIO                : i2cRead function reported some error.
+ *       - EIO                : i2cRead function reported some error.  On
+ *                              cores built on ESP-IDF 5.4 or later, a transfer
+ *                              that timed out is reported as EIO too, since the
+ *                              driver returns the same error for a timeout and
+ *                              a missing acknowledge.
  *     - Linux specific       :
  *       - EAGAIN             : The transfer completed zero messages.
  *       - EBADE              : The adapter driver returned an unexpected
@@ -338,7 +345,10 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
  *     - ETIMEDOUT            : The transfer timed out.
  *     - ESP32 specific       :
  *       - EIO                : i2cWriteReadNonStop function reported some
- *                              error.
+ *                              error.  On cores built on ESP-IDF 5.4 or later,
+ *                              a transfer that timed out is reported as EIO
+ *                              too, since the driver returns the same error for
+ *                              a timeout and a missing acknowledge.
  *     - Linux specific       :
  *       - EAGAIN             : The transfer completed zero messages.
  *       - EBADE              : The adapter driver returned an unexpected
