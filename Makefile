@@ -58,6 +58,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(LIB): $(OBJS) | $(BUILD_DIR)
+	rm -f $@
 	ar rcs $@ $(OBJS)
 
 tests:
