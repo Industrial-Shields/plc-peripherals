@@ -43,6 +43,7 @@ LDFLAGS += -L$(ABS_BUILD_DIR) -lplc-peripherals
 
 SRCS := $(filter-out $(SRC_DIR)/expanded-gpio.c, $(wildcard $(SRC_DIR)/*.c))
 OBJS := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
+DEPS := $(OBJS:.o=.d)
 LIB := $(BUILD_DIR)/$(LIBNAME)
 
 .PHONY: all tests coverage cppcheck valgrind check format clean
@@ -55,7 +56,7 @@ $(BUILD_DIR):
 
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(LIB): $(OBJS) | $(BUILD_DIR)
 	rm -f $@
@@ -92,3 +93,5 @@ check: format $(LIB)
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+-include $(DEPS)
