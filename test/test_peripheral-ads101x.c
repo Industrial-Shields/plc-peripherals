@@ -1648,12 +1648,34 @@ void test_ads101x_set_fs_fails_when_writing_the_config_reg_fails_in_continuous_m
 	destroy_ads(ads);
 }
 
-void test_ads101x_set_fs_skips_the_write_when_the_rate_is_unchanged(void)
+void test_ads101x_set_fs_returns_1_and_skips_the_write_when_the_rate_is_unchanged(
+	void)
 {
 	ads101x_t* ads = create_ads(true); // continuous, starts at FAST_DR
 
 	// No i2c_write8_16b expectation queued: any write here is a bug.
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(1, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
+	TEST_ASSERT_EQUAL_size_t(0, fake_delay.len);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_set_fs_returns_1_when_the_rate_is_unchanged_in_single_mode(
+	void)
+{
+	ads101x_t* ads = create_ads(false); // single-shot, starts at FAST_DR
+
+	TEST_ASSERT_EQUAL_INT(1, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
+
+	// The next read writes CONFIG_REG with the same rate
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 
 	destroy_ads(ads);
 }
@@ -1711,27 +1733,35 @@ void test_ads101x_single_read_exercises_every_data_rate_in_the_conversion_time_t
 		ADS101X_DATA_RATE dr;
 		uint16_t expected_cfg;
 		uint32_t expected_us;
+		int expected_ret;
 	} cases[] = {
 		{ ADS101X_250SPS,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x20,
-		  CONVERSION_US(250) },
+		  CONVERSION_US(250),
+		  0 },
 		{ ADS101X_490SPS,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x40,
-		  CONVERSION_US(490) },
+		  CONVERSION_US(490),
+		  0 },
 		{ ADS101X_1600SPS,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0x80,
-		  CONVERSION_US(1600) },
+		  CONVERSION_US(1600),
+		  0 },
 		{ ADS101X_3300SPS,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0,
-		  CONVERSION_US(3300) },
+		  CONVERSION_US(3300),
+		  0 },
+		// The same rate as the previous case
 		{ (ADS101X_DATA_RATE)0b111,
 		  (INIT_RESTART_CFG_SINGLE & ~0xE0) | 0xC0,
-		  CONVERSION_US(3300) },
+		  CONVERSION_US(3300),
+		  1 },
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
 		TEST_ASSERT_EQUAL_INT(
-			0, ads101x_set_fs(TEST_I2C, ads, cases[i].dr, 1000));
+			cases[i].expected_ret,
+			ads101x_set_fs(TEST_I2C, ads, cases[i].dr, 1000));
 		i2c_write8_16b_ExpectAndReturn(TEST_I2C,
 					       TEST_ADDR,
 					       CONFIG_REG,

@@ -574,7 +574,7 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr, uint32_t timeout_ms);
  *                                  applicable when the ADS101X is protected.
  *
  * Returns:
- *   int - 0 if successful, otherwise -1.
+ *   int - 0 if successful, 1 if it already had that rate, otherwise -1.
  *
  * Errors:
  *   errno set to:

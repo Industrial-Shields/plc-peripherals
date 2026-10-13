@@ -698,6 +698,7 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 		   ADS101X_DATA_RATE dr,
 		   uint32_t timeout_ms)
 {
+	uint16_t new_cfg;
 	int ret;
 
 	if (ads == NULL) {
@@ -727,7 +728,12 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 		goto ads101x_set_fs_exit;
 	}
 
-	ADS101X_SET_DR(ADS(ads)->expected_cfg_reg, dr);
+	new_cfg = ADS(ads)->expected_cfg_reg;
+	ADS101X_SET_DR(new_cfg, dr);
+
+	ret = new_cfg == ADS(ads)->expected_cfg_reg ? 1 : 0;
+
+	ADS(ads)->expected_cfg_reg = new_cfg;
 
 	if (ADS101X_IS_CONTINUOUS_MODE(ads) &&
 	    ADS(ads)->expected_cfg_reg != ADS(ads)->last_cfg_reg) {
@@ -755,9 +761,10 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 		}
 
 		ADS(ads)->last_cfg_reg = ADS(ads)->expected_cfg_reg;
-	}
 
-	ret = 0;
+		// The chip didn't have this rate, or we couldn't confirm it had
+		ret = 0;
+	}
 
 ads101x_set_fs_exit:
 	ads101x_unlock(ADS(ads));
