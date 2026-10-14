@@ -556,6 +556,10 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
  * single I2C transfer. Pull-ups and inversions are left as they are (see
  * mcp230xx_set_input).
  *
+ * WARNING: Bit i is GPIO i, so port A (GPA0 to GPA7) is the low byte, as in
+ * mcp230xx_read_all and mcp230xx_write_all. v2.0.0's mcp23017_set_pin_mode_all
+ * took port A in the high byte.
+ *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
