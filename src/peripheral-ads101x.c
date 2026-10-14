@@ -217,6 +217,36 @@ static int ads101x_resync_if_needed(const i2c_interface_t* i2c,
 }
 
 /*
+ * Write expected_cfg_reg in continuous mode, and wait for the first conversion
+ * that uses it. The caller must hold the lock before calling it (if
+ * protected).
+ */
+static int ads101x_write_continuous_cfg(const i2c_interface_t* i2c,
+					ads101x_internal_t* ads)
+{
+	if (i2c_write8_16b(i2c, ads->addr, CONFIG_REG, ads->expected_cfg_reg) !=
+	    0) {
+		return -1;
+	}
+
+	/*
+	 * Per the datasheet (SBAS473F 7.4.2.2), the conversion already in
+	 * flight completes with the PREVIOUS settings; only the one after it
+	 * uses the new ones. In continuous mode, every CONFIG_REG write
+	 * (ads101x_init, ads101x_continuous_read and ads101x_set_fs) also
+	 * updates last_cfg_reg, so that in-flight conversion is necessarily
+	 * still running at last_cfg_reg's rate. Wait it out, then wait one
+	 * full conversion at the new rate.
+	 */
+	if (ADS101X_DELAY_UNTIL_NEW_CFG(ads) != 0) {
+		return -1;
+	}
+
+	ads->last_cfg_reg = ads->expected_cfg_reg;
+	return 0;
+}
+
+/*
  * Read the last conversion result. The caller checks ads and return_value for
  * NULL, and must hold the lock before calling it (if protected).
  */
@@ -613,31 +643,10 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
 		goto ads101x_continuous_read_exit;
 	}
 
-	if (ADS(ads)->expected_cfg_reg != ADS(ads)->last_cfg_reg) {
-		if (i2c_write8_16b(i2c,
-				   ADS(ads)->addr,
-				   CONFIG_REG,
-				   ADS(ads)->expected_cfg_reg) != 0) {
-			ret = -1;
-			goto ads101x_continuous_read_exit;
-		}
-
-		/*
-		 * Per the datasheet (SBAS473F 7.4.2.2), the conversion already
-		 * in flight completes with the PREVIOUS settings; only the one
-		 * after it uses the new ones. In continuous mode, every
-		 * CONFIG_REG write (ads101x_init, ads101x_continuous_read and
-		 * ads101x_set_fs) also updates last_cfg_reg, so that in-flight
-		 * conversion is necessarily still running at last_cfg_reg's
-		 * rate Wait the old conversion time plus one full conversion at
-		 * the new rate.
-		 */
-		if (ADS101X_DELAY_UNTIL_NEW_CFG(ads)) {
-			ret = -1;
-			goto ads101x_continuous_read_exit;
-		}
-
-		ADS(ads)->last_cfg_reg = ADS(ads)->expected_cfg_reg;
+	if (ADS(ads)->expected_cfg_reg != ADS(ads)->last_cfg_reg &&
+	    ads101x_write_continuous_cfg(i2c, ADS(ads)) != 0) {
+		ret = -1;
+		goto ads101x_continuous_read_exit;
 	}
 
 	ret = ads101x_read_conversion(i2c, ADS(ads), return_value);
@@ -737,30 +746,10 @@ int ads101x_set_fs(const i2c_interface_t* i2c,
 
 	if (ADS101X_IS_CONTINUOUS_MODE(ads) &&
 	    ADS(ads)->expected_cfg_reg != ADS(ads)->last_cfg_reg) {
-		if (i2c_write8_16b(i2c,
-				   ADS(ads)->addr,
-				   CONFIG_REG,
-				   ADS(ads)->expected_cfg_reg) != 0) {
+		if (ads101x_write_continuous_cfg(i2c, ADS(ads)) != 0) {
 			ret = -1;
 			goto ads101x_set_fs_exit;
 		}
-
-		/*
-		 * Per the datasheet (SBAS473F 7.4.2.2), the conversion already
-		 * in flight completes with the PREVIOUS settings; only the one
-		 * after it uses the new ones. In continuous mode, every
-		 * CONFIG_REG write (ads101x_init, ads101x_continuous_read and
-		 * ads101x_set_fs) also updates last_cfg_reg, so that in-flight
-		 * conversion is necessarily still running at last_cfg_reg's
-		 * rate. Wait it out, then wait one full conversion at the new
-		 * rate.
-		 */
-		if (ADS101X_DELAY_UNTIL_NEW_CFG(ads)) {
-			ret = -1;
-			goto ads101x_set_fs_exit;
-		}
-
-		ADS(ads)->last_cfg_reg = ADS(ads)->expected_cfg_reg;
 
 		// The chip didn't have this rate, or we couldn't confirm it had
 		ret = 0;
