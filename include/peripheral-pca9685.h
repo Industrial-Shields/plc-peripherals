@@ -374,7 +374,7 @@ int pca9685_unprotect(pca9685_t* pca);
  *                                  PCA9685_MIN_FREQ_HZ to PCA9685_MAX_FREQ_HZ,
  *                                  or PCA9685_FREQ_NO_CHANGE to keep the
  *                                  current one.
- *   timeout_ms (uint32_t)        - The maximum time to wait to set it. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
  *   int - 0 if successful, 1 if the chip already had that frequency (so the
@@ -416,7 +416,7 @@ int pca9685_set_frequency(const i2c_interface_t* i2c,
  *   prescale (uint8_t)           - The PRE_SCALE value. From
  *                                  PCA9685_MIN_PRESCALER, the lowest the chip
  *                                  accepts, to PCA9685_MAX_PRESCALER.
- *   timeout_ms (uint32_t)        - The maximum time to wait to set it. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
  *   int - 0 if successful, 1 if the chip already had that prescale (so the
@@ -457,7 +457,7 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
  *                                  turns it fully off, PCA9685_OUTPUT_ON
  *                                  (4096) fully on, and anything in between
  *                                  keeps it on for value/4096 of each period.
- *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -503,7 +503,7 @@ int pca9685_write_output(const i2c_interface_t* i2c,
  *                                  pca9685_write_output) to
  *                                  PCA9685_MAX_PHASE. It doesn't matter when
  *                                  the output is fully off or fully on.
- *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -544,7 +544,7 @@ int pca9685_write_output_phase(const i2c_interface_t* i2c,
  *   values (const uint16_t*)     - PCA9685_NUM_OUTPUTS duty cycles, values[0]
  *                                  for output 0. Nothing is written unless
  *                                  all are valid.
- *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -584,7 +584,7 @@ int pca9685_write_all(const i2c_interface_t* i2c,
  *   index (uint8_t)              - The output you want to read.
  *   value (uint16_t*)            - Where the duty cycle is stored, from
  *                                  PCA9685_OUTPUT_OFF to PCA9685_OUTPUT_ON.
- *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -628,7 +628,7 @@ int pca9685_read_output(const i2c_interface_t* i2c,
  *                                  PCA9685_MIN_PHASE to PCA9685_MAX_PHASE. A
  *                                  fully on output has none, so it reads as
  *                                  PCA9685_MIN_PHASE.
- *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -669,7 +669,7 @@ int pca9685_read_output_phase(const i2c_interface_t* i2c,
  *   values (uint16_t*)           - Where the PCA9685_NUM_OUTPUTS duty cycles
  *                                  are stored, values[0] for output 0. It is
  *                                  left as it was if the read fails.
- *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the PCA9685 is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.

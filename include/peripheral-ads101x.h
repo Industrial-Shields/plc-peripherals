@@ -369,7 +369,7 @@ int ads101x_unprotect(ads101x_t* ads);
  *   index (ADS101X_INPUT)        - The input to read from the ADS101X.
  *   return_value (int16_t*)      - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the ADS101X is protected.
  *
  * Returns:
@@ -414,7 +414,7 @@ int ads101x_single_read(const i2c_interface_t* i2c,
  *   index (ADS101X_INPUT)        - The input to read from the ADS101X.
  *   return_value (uint16_t*)     - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the ADS101X is protected.
  *
  * Returns:
@@ -461,7 +461,7 @@ int ads101x_unsigned_single_read(const i2c_interface_t* i2c,
  *   index (ADS101X_INPUT)        - The input to read from the ADS101X.
  *   return_value (int16_t*)      - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the ADS101X is protected.
  *
  * Returns:
@@ -504,7 +504,7 @@ int ads101x_continuous_read(const i2c_interface_t* i2c,
  *   index (ADS101X_INPUT)        - The input to read from the ADS101X.
  *   return_value (uint16_t*)     - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the ADS101X is protected.
  *
  * Returns:
@@ -540,7 +540,7 @@ int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
  *   ads (ads101x_t*)        - The ADS101X to interact with.
  *   dr (ADS101X_DATA_RATE*) - Pointer to where the sampling frequency will be
  *                             saved.
- *   timeout_ms (uint32_t)   - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)   - The maximum time to wait for the lock. Only
  *                             applicable when the ADS101X is protected.
  *
  * Returns:
@@ -570,7 +570,7 @@ int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr, uint32_t timeout_ms);
  *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
  *   ads (ads101x_t*)             - The ADS101X to interact with.
  *   dr (ADS101X_DATA_RATE)       - Sampling frequency to set.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the ADS101X is protected.
  *
  * Returns:

@@ -416,9 +416,9 @@ int mcp230xx_get_type(mcp230xx_t* mcp,
  *   config (MCP230XX_INPUT_CONFIG) - Used to enable/disable the pull-up of the
  *                                    input, and whether its level reads
  *                                    inverted.
- *   timeout_ms (uint32_t)          - The maximum time to wait to configure
- *                                    the pin. Only applicable when the
- *                                    MCP230XX is protected.
+ *   timeout_ms (uint32_t)          - The maximum time to wait for the lock.
+ *                                    Only applicable when the MCP230XX is
+ *                                    protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already an input and the pull-up and
  *         the polarity were correctly configured, otherwise -1.
@@ -459,7 +459,7 @@ int mcp230xx_set_input(const i2c_interface_t* i2c,
  *   index (uint8_t)              - The GPIO you want to read from.
  *   return_value (uint8_t*)      - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -499,7 +499,7 @@ int mcp230xx_read_gpio(const i2c_interface_t* i2c,
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   return_value (uint16_t*)     - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -528,9 +528,8 @@ int mcp230xx_read_all(const i2c_interface_t* i2c,
  *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   index (uint8_t)              - The GPIO you want to set as output.
- *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
- *                                  pin. Only applicable when the MCP230XX is
- *                                  protected.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
+ *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already an output, otherwise -1.
  *
@@ -562,9 +561,8 @@ int mcp230xx_set_output(const i2c_interface_t* i2c,
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   modes (uint16_t)             - MCP230XX_INPUT or MCP230XX_OUTPUT per
  *                                  GPIO. Bit i is GPIO i.
- *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
- *                                  pins. Only applicable when the MCP230XX is
- *                                  protected.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
+ *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
@@ -597,7 +595,7 @@ int mcp230xx_set_pin_mode_all(const i2c_interface_t* i2c,
  *   index (uint8_t)              - The GPIO you want to modify.
  *   to_write (uint8_t)           - The value to write. MCP230XX_LOW sets the
  *                                  output low, any other value sets it high.
- *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already set/cleared, otherwise -1.
@@ -631,7 +629,7 @@ int mcp230xx_write_gpio(const i2c_interface_t* i2c,
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   to_write (uint16_t)          - 0 sets a GPIO low, 1 high. Bit i is GPIO
  *                                  i.
- *   timeout_ms (uint32_t)        - The maximum time to wait to write. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.
@@ -671,9 +669,8 @@ int mcp230xx_write_all(const i2c_interface_t* i2c,
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   index (uint8_t)              - The GPIO whose interrupt you want to enable.
  *   mode (MCP230XX_INT_MODE)     - When the interrupt fires.
- *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
- *                                  interrupt. Only applicable when the
- *                                  MCP230XX is protected.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
+ *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already enabled with that mode,
  *         otherwise -1.
@@ -720,9 +717,8 @@ int mcp230xx_enable_interrupt(const i2c_interface_t* i2c,
  *                                  disable.
  *   regs (mcp230xx_int_regs_t*)  - Where to store what was read (see
  *                                  mcp230xx_read_interrupt).
- *   timeout_ms (uint32_t)        - The maximum time to wait to configure the
- *                                  interrupt. Only applicable when the
- *                                  MCP230XX is protected.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
+ *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, 1 if it was already disabled, otherwise -1.
  *         "regs" is only written when 0 is returned. On failure, the GPIO
@@ -780,7 +776,7 @@ int mcp230xx_disable_interrupt(const i2c_interface_t* i2c,
  *   mcp (mcp230xx_t*)            - The MCP230XX to interact with.
  *   regs (mcp230xx_int_regs_t*)  - Where to store what was read (see
  *                                  mcp230xx_int_regs_t).
- *   timeout_ms (uint32_t)        - The maximum time to wait to read. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the MCP230XX is protected.
  * Returns:
  *   int - 0 if successful, otherwise -1.

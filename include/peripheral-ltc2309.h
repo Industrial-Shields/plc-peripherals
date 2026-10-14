@@ -297,7 +297,7 @@ int ltc2309_unprotect(ltc2309_t* ltc);
  *   index (LTC2309_INPUT)        - The channel to read.
  *   read_value (uint16_t*)       - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the LTC2309 is protected.
  *
  * Returns:
@@ -341,7 +341,7 @@ int ltc2309_unsigned_single_ended_read(const i2c_interface_t* i2c,
  *   index (LTC2309_INPUT)        - The channel to read.
  *   read_value (int16_t*)        - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the LTC2309 is protected.
  *
  * Returns:
@@ -384,7 +384,7 @@ int ltc2309_single_ended_read(const i2c_interface_t* i2c,
  *                                  positive and y as negative.
  *   read_value (uint16_t*)       - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the LTC2309 is protected.
  *
  * Returns:
@@ -427,7 +427,7 @@ int ltc2309_unsigned_differential_read(const i2c_interface_t* i2c,
  *                                  positive and y as negative.
  *   read_value (int16_t*)        - The value in which the reading will be
  *                                  stored.
- *   timeout_ms (uint32_t)        - The maximum time to wait for a reading. Only
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
  *                                  applicable when the LTC2309 is protected.
  *
  * Returns:
