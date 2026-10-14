@@ -35,7 +35,8 @@ extern "C" {
 #define LTC2309_INTERNAL_ALIGN PLC_MUTEX_ALIGN
 #define LTC2309_INTERNAL_SIZE                                                 \
 	PLC_PERIPHERAL_INTERNAL_PAD(PLC_MUTEX_SIZE + sizeof(plc_i2c_addr_t) + \
-					    sizeof(uint8_t) + sizeof(bool),   \
+					    sizeof(uint8_t) +                 \
+					    2 * sizeof(bool),                 \
 				    LTC2309_INTERNAL_ALIGN)
 
 /*
@@ -131,6 +132,8 @@ ltc2309_t* ltc2309_init(const i2c_interface_t* i2c, plc_i2c_addr_t addr);
  *   - If the handle is protected, its mutex is destroyed first. If the
  *     shutdown write fails after that, the handle is not freed, but it is no
  *     longer protected.
+ *   - A failed shutdown write may still have put the LTC2309 to sleep. The
+ *     next read on the handle then waits tREFWAKE (200ms) for it to wake up.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
@@ -200,6 +203,8 @@ int ltc2309_static_init(const i2c_interface_t* i2c,
  *   - If the handle is protected, its mutex is destroyed first. If the
  *     shutdown write fails after that, the handle is still initialized, but it
  *     is no longer protected.
+ *   - A failed shutdown write may still have put the LTC2309 to sleep. The
+ *     next read on the handle then waits tREFWAKE (200ms) for it to wake up.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
@@ -282,6 +287,10 @@ int ltc2309_unprotect(ltc2309_t* ltc);
  * Single-ended inputs are measured against COM, which should be tied to ground
  * for unipolar conversions.
  *
+ * WARNING: If a shutdown write of ltc2309_deinit or ltc2309_static_deinit
+ * failed, the LTC2309 may be asleep. The first read after it then wakes it, and
+ * waits tREFWAKE (200ms) before its conversion.
+ *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
  *   ltc (ltc2309_t*)             - The LTC2309 to interact with.
@@ -322,6 +331,10 @@ int ltc2309_unsigned_single_ended_read(const i2c_interface_t* i2c,
  * Single-ended inputs are measured against COM, which should be tied midway
  * between GND and REFCOMP for bipolar conversions.
  *
+ * WARNING: If a shutdown write of ltc2309_deinit or ltc2309_static_deinit
+ * failed, the LTC2309 may be asleep. The first read after it then wakes it, and
+ * waits tREFWAKE (200ms) before its conversion.
+ *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
  *   ltc (ltc2309_t*)             - The LTC2309 to interact with.
@@ -358,6 +371,10 @@ int ltc2309_single_ended_read(const i2c_interface_t* i2c,
  *
  * Perform a differential unipolar conversion, and store the 12-bit result as
  * straight binary (0 to 4095).
+ *
+ * WARNING: If a shutdown write of ltc2309_deinit or ltc2309_static_deinit
+ * failed, the LTC2309 may be asleep. The first read after it then wakes it, and
+ * waits tREFWAKE (200ms) before its conversion.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.
@@ -397,6 +414,10 @@ int ltc2309_unsigned_differential_read(const i2c_interface_t* i2c,
  *
  * Perform a differential bipolar conversion, and store the 12-bit result as
  * 2's complement (-2048 to 2047), sign-extended to int16_t.
+ *
+ * WARNING: If a shutdown write of ltc2309_deinit or ltc2309_static_deinit
+ * failed, the LTC2309 may be asleep. The first read after it then wakes it, and
+ * waits tREFWAKE (200ms) before its conversion.
  *
  * Parameters:
  *   i2c (const i2c_interface_t*) - The I2C interface the LTC2309 is on.

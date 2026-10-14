@@ -226,6 +226,76 @@ void test_ltc2309_deinit_fails_when_the_shutdown_write_fails(void)
 	free(ltc); // deinit bailed out before freeing it
 }
 
+void test_ltc2309_read_waits_for_the_wake_up_after_a_failed_shutdown(void)
+{
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+	static const uint32_t woken[] = { TREFWAKE_US, CMD_DELAY_US };
+	ltc2309_t* ltc = create_ltc();
+	uint32_t writes_before;
+	uint16_t value;
+
+	fake_i2c_write_op.retval = -1;
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_deinit(TEST_I2C, ltc, true));
+
+	// The shutdown may have reached it: wake it and wait, then convert
+	fake_i2c_write_op.retval = 1;
+	fake_i2c_read_answers(reading, 2);
+	fake_delay_reset();
+	writes_before = fake_i2c_write_op.calls;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_unsigned_single_ended_read(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+	TEST_ASSERT_EQUAL_UINT32(writes_before + 2, fake_i2c_write_op.calls);
+	TEST_ASSERT_EQUAL_size_t(2, fake_delay.len);
+	TEST_ASSERT_EQUAL_UINT32_ARRAY(woken, fake_delay.us, 2);
+
+	// Awake now, so only the conversion
+	fake_i2c_read_answers(reading, 2);
+	fake_delay_reset();
+	writes_before = fake_i2c_write_op.calls;
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_unsigned_single_ended_read(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+	TEST_ASSERT_EQUAL_UINT32(writes_before + 1, fake_i2c_write_op.calls);
+	TEST_ASSERT_EQUAL_size_t(1, fake_delay.len);
+	TEST_ASSERT_EQUAL_UINT32(CMD_DELAY_US, fake_delay.us[0]);
+
+	destroy_ltc(ltc);
+}
+
+void test_ltc2309_read_wakes_again_when_waking_after_a_failed_shutdown_fails(
+	void)
+{
+	static const uint8_t reading[2] = { 0x0F, 0xF0 };
+	ltc2309_t* ltc = create_ltc();
+	uint16_t value;
+
+	fake_i2c_write_op.retval = -1;
+	TEST_ASSERT_EQUAL_INT(-1, ltc2309_deinit(TEST_I2C, ltc, true));
+
+	// The wake write fails: no wait, no read
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ltc2309_unsigned_single_ended_read(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+	TEST_ASSERT_EQUAL_size_t(0, fake_delay.len);
+	TEST_ASSERT_EQUAL_UINT32(0, fake_i2c_read_op.calls);
+
+	fake_i2c_write_op.retval = 1;
+	fake_i2c_read_answers(reading, 2);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ltc2309_unsigned_single_ended_read(
+			TEST_I2C, ltc, LTC2309_CH0, &value, 1000));
+	TEST_ASSERT_EQUAL_size_t(2, fake_delay.len);
+	TEST_ASSERT_EQUAL_UINT32(TREFWAKE_US, fake_delay.us[0]);
+
+	destroy_ltc(ltc);
+}
+
 void test_ltc2309_deinit_fails_with_efault_for_null(void)
 {
 	errno = 0;

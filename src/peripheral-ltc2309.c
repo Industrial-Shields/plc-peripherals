@@ -38,6 +38,7 @@ static const uint8_t SHUTDOWN        = 0b00000100;
 #define COMMAND_BYTE_BIP                                                    0x00
 
 #define MAX_CONVERSION_DELAY_US                                             2 // (1.8)
+#define REFWAKE_DELAY_US                                                    200000
 // clang-format on
 
 typedef struct {
@@ -45,6 +46,7 @@ typedef struct {
 	plc_i2c_addr_t addr;
 	uint8_t bus;
 	bool is_protected;
+	bool needs_wake;
 } ltc2309_internal_t;
 
 _Static_assert(sizeof(ltc2309_t) == sizeof(ltc2309_internal_t),
@@ -77,6 +79,7 @@ int ltc2309_static_init(const i2c_interface_t* i2c,
 	LTC(ltc)->addr = addr;
 	LTC(ltc)->bus = bus;
 	LTC(ltc)->is_protected = false;
+	LTC(ltc)->needs_wake = false;
 
 	/*
 	 * According to the datasheet: When the LTC2309 is properly addressed,
@@ -87,7 +90,7 @@ int ltc2309_static_init(const i2c_interface_t* i2c,
 	 *
 	 * Assume the chip could be sleeping.
 	 */
-	if (plc_delay_us(200 * 1000) != 0) {
+	if (plc_delay_us(REFWAKE_DELAY_US) != 0) {
 		return -1;
 	}
 
@@ -130,6 +133,8 @@ int ltc2309_static_deinit(const i2c_interface_t* i2c,
 
 	if (shutdown &&
 	    i2c_write(i2c, LTC(ltc)->addr, &SHUTDOWN, sizeof(SHUTDOWN)) != 1) {
+		// The LTC2309 may have taken it anyway, and be going to sleep
+		LTC(ltc)->needs_wake = true;
 		return -1;
 	}
 
@@ -190,6 +195,32 @@ int ltc2309_unprotect(ltc2309_t* ltc)
 	return 0;
 }
 
+/*
+ * Wake the LTC2309 if a failed shutdown may have left it asleep. Addressing it
+ * wakes it, but a conversion started before tREFWAKE has passed isn't valid,
+ * so wait it out before the caller starts its own.
+ *
+ * The caller must hold the lock before calling it (if protected).
+ */
+static int ltc2309_wake_if_needed(const i2c_interface_t* i2c,
+				  ltc2309_internal_t* ltc,
+				  uint8_t cmd)
+{
+	if (ltc->needs_wake) {
+		if (i2c_write(i2c, ltc->addr, &cmd, sizeof(cmd)) != 1) {
+			return -1;
+		}
+
+		if (plc_delay_us(REFWAKE_DELAY_US) != 0) {
+			return -1;
+		}
+
+		ltc->needs_wake = false;
+	}
+
+	return 0;
+}
+
 static inline int16_t ltc2309_conversion_reg_to_value(uint16_t read_value)
 {
 	uint16_t shifted = read_value >> 4;
@@ -246,6 +277,11 @@ static int ltc2309_read(const i2c_interface_t* i2c,
 	uint8_t new_cmd = mux_field << COMMAND_BYTE_CHANNEL_SHIFT;
 	new_cmd |= diff ? COMMAND_BYTE_DIFF : COMMAND_BYTE_SGL;
 	new_cmd |= bip ? COMMAND_BYTE_BIP : COMMAND_BYTE_UNI;
+
+	if (ltc2309_wake_if_needed(i2c, LTC(ltc), new_cmd) != 0) {
+		ret = -1;
+		goto ltc2309_read_exit;
+	}
 
 	if (i2c_write(i2c, LTC(ltc)->addr, &new_cmd, 1) != 1) {
 		ret = -1;
