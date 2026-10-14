@@ -181,9 +181,9 @@ static int ads101x_resync_if_needed(const i2c_interface_t* i2c,
 
 	if (ads->needs_resync) {
 		/*
-		 * The previous owner may have left a conversion running, and
-		 * written CONFIG_REG without updating last_cfg_reg with the
-		 * old values.
+		 * The previous owner, or a call that failed after writing
+		 * CONFIG_REG, may have left a conversion running, and
+		 * CONFIG_REG changed without updating last_cfg_reg.
 		 */
 		if (i2c_read8_16b(
 			    i2c, ads->addr, CONFIG_REG, &actual_cfg_reg) != 0) {
@@ -226,6 +226,8 @@ static int ads101x_write_continuous_cfg(const i2c_interface_t* i2c,
 {
 	if (i2c_write8_16b(i2c, ads->addr, CONFIG_REG, ads->expected_cfg_reg) !=
 	    0) {
+		// The ADS101X may have taken the write anyway
+		ads->needs_resync = true;
 		return -1;
 	}
 
@@ -239,6 +241,8 @@ static int ads101x_write_continuous_cfg(const i2c_interface_t* i2c,
 	 * full conversion at the new rate.
 	 */
 	if (ADS101X_DELAY_UNTIL_NEW_CFG(ads) != 0) {
+		// The ADS101X has the new CONFIG_REG, last_cfg_reg doesn't
+		ads->needs_resync = true;
 		return -1;
 	}
 
@@ -570,6 +574,8 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 			   ADS(ads)->addr,
 			   CONFIG_REG,
 			   ADS(ads)->expected_cfg_reg) != 0) {
+		// The ADS101X may have taken the write anyway
+		ADS(ads)->needs_resync = true;
 		ret = -1;
 		goto ads101x_single_read_exit;
 	}
@@ -577,6 +583,8 @@ int ads101x_single_read(const i2c_interface_t* i2c,
 	// Delay for the conversion
 	if (ads101x_delay_until_conversion(
 		    ADS101X_GET_DR(ADS(ads)->expected_cfg_reg)) != 0) {
+		// The conversion is still running
+		ADS(ads)->needs_resync = true;
 		ret = -1;
 		goto ads101x_single_read_exit;
 	}

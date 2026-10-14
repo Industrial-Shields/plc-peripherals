@@ -1003,6 +1003,92 @@ void test_ads101x_single_read_fails_when_writing_the_config_reg_fails(void)
 	destroy_ads(ads);
 }
 
+void test_ads101x_single_read_waits_out_a_conversion_a_failed_write_started(void)
+{
+	ads101x_t* ads = create_ads(false);
+	const uint16_t p0_n3_cfg = INIT_RESTART_CFG_SINGLE |
+				   (ADS101X_P0_N3 << 12);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, p0_n3_cfg, -1);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N3, &value, 1000));
+
+	/*
+	 * The write reached the ADS101X anyway, and OS=0 says its conversion
+	 * is still running. Wait it out, or the next start would be ignored.
+	 */
+	expect_i2c_read8_16b(CONFIG_REG, p0_n3_cfg & ~CONFIG_REG_OS, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 2);
+	TEST_ASSERT_EQUAL_INT16(255, value);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_single_read_waits_out_its_conversion_after_a_failed_delay(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	fake_delay_reset();
+	fake_delay.fail_at = 0;
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	expect_i2c_read8_16b(
+		CONFIG_REG, INIT_RESTART_CFG_SINGLE & ~CONFIG_REG_OS, 0);
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	static const uint32_t expected[] = { FAST_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 2);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_single_read_does_not_resync_after_a_failed_conversion_read(
+	void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0, -1);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	// The conversion was over: no CONFIG_REG read this time.
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, INIT_RESTART_CFG_SINGLE, 0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+
+	destroy_ads(ads);
+}
+
 void test_ads101x_single_read_fails_when_reading_the_conversion_reg_fails(void)
 {
 	ads101x_t* ads = create_ads(false);
@@ -2367,8 +2453,7 @@ void test_ads101x_single_read_fails_without_reading_when_the_delay_fails(void)
 	destroy_ads(ads);
 }
 
-void test_ads101x_continuous_read_writes_the_config_again_after_a_failed_delay(
-	void)
+void test_ads101x_continuous_read_resyncs_after_a_failed_delay(void)
 {
 	ads101x_t* ads = create_ads(true);
 	const uint16_t p1_n3_cfg = INIT_RESTART_CFG_CONTINUOUS |
@@ -2384,23 +2469,64 @@ void test_ads101x_continuous_read_writes_the_config_again_after_a_failed_delay(
 		ads101x_continuous_read(
 			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
 
-	// The ADS101X may not use P1_N3 yet, so it is written and waited again.
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, p1_n3_cfg, 0);
+	// CONFIG_REG reads back P1_N3: wait for a conversion on it, no write.
+	expect_i2c_read8_16b(CONFIG_REG, p1_n3_cfg, 0);
 	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
 	fake_delay_reset();
 	TEST_ASSERT_EQUAL_INT(
 		0,
 		ads101x_continuous_read(
 			TEST_I2C, ads, ADS101X_P1_N3, &value, 1000));
-	static const uint32_t expected[] = { FAST_DR_CONVERSION_US,
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US,
 					     FAST_DR_CONVERSION_US };
 	assert_delays(expected, 2);
 
 	destroy_ads(ads);
 }
 
-void test_ads101x_set_fs_writes_the_config_again_after_a_failed_delay(void)
+void test_ads101x_continuous_read_rewrites_the_channel_a_failed_write_changed(
+	void)
+{
+	ads101x_t* ads = create_ads(true);
+	const uint16_t p0_n3_cfg = INIT_RESTART_CFG_CONTINUOUS |
+				   (ADS101X_P0_N3 << 12);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, p0_n3_cfg, -1);
+	int16_t value;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N3, &value, 1000));
+
+	/*
+	 * The write reached the ADS101X anyway. Back on P0_N1, which the cache
+	 * still had, CONFIG_REG must be written again rather than skipped.
+	 */
+	expect_i2c_read8_16b(CONFIG_REG, p0_n3_cfg, 0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS,
+				       0);
+	expect_i2c_read8_16b(CONVERSION_REG, 0x0FF0, 0);
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	// The resync's two, then the old conversion and one on P0_N1.
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 4);
+	TEST_ASSERT_EQUAL_INT16(255, value);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_set_fs_resyncs_after_a_failed_delay(void)
 {
 	ads101x_t* ads = create_ads(true);
 	const uint16_t slow_cfg =
@@ -2413,13 +2539,46 @@ void test_ads101x_set_fs_writes_the_config_again_after_a_failed_delay(void)
 	fake_delay.fail_at = 1;
 	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
 
-	i2c_write8_16b_ExpectAndReturn(
-		TEST_I2C, TEST_ADDR, CONFIG_REG, slow_cfg, 0);
+	// CONFIG_REG reads back SLOW_DR: the chip has it, so no write.
+	expect_i2c_read8_16b(CONFIG_REG, slow_cfg, 0);
 	fake_delay_reset();
-	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
-	static const uint32_t expected[] = { FAST_DR_CONVERSION_US,
+	TEST_ASSERT_EQUAL_INT(1, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US,
 					     SLOW_DR_CONVERSION_US };
 	assert_delays(expected, 2);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_set_fs_rewrites_the_rate_a_failed_write_changed(void)
+{
+	ads101x_t* ads = create_ads(true); // cached at FAST_DR
+	const uint16_t slow_cfg =
+		(INIT_RESTART_CFG_CONTINUOUS & ~CONFIG_REG_DR) |
+		(SLOW_DR << CONFIG_REG_DR_SHIFT);
+
+	i2c_write8_16b_ExpectAndReturn(
+		TEST_I2C, TEST_ADDR, CONFIG_REG, slow_cfg, -1);
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+
+	/*
+	 * The write reached the ADS101X anyway. Back to FAST_DR, which the
+	 * cache still had, CONFIG_REG must be written again rather than skipped.
+	 */
+	expect_i2c_read8_16b(CONFIG_REG, slow_cfg, 0);
+	i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+				       TEST_ADDR,
+				       CONFIG_REG,
+				       INIT_RESTART_CFG_CONTINUOUS,
+				       0);
+	fake_delay_reset();
+	TEST_ASSERT_EQUAL_INT(0, ads101x_set_fs(TEST_I2C, ads, FAST_DR, 1000));
+	// The resync's two, then the old conversion and one at FAST_DR.
+	static const uint32_t expected[] = { SLOW_DR_CONVERSION_US,
+					     SLOW_DR_CONVERSION_US,
+					     SLOW_DR_CONVERSION_US,
+					     FAST_DR_CONVERSION_US };
+	assert_delays(expected, 4);
 
 	destroy_ads(ads);
 }
