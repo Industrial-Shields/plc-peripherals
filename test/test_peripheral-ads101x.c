@@ -811,6 +811,23 @@ void test_ads101x_static_init_fails_when_the_i2c_transfer_fails(void)
 		ads101x_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
 }
 
+void test_ads101x_static_init_passes_the_bus_lookup_error_through(void)
+{
+	static ads101x_t storage;
+	ads101x_config_t cfg;
+
+	fill_single_shot_cfg(&cfg);
+	fake_i2c_bus_retval = -1;
+	fake_i2c_bus_errno = ENODEV;
+
+	// No I2C transfer is expected.
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_static_init(TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+	TEST_ASSERT_EQUAL_INT(ENODEV, errno);
+}
+
 void test_ads101x_static_deinit_fails_with_efault_for_null(void)
 {
 	errno = 0;
@@ -865,6 +882,24 @@ void test_ads101x_rejects_an_interface_for_another_bus(void)
 	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
 	// Back on the right bus, the same handle still works.
+	fake_i2c_bus = TEST_BUS;
+	destroy_ads(ads);
+}
+
+void test_ads101x_continuous_read_rejects_an_interface_for_another_bus(void)
+{
+	ads101x_t* ads = create_ads(true);
+	int16_t value;
+
+	fake_i2c_bus = TEST_BUS + 1;
+
+	// No I2C transfer is expected.
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ads101x_continuous_read(
+				      TEST_I2C, ads, ADS101X_P0_N1, &value, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
 	fake_i2c_bus = TEST_BUS;
 	destroy_ads(ads);
 }
@@ -2007,6 +2042,56 @@ void test_ads101x_single_read_fails_when_the_mutex_cant_be_taken(void)
 		-1,
 		ads101x_single_read(TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
 	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_continuous_read_fails_when_the_mutex_cant_be_taken(void)
+{
+	ads101x_t* ads = create_protected_ads(true);
+	int16_t value;
+
+	// No I2C transfer and no release are expected.
+	plc_mutex_acquire_Stub(acquire_times_out);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1,
+		ads101x_continuous_read(
+			TEST_I2C, ads, ADS101X_P0_N1, &value, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_get_fs_fails_when_the_mutex_cant_be_taken(void)
+{
+	ads101x_t* ads = create_protected_ads(false);
+	ADS101X_DATA_RATE dr = ADS101X_128SPS;
+
+	// No release is expected, and dr is left as it was.
+	plc_mutex_acquire_Stub(acquire_times_out);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_fs(ads, &dr, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+	TEST_ASSERT_EQUAL_INT(ADS101X_128SPS, dr);
+
+	destroy_protected_ads(ads);
+}
+
+void test_ads101x_set_fs_fails_when_the_mutex_cant_be_taken(void)
+{
+	ads101x_t* ads = create_protected_ads(true);
+
+	// No I2C transfer, no delay and no release are expected.
+	plc_mutex_acquire_Stub(acquire_times_out);
+
+	fake_delay_reset();
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_set_fs(TEST_I2C, ads, SLOW_DR, 1000));
+	TEST_ASSERT_EQUAL_INT(EBUSY, errno);
+	assert_delays(NULL, 0);
 
 	destroy_protected_ads(ads);
 }
