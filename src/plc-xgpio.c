@@ -19,6 +19,7 @@
 
 #include <plc-xgpio.h>
 
+#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -52,6 +53,8 @@ find_mcp230xx(plc_xgpio_mcp230xx_t* arr, size_t num, uint8_t addr)
 {
 	size_t i;
 
+	assert(num == 0 || arr != NULL);
+
 	for (i = 0; i < num; i++) {
 		if (arr[i].addr == addr) {
 			return &arr[i];
@@ -63,19 +66,18 @@ find_mcp230xx(plc_xgpio_mcp230xx_t* arr, size_t num, uint8_t addr)
 
 static plc_xgpio_mcp230xx_t* find_pin_mcp230xx(uint32_t pin)
 {
+	assert(PIN_PERIPHERAL_TYPE(pin) == PLC_MCP23008 ||
+	       PIN_PERIPHERAL_TYPE(pin) == PLC_MCP23017);
+
 	if (PIN_PERIPHERAL_TYPE(pin) == PLC_MCP23008) {
 		return find_mcp230xx(PLC_XGPIO_ARRAY_MCP23008,
 				     PLC_XGPIO_NUM_ARRAY_MCP23008,
 				     PIN_PERIPHERAL_ADDR(pin));
 	}
 
-	if (PIN_PERIPHERAL_TYPE(pin) == PLC_MCP23017) {
-		return find_mcp230xx(PLC_XGPIO_ARRAY_MCP23017,
-				     PLC_XGPIO_NUM_ARRAY_MCP23017,
-				     PIN_PERIPHERAL_ADDR(pin));
-	}
-
-	return NULL;
+	return find_mcp230xx(PLC_XGPIO_ARRAY_MCP23017,
+			     PLC_XGPIO_NUM_ARRAY_MCP23017,
+			     PIN_PERIPHERAL_ADDR(pin));
 }
 
 static void* find_pca9685(uint8_t addr)
@@ -83,6 +85,8 @@ static void* find_pca9685(uint8_t addr)
 	plc_xgpio_pca9685_t* arr = PLC_XGPIO_ARRAY_PCA9685;
 	size_t num = PLC_XGPIO_NUM_ARRAY_PCA9685;
 	size_t i;
+
+	assert(num == 0 || arr != NULL);
 
 	for (i = 0; i < num; i++) {
 		if (arr[i].addr == addr) {
@@ -99,6 +103,8 @@ static void* find_ltc2309(uint8_t addr)
 	size_t num = PLC_XGPIO_NUM_ARRAY_LTC2309;
 	size_t i;
 
+	assert(num == 0 || arr != NULL);
+
 	for (i = 0; i < num; i++) {
 		if (arr[i].addr == addr) {
 			return &arr[i];
@@ -113,6 +119,8 @@ static void* find_ads1015(uint8_t addr)
 	plc_xgpio_ads101x_t* arr = PLC_XGPIO_ARRAY_ADS1015;
 	size_t num = PLC_XGPIO_NUM_ARRAY_ADS1015;
 	size_t i;
+
+	assert(num == 0 || arr != NULL);
 
 	for (i = 0; i < num; i++) {
 		if (arr[i].addr == addr) {
@@ -134,6 +142,9 @@ static int fixed_pin_mode(uint32_t pin,
 			  uint8_t fixed_mode,
 			  void* (*find)(uint8_t addr))
 {
+	assert(fixed_mode == PLC_XGPIO_INPUT || fixed_mode == PLC_XGPIO_OUTPUT);
+	assert(find != NULL);
+
 	if (PIN_PERIPHERAL_INDEX(pin) >= num_gpios) {
 		return INDEX_OUT_OF_RANGE;
 	}
@@ -194,6 +205,7 @@ int plc_xgpio_pin_mode(uint32_t pin, uint8_t mode)
 			PIN_DIRECT_INDEX(pin),
 			mode == PLC_XGPIO_OUTPUT ? PLC_NORMAL_GPIO_OUTPUT :
 						   PLC_NORMAL_GPIO_INPUT);
+		assert(ret >= -1 && ret <= 1);
 		break;
 
 	case PLC_MCP23008:
@@ -249,6 +261,7 @@ int plc_xgpio_digital_write(uint32_t pin, uint8_t value)
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_WRITE_FAIL;
 		ret = plc_normal_gpio_write(PIN_DIRECT_INDEX(pin), value);
+		assert(ret >= -1 && ret <= 1);
 		break;
 
 	case PLC_PCA9685:
@@ -296,6 +309,7 @@ int plc_xgpio_digital_read(uint32_t pin)
 	plc_xgpio_ads101x_t* ads;
 	uint16_t analog;
 	uint8_t level;
+	int ret;
 
 	const uint8_t type = PIN_PERIPHERAL_TYPE(pin);
 
@@ -307,9 +321,12 @@ int plc_xgpio_digital_read(uint32_t pin)
 
 	switch (type) {
 	case PLC_DIRECT:
-		if (plc_normal_gpio_read(PIN_DIRECT_INDEX(pin), &level) != 0) {
+		ret = plc_normal_gpio_read(PIN_DIRECT_INDEX(pin), &level);
+		assert(ret == 0 || ret == -1);
+		if (ret != 0) {
 			return 0;
 		}
+		assert(level == PLC_XGPIO_HIGH || level == PLC_XGPIO_LOW);
 		return level;
 
 	case PLC_MCP23008:
@@ -378,6 +395,7 @@ int plc_xgpio_analog_write(uint32_t pin, uint16_t value)
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_PWM_WRITE_FAIL;
 		ret = plc_normal_gpio_pwm_write(PIN_DIRECT_INDEX(pin), value);
+		assert(ret >= -1 && ret <= 1);
 		break;
 
 	case PLC_PCA9685:
@@ -426,6 +444,7 @@ int plc_xgpio_analog_write_set_frequency(uint32_t pin, uint32_t freq_hz)
 		code = NORMAL_GPIO_PWM_CHANGE_FREQ_FAIL;
 		ret = plc_normal_gpio_pwm_set_frequency(PIN_DIRECT_INDEX(pin),
 							freq_hz);
+		assert(ret >= -1 && ret <= 1);
 		break;
 
 	case PLC_PCA9685:
@@ -455,6 +474,7 @@ uint16_t plc_xgpio_analog_read(uint32_t pin)
 	plc_xgpio_ltc2309_t* ltc;
 	plc_xgpio_ads101x_t* ads;
 	uint16_t value;
+	int ret;
 
 	const uint8_t type = PIN_PERIPHERAL_TYPE(pin);
 
@@ -466,8 +486,10 @@ uint16_t plc_xgpio_analog_read(uint32_t pin)
 
 	switch (type) {
 	case PLC_DIRECT:
-		if (plc_normal_gpio_analog_read(PIN_DIRECT_INDEX(pin),
-						&value) != 0) {
+		ret = plc_normal_gpio_analog_read(PIN_DIRECT_INDEX(pin),
+						  &value);
+		assert(ret == 0 || ret == -1);
+		if (ret != 0) {
 			return 0;
 		}
 		return value;
