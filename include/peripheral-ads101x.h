@@ -29,6 +29,7 @@ extern "C" {
 
 // clang-format off
 #define ADS1015_NUM_INPUTS  4 // AIN0 to AIN3
+#define ADS101X_NUM_INPUTS  8 // The ADS101X_INPUT values (AIN0 - AIN3 + pairs)
 // clang-format on
 
 /*
