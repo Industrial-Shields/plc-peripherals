@@ -20,10 +20,16 @@
 #ifndef PLC_XGPIO_H_
 #define PLC_XGPIO_H_
 
-// The accepted modes of plc_xgpio_pin_mode
+/*
+ * The accepted modes of plc_xgpio_pin_mode. An input can also have
+ * PLC_XGPIO_PULLUP and PLC_XGPIO_INVERTED, as a mask, on the pins that support
+ * them.
+ */
 // clang-format off
-#define PLC_XGPIO_INPUT  0
-#define PLC_XGPIO_OUTPUT 1
+#define PLC_XGPIO_INPUT    0b000
+#define PLC_XGPIO_OUTPUT   0b001
+#define PLC_XGPIO_PULLUP   0b010
+#define PLC_XGPIO_INVERTED 0b100
 // clang-format on
 
 // The accepted values of plc_xgpio_digital_write/_all
@@ -194,27 +200,34 @@ extern plc_xgpio_peripherals_t plc_xgpio_peripherals;
  */
 
 /*
- * The "mode" values plc_normal_gpio_set_pin_mode takes for an input and an
- * output.
+ * The "mode" values plc_normal_gpio_set_pin_mode takes for an input (with its
+ * pull-up enabled, its level inverted, or both) and an output.
  */
 extern const uint8_t PLC_NORMAL_GPIO_INPUT;
+extern const uint8_t PLC_NORMAL_GPIO_INPUT_PULLUP;
+extern const uint8_t PLC_NORMAL_GPIO_INPUT_INVERTED;
+extern const uint8_t PLC_NORMAL_GPIO_INPUT_PULLUP_INVERTED;
 extern const uint8_t PLC_NORMAL_GPIO_OUTPUT;
 
 /**
  * plc_normal_gpio_set_pin_mode
  *
- * Set a direct GPIO as input or as output.
+ * Set a direct GPIO as input, with or without its pull-up and its level
+ * inverted, or as output.
  *
  * Parameters:
  *   pin (uint32_t)  - The index of the direct GPIO.
- *   mode (uint8_t)  - PLC_NORMAL_GPIO_INPUT or PLC_NORMAL_GPIO_OUTPUT.
+ *   mode (uint8_t)  - PLC_NORMAL_GPIO_INPUT, PLC_NORMAL_GPIO_INPUT_PULLUP,
+ *                     PLC_NORMAL_GPIO_INPUT_INVERTED,
+ *                     PLC_NORMAL_GPIO_INPUT_PULLUP_INVERTED or
+ *                     PLC_NORMAL_GPIO_OUTPUT.
  * Returns:
  *   int - 0 if successful, 1 if it already had that mode, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL : mode is neither PLC_NORMAL_GPIO_INPUT nor
- *                PLC_NORMAL_GPIO_OUTPUT.
+ *     - EINVAL  : mode is none of the five.
+ *     - ENOTSUP : The GPIO has no pull-up, or can't be inverted.
  *     - Linux specific :
  *         - (others)   : Whatever ioctl(2) reports for the GPIO line request.
  */
@@ -372,7 +385,10 @@ enum {
  *
  * Parameters:
  *   pin (uint32_t)  - The pin.
- *   mode (uint8_t)  - PLC_XGPIO_INPUT or PLC_XGPIO_OUTPUT.
+ *   mode (uint8_t)  - PLC_XGPIO_OUTPUT, or PLC_XGPIO_INPUT, optionally with
+ *                     PLC_XGPIO_PULLUP and PLC_XGPIO_INVERTED. MCP230XX inputs
+ *                     support both, direct inputs what the platform does, and
+ *                     LTC2309 and ADS1015 inputs neither.
  * Returns:
  *   int - 0 if successful, 1 if it already had that mode, otherwise a negative
  *         value:

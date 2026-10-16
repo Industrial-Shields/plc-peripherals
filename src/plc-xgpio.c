@@ -196,13 +196,45 @@ static int fixed_pin_mode(uint32_t pin,
 	return find(PIN_PERIPHERAL_ADDR(pin)) != NULL ? 1 : I2C_ADDR_NOT_FOUND;
 }
 
+static uint8_t to_normal_gpio_mode(uint8_t mode)
+{
+	if (mode == PLC_XGPIO_OUTPUT) {
+		return PLC_NORMAL_GPIO_OUTPUT;
+	}
+
+	switch (mode & (PLC_XGPIO_PULLUP | PLC_XGPIO_INVERTED)) {
+	case PLC_XGPIO_PULLUP | PLC_XGPIO_INVERTED:
+		return PLC_NORMAL_GPIO_INPUT_PULLUP_INVERTED;
+	case PLC_XGPIO_PULLUP:
+		return PLC_NORMAL_GPIO_INPUT_PULLUP;
+	case PLC_XGPIO_INVERTED:
+		return PLC_NORMAL_GPIO_INPUT_INVERTED;
+	default:
+		return PLC_NORMAL_GPIO_INPUT;
+	}
+}
+
+static MCP230XX_INPUT_CONFIG to_mcp230xx_gpio_mode(uint8_t mode)
+{
+	if (mode & PLC_XGPIO_PULLUP) {
+		return (mode & PLC_XGPIO_INVERTED) ? MCP230XX_PULLUP_INVERTED :
+						     MCP230XX_PULLUP;
+	}
+
+	return (mode & PLC_XGPIO_INVERTED) ? MCP230XX_NO_PULLUP_INVERTED :
+					     MCP230XX_NO_PULLUP;
+}
+
 int plc_xgpio_pin_mode(uint32_t pin, uint8_t mode)
 {
 	plc_xgpio_mcp230xx_t* mcp;
 	int code;
 	int ret;
 
-	if (mode != PLC_XGPIO_INPUT && mode != PLC_XGPIO_OUTPUT) {
+	// An output can't have the input flags
+	if (mode != PLC_XGPIO_OUTPUT &&
+	    (mode & ~(PLC_XGPIO_PULLUP | PLC_XGPIO_INVERTED)) !=
+		    PLC_XGPIO_INPUT) {
 		return PIN_NOT_SUPPORTED;
 	}
 
@@ -246,10 +278,8 @@ int plc_xgpio_pin_mode(uint32_t pin, uint8_t mode)
 
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_SET_PIN_MODE_FAIL;
-		ret = plc_normal_gpio_set_pin_mode(
-			PIN_DIRECT_INDEX(pin),
-			mode == PLC_XGPIO_OUTPUT ? PLC_NORMAL_GPIO_OUTPUT :
-						   PLC_NORMAL_GPIO_INPUT);
+		ret = plc_normal_gpio_set_pin_mode(PIN_DIRECT_INDEX(pin),
+						   to_normal_gpio_mode(mode));
 		assert(ret >= -1 && ret <= 1);
 		break;
 
@@ -272,7 +302,7 @@ int plc_xgpio_pin_mode(uint32_t pin, uint8_t mode)
 			ret = mcp230xx_set_input(I2C,
 						 &mcp->handle,
 						 index,
-						 MCP230XX_NO_PULLUP,
+						 to_mcp230xx_gpio_mode(mode),
 						 mcp->timeout_ms);
 		}
 		break;

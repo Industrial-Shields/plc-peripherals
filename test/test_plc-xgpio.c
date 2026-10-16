@@ -55,6 +55,9 @@ static plc_xgpio_ads101x_t ads1015[1];
  * returns normal_ret, and the reads store normal_level or normal_analog.
  */
 const uint8_t PLC_NORMAL_GPIO_INPUT = 0x01;
+const uint8_t PLC_NORMAL_GPIO_INPUT_PULLUP = 0x05;
+const uint8_t PLC_NORMAL_GPIO_INPUT_INVERTED = 0x81;
+const uint8_t PLC_NORMAL_GPIO_INPUT_PULLUP_INVERTED = 0x85;
 const uint8_t PLC_NORMAL_GPIO_OUTPUT = 0x03;
 
 static uint32_t normal_calls;
@@ -204,8 +207,14 @@ void test_pin_mode_rejects_an_invalid_mode_before_anything_else(void)
 {
 	plc_xgpio_peripherals.i2c = PLC_XGPIO_NO_I2C_BUS;
 
+	// An unknown bit
 	TEST_ASSERT_EQUAL_INT(PIN_NOT_SUPPORTED,
-			      plc_xgpio_pin_mode(MAKE_PIN_DIRECT(5), 2));
+			      plc_xgpio_pin_mode(MAKE_PIN_DIRECT(5), 0x08));
+	// An output with the input flags
+	TEST_ASSERT_EQUAL_INT(PIN_NOT_SUPPORTED,
+			      plc_xgpio_pin_mode(MAKE_PIN_DIRECT(5),
+						 PLC_XGPIO_OUTPUT |
+							 PLC_XGPIO_PULLUP));
 	TEST_ASSERT_EQUAL_INT(
 		PIN_NOT_SUPPORTED,
 		plc_xgpio_pin_mode(MAKE_PIN_MCP23008(MCP23008_ADDR, 0), 7));
@@ -224,6 +233,39 @@ void test_pin_mode_direct_passes_the_platform_modes(void)
 		0, plc_xgpio_pin_mode(MAKE_PIN_DIRECT(7), PLC_XGPIO_INPUT));
 	TEST_ASSERT_EQUAL_UINT32(7, normal_pin);
 	TEST_ASSERT_EQUAL_UINT32(PLC_NORMAL_GPIO_INPUT, normal_arg);
+
+	TEST_ASSERT_EQUAL_INT(0,
+			      plc_xgpio_pin_mode(MAKE_PIN_DIRECT(7),
+						 PLC_XGPIO_INPUT |
+							 PLC_XGPIO_PULLUP));
+	TEST_ASSERT_EQUAL_UINT32(PLC_NORMAL_GPIO_INPUT_PULLUP, normal_arg);
+}
+
+void test_pin_mode_direct_input_flags_map_to_the_platform_modes(void)
+{
+	TEST_ASSERT_EQUAL_INT(0,
+			      plc_xgpio_pin_mode(MAKE_PIN_DIRECT(7),
+						 PLC_XGPIO_INPUT |
+							 PLC_XGPIO_INVERTED));
+	TEST_ASSERT_EQUAL_UINT32(PLC_NORMAL_GPIO_INPUT_INVERTED, normal_arg);
+
+	TEST_ASSERT_EQUAL_INT(0,
+			      plc_xgpio_pin_mode(MAKE_PIN_DIRECT(7),
+						 PLC_XGPIO_INPUT |
+							 PLC_XGPIO_PULLUP |
+							 PLC_XGPIO_INVERTED));
+	TEST_ASSERT_EQUAL_UINT32(PLC_NORMAL_GPIO_INPUT_PULLUP_INVERTED,
+				 normal_arg);
+}
+
+void test_pin_mode_direct_platform_rejecting_a_flag_fails(void)
+{
+	// As a platform without inversion does
+	normal_ret = -1;
+	TEST_ASSERT_EQUAL_INT(NORMAL_GPIO_SET_PIN_MODE_FAIL,
+			      plc_xgpio_pin_mode(MAKE_PIN_DIRECT(7),
+						 PLC_XGPIO_INPUT |
+							 PLC_XGPIO_INVERTED));
 }
 
 void test_pin_mode_direct_passes_1_through(void)
@@ -249,6 +291,48 @@ void test_pin_mode_mcp23008_output(void)
 		0,
 		plc_xgpio_pin_mode(MAKE_PIN_MCP23008(MCP23008_ADDR, 3),
 				   PLC_XGPIO_OUTPUT));
+}
+
+void test_pin_mode_mcp230xx_input_flags_map_to_the_input_configs(void)
+{
+	static const struct {
+		uint8_t mode;
+		MCP230XX_INPUT_CONFIG config;
+	} cases[] = {
+		{ PLC_XGPIO_INPUT, MCP230XX_NO_PULLUP },
+		{ PLC_XGPIO_INPUT | PLC_XGPIO_PULLUP, MCP230XX_PULLUP },
+		{ PLC_XGPIO_INPUT | PLC_XGPIO_INVERTED,
+		  MCP230XX_NO_PULLUP_INVERTED },
+		{ PLC_XGPIO_INPUT | PLC_XGPIO_PULLUP | PLC_XGPIO_INVERTED,
+		  MCP230XX_PULLUP_INVERTED },
+	};
+	size_t i;
+
+	for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		mcp230xx_set_input_ExpectAndReturn(TEST_I2C,
+						   &mcp23017[0].handle,
+						   12,
+						   cases[i].config,
+						   TEST_TIMEOUT_MS,
+						   0);
+		TEST_ASSERT_EQUAL_INT(
+			0,
+			plc_xgpio_pin_mode(MAKE_PIN_MCP23017(MCP23017_ADDR, 12),
+					   cases[i].mode));
+	}
+}
+
+void test_pin_mode_fixed_direction_pins_reject_the_input_flags(void)
+{
+	TEST_ASSERT_EQUAL_INT(
+		PIN_NOT_SUPPORTED,
+		plc_xgpio_pin_mode(MAKE_PIN_ADS1015(ADS1015_ADDR,
+						    ADS101X_P0_GND),
+				   PLC_XGPIO_INPUT | PLC_XGPIO_PULLUP));
+	TEST_ASSERT_EQUAL_INT(
+		PIN_NOT_SUPPORTED,
+		plc_xgpio_pin_mode(MAKE_PIN_LTC2309(LTC2309_ADDR, 0),
+				   PLC_XGPIO_INPUT | PLC_XGPIO_INVERTED));
 }
 
 void test_pin_mode_mcp23008_input_has_no_pullup(void)
