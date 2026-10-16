@@ -88,7 +88,7 @@ int plc_normal_gpio_pwm_set_frequency(uint32_t pin, uint32_t freq)
 	return normal_ret;
 }
 
-int plc_normal_gpio_pwm_write(uint32_t pin, uint16_t value)
+int plc_normal_gpio_pwm_write(uint32_t pin, uint32_t value)
 {
 	normal_calls++;
 	normal_pin = pin;
@@ -733,6 +733,14 @@ void test_analog_write_direct(void)
 			      plc_xgpio_analog_write(MAKE_PIN_DIRECT(4), 1234));
 }
 
+void test_analog_write_direct_keeps_duty_cycles_above_16_bits(void)
+{
+	// A 20-bit PWM's full scale
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_xgpio_analog_write(MAKE_PIN_DIRECT(4), 0xFFFFF));
+	TEST_ASSERT_EQUAL_UINT32(0xFFFFF, normal_arg);
+}
+
 void test_analog_write_pca9685_passes_the_duty_cycle(void)
 {
 	pca9685_write_output_ExpectAndReturn(
@@ -757,10 +765,21 @@ void test_analog_write_pca9685_passes_the_duty_cycle(void)
 void test_analog_write_pca9685_errors(void)
 {
 	pca9685_write_output_ExpectAndReturn(
-		TEST_I2C, &pca9685[0].handle, 0, 5000, TEST_TIMEOUT_MS, -1);
+		TEST_I2C, &pca9685[0].handle, 0, 2048, TEST_TIMEOUT_MS, -1);
 	TEST_ASSERT_EQUAL_INT(ARRAY_PCA9685_PWM_WRITE_FAIL,
 			      plc_xgpio_analog_write(
-				      MAKE_PIN_PCA9685(PCA9685_ADDR, 0), 5000));
+				      MAKE_PIN_PCA9685(PCA9685_ADDR, 0), 2048));
+
+	// Above PCA9685_OUTPUT_ON, without calling the driver
+	TEST_ASSERT_EQUAL_INT(
+		ARRAY_PCA9685_PWM_WRITE_FAIL,
+		plc_xgpio_analog_write(MAKE_PIN_PCA9685(PCA9685_ADDR, 0),
+				       PCA9685_OUTPUT_ON + 1));
+	// It would wrap to 100 in the driver's uint16_t
+	TEST_ASSERT_EQUAL_INT(
+		ARRAY_PCA9685_PWM_WRITE_FAIL,
+		plc_xgpio_analog_write(MAKE_PIN_PCA9685(PCA9685_ADDR, 0),
+				       65536 + 100));
 	TEST_ASSERT_EQUAL_INT(
 		INDEX_OUT_OF_RANGE,
 		plc_xgpio_analog_write(MAKE_PIN_PCA9685(PCA9685_ADDR, 16), 0));

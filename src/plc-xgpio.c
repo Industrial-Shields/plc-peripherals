@@ -371,7 +371,7 @@ int plc_xgpio_digital_read(uint32_t pin)
 	}
 }
 
-int plc_xgpio_analog_write(uint32_t pin, uint16_t value)
+int plc_xgpio_analog_write(uint32_t pin, uint32_t value)
 {
 	plc_xgpio_pca9685_t* pca;
 	int code;
@@ -402,6 +402,10 @@ int plc_xgpio_analog_write(uint32_t pin, uint16_t value)
 		if (PIN_PERIPHERAL_INDEX(pin) >= PCA9685_NUM_OUTPUTS) {
 			return INDEX_OUT_OF_RANGE;
 		}
+
+		if (value > PCA9685_OUTPUT_ON) {
+			return ARRAY_PCA9685_PWM_WRITE_FAIL;
+		}
 		pca = find_pca9685(PIN_PERIPHERAL_ADDR(pin));
 		if (pca == NULL) {
 			return I2C_ADDR_NOT_FOUND;
@@ -411,7 +415,7 @@ int plc_xgpio_analog_write(uint32_t pin, uint16_t value)
 		ret = pca9685_write_output(I2C,
 					   &pca->handle,
 					   PIN_PERIPHERAL_INDEX(pin),
-					   value,
+					   (uint16_t)value,
 					   pca->timeout_ms);
 		break;
 	}

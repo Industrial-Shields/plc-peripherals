@@ -257,7 +257,7 @@ extern int plc_normal_gpio_pwm_set_frequency(uint32_t pin, uint32_t freq);
  *
  * Parameters:
  *   pin (uint32_t)    - The index of the direct GPIO.
- *   value (uint16_t)  - The duty cycle, as passed to plc_xgpio_analog_write.
+ *   value (uint32_t)  - The duty cycle, as passed to plc_xgpio_analog_write.
  *                       Its scale is up to this function.
  * Returns:
  *   int - 0 if successful, 1 if it already had that duty cycle, otherwise -1.
@@ -267,7 +267,7 @@ extern int plc_normal_gpio_pwm_set_frequency(uint32_t pin, uint32_t freq);
  *     - EINVAL  : The GPIO can't be set to that duty cycle.
  *     - ENOTSUP : The platform has no PWM on its direct GPIOs.
  */
-extern int plc_normal_gpio_pwm_write(uint32_t pin, uint16_t value);
+extern int plc_normal_gpio_pwm_write(uint32_t pin, uint32_t value);
 
 /**
  * plc_normal_gpio_read
@@ -436,12 +436,14 @@ int plc_xgpio_digital_read(uint32_t pin);
  *
  * Parameters:
  *   pin (uint32_t)    - The pin.
- *   value (uint16_t)  - The duty cycle. For a PCA9685, from
+ *   value (uint32_t)  - The duty cycle. For a PCA9685, from
  *                       PCA9685_OUTPUT_OFF to PCA9685_OUTPUT_ON.
  * Returns:
  *   int - 0 if successful, otherwise a negative value:
  *         - NORMAL_GPIO_PWM_WRITE_FAIL   : The direct GPIO call failed.
- *         - ARRAY_PCA9685_PWM_WRITE_FAIL : The PCA9685 call failed.
+ *         - ARRAY_PCA9685_PWM_WRITE_FAIL : The PCA9685 call failed, or the
+ *                                          duty cycle is above
+ *                                          PCA9685_OUTPUT_ON.
  *         - I2C_ADDR_NOT_FOUND           : The peripheral isn't in the arrays.
  *         - INDEX_OUT_OF_RANGE           : The peripheral doesn't have the
  *                                          pin's index.
@@ -450,7 +452,7 @@ int plc_xgpio_digital_read(uint32_t pin);
  *         - PIN_NOT_SUPPORTED            : The pin type has no PWM.
  *         - UNKNOWN_PIN_TYPE             : The pin type is unknown.
  */
-int plc_xgpio_analog_write(uint32_t pin, uint16_t value);
+int plc_xgpio_analog_write(uint32_t pin, uint32_t value);
 
 /**
  * plc_xgpio_analog_write_set_frequency
