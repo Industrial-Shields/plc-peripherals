@@ -1691,6 +1691,53 @@ void test_ads101x_get_fs_maps_the_0b111_encoding_to_3300sps(void)
 	destroy_ads(ads);
 }
 
+/* ----------------------- ads101x_get_continuous_mode ---------------------- */
+
+void test_ads101x_get_continuous_mode_fails_with_efault_for_null_ads(void)
+{
+	bool continuous;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_get_continuous_mode(NULL, &continuous, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+}
+
+void test_ads101x_get_continuous_mode_fails_with_efault_for_null_continuous(void)
+{
+	ads101x_t* ads = create_ads(false);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_continuous_mode(ads, NULL, 1000));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_get_continuous_mode_returns_false_in_single_shot(void)
+{
+	ads101x_t* ads = create_ads(false);
+	bool continuous = true;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_get_continuous_mode(ads, &continuous, 1000));
+	TEST_ASSERT_FALSE(continuous);
+
+	destroy_ads(ads);
+}
+
+void test_ads101x_get_continuous_mode_returns_true_in_continuous(void)
+{
+	ads101x_t* ads = create_ads(true);
+	bool continuous = false;
+
+	TEST_ASSERT_EQUAL_INT(
+		0, ads101x_get_continuous_mode(ads, &continuous, 1000));
+	TEST_ASSERT_TRUE(continuous);
+
+	destroy_ads(ads);
+}
+
 /* --------------------------- ads101x_set_fs -------------------------------- */
 
 void test_ads101x_set_fs_fails_with_efault_for_null_ads(void)

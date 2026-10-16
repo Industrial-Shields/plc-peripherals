@@ -533,6 +533,34 @@ int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
 				     uint32_t timeout_ms);
 
 /**
+ * ads101x_get_continuous_mode
+ *
+ * Retrieve whether the ADS101X is in continuous mode, so that it is read with
+ * ads101x_continuous_read, or in single-shot mode, so that it is read with
+ * ads101x_single_read.
+ *
+ * Parameters:
+ *   ads (ads101x_t*)      - The ADS101X to interact with.
+ *   continuous (bool*)    - Pointer to where true will be saved if it is in
+ *                           continuous mode, or false if in single-shot mode.
+ *   timeout_ms (uint32_t) - The maximum time to wait for the lock. Only
+ *                           applicable when the ADS101X is protected.
+ *
+ * Returns:
+ *   int - 0 if successful, otherwise -1.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT   : Passed ads101x_t or continuous is NULL.
+ *     - (others) : Whatever plc_mutex_acquire reports while protected (see
+ *                  plc-mutex.h). EOWNERDEAD is never reported, because the
+ *                  driver recovers from it.
+ */
+int ads101x_get_continuous_mode(ads101x_t* ads,
+				bool* continuous,
+				uint32_t timeout_ms);
+
+/**
  * ads101x_get_fs
  *
  * Retrieve the sampling frequency set in the ADS101X.

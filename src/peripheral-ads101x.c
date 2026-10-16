@@ -688,6 +688,22 @@ int ads101x_unsigned_continuous_read(const i2c_interface_t* i2c,
 						  return_value);
 }
 
+int ads101x_get_continuous_mode(ads101x_t* ads,
+				bool* continuous,
+				uint32_t timeout_ms)
+{
+	(void)timeout_ms;
+
+	if (ads == NULL || continuous == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	*continuous = ADS101X_IS_CONTINUOUS_MODE(ads);
+
+	return 0;
+}
+
 int ads101x_get_fs(ads101x_t* ads, ADS101X_DATA_RATE* dr, uint32_t timeout_ms)
 {
 	ADS101X_DATA_RATE local_dr;
