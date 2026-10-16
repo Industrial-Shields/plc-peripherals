@@ -60,7 +60,7 @@ const uint8_t PLC_NORMAL_GPIO_OUTPUT = 0x03;
 static uint32_t normal_calls;
 static uint32_t normal_pin;
 static uint32_t normal_arg;
-static uint16_t normal_analog;
+static uint32_t normal_analog;
 static uint8_t normal_level;
 static int normal_ret;
 
@@ -104,7 +104,7 @@ int plc_normal_gpio_read(uint32_t pin, uint8_t* read)
 	return normal_ret;
 }
 
-int plc_normal_gpio_analog_read(uint32_t pin, uint16_t* read)
+int plc_normal_gpio_analog_read(uint32_t pin, uint32_t* read)
 {
 	normal_calls++;
 	normal_pin = pin;
@@ -346,7 +346,6 @@ void test_pin_mode_fixed_direction_pins_reject_the_other_mode(void)
 						    ADS101X_P0_GND),
 				   PLC_XGPIO_OUTPUT));
 }
-
 
 void test_pin_mode_fixed_direction_pins_check_the_index_first(void)
 {
@@ -911,12 +910,20 @@ void test_set_frequency_without_bus(void)
 void test_analog_read_direct(void)
 {
 	normal_analog = 3210;
-	TEST_ASSERT_EQUAL_UINT16(3210,
+	TEST_ASSERT_EQUAL_UINT32(3210,
 				 plc_xgpio_analog_read(MAKE_PIN_DIRECT(36)));
 	TEST_ASSERT_EQUAL_UINT32(36, normal_pin);
 
 	normal_ret = -1;
-	TEST_ASSERT_EQUAL_UINT16(0, plc_xgpio_analog_read(MAKE_PIN_DIRECT(36)));
+	TEST_ASSERT_EQUAL_UINT32(0, plc_xgpio_analog_read(MAKE_PIN_DIRECT(36)));
+}
+
+void test_analog_read_direct_keeps_readings_above_16_bits(void)
+{
+	// A 24-bit ADC's full scale
+	normal_analog = 0xFFFFFF;
+	TEST_ASSERT_EQUAL_UINT32(0xFFFFFF,
+				 plc_xgpio_analog_read(MAKE_PIN_DIRECT(36)));
 }
 
 void test_analog_read_ltc2309_maps_every_index_to_its_channel(void)
@@ -931,7 +938,7 @@ void test_analog_read_ltc2309_maps_every_index_to_its_channel(void)
 	for (i = 0; i < LTC2309_NUM_INPUTS; i++) {
 		value = (uint16_t)(100 + i);
 		expect_ltc2309_read(CHANNELS[i], &value, 0);
-		TEST_ASSERT_EQUAL_UINT16(100 + i,
+		TEST_ASSERT_EQUAL_UINT32(100 + i,
 					 plc_xgpio_analog_read(MAKE_PIN_LTC2309(
 						 LTC2309_ADDR, i)));
 	}
@@ -951,7 +958,7 @@ void test_analog_read_ads1015_reads_each_input_against_gnd(void)
 	for (i = 0; i < ADS1015_NUM_INPUTS; i++) {
 		value = (uint16_t)(2000 + i);
 		expect_ads1015_read(INPUTS[i], &value, 0);
-		TEST_ASSERT_EQUAL_UINT16(2000 + i,
+		TEST_ASSERT_EQUAL_UINT32(2000 + i,
 					 plc_xgpio_analog_read(MAKE_PIN_ADS1015(
 						 ADS1015_ADDR, INPUTS[i])));
 	}
@@ -962,25 +969,25 @@ void test_analog_read_failures_read_0(void)
 	uint16_t value = 1234;
 
 	expect_ltc2309_read(LTC2309_CH0, &value, -1);
-	TEST_ASSERT_EQUAL_UINT16(
+	TEST_ASSERT_EQUAL_UINT32(
 		0, plc_xgpio_analog_read(MAKE_PIN_LTC2309(LTC2309_ADDR, 0)));
 
 	expect_ads1015_read(ADS101X_P0_GND, &value, -1);
-	TEST_ASSERT_EQUAL_UINT16(0,
+	TEST_ASSERT_EQUAL_UINT32(0,
 				 plc_xgpio_analog_read(MAKE_PIN_ADS1015(
 					 ADS1015_ADDR, ADS101X_P0_GND)));
 
-	TEST_ASSERT_EQUAL_UINT16(
+	TEST_ASSERT_EQUAL_UINT32(
 		0, plc_xgpio_analog_read(MAKE_PIN_LTC2309(LTC2309_ADDR, 8)));
-	TEST_ASSERT_EQUAL_UINT16(
+	TEST_ASSERT_EQUAL_UINT32(
 		0, plc_xgpio_analog_read(MAKE_PIN_ADS1015(ADS1015_ADDR, 8)));
-	TEST_ASSERT_EQUAL_UINT16(
+	TEST_ASSERT_EQUAL_UINT32(
 		0, plc_xgpio_analog_read(MAKE_PIN_LTC2309(MISSING_ADDR, 0)));
-	TEST_ASSERT_EQUAL_UINT16(
+	TEST_ASSERT_EQUAL_UINT32(
 		0, plc_xgpio_analog_read(MAKE_PIN_PCA9685(PCA9685_ADDR, 0)));
-	TEST_ASSERT_EQUAL_UINT16(
+	TEST_ASSERT_EQUAL_UINT32(
 		0, plc_xgpio_analog_read(MAKE_PIN_MCP23008(MCP23008_ADDR, 0)));
-	TEST_ASSERT_EQUAL_UINT16(0, plc_xgpio_analog_read(0x06000000));
+	TEST_ASSERT_EQUAL_UINT32(0, plc_xgpio_analog_read(0x06000000));
 }
 
 void test_analog_read_without_bus_returns_32(void)
@@ -988,12 +995,12 @@ void test_analog_read_without_bus_returns_32(void)
 	plc_xgpio_peripherals.i2c = PLC_XGPIO_NO_I2C_BUS;
 	normal_analog = 77;
 
-	TEST_ASSERT_EQUAL_UINT16(77,
+	TEST_ASSERT_EQUAL_UINT32(77,
 				 plc_xgpio_analog_read(MAKE_PIN_DIRECT(36)));
-	TEST_ASSERT_EQUAL_UINT16(-I2C_PIN_WITHOUT_I2C_BUS,
+	TEST_ASSERT_EQUAL_UINT32(-I2C_PIN_WITHOUT_I2C_BUS,
 				 plc_xgpio_analog_read(MAKE_PIN_ADS1015(
 					 ADS1015_ADDR, ADS101X_P0_GND)));
-	TEST_ASSERT_EQUAL_UINT16(
+	TEST_ASSERT_EQUAL_UINT32(
 		32, plc_xgpio_analog_read(MAKE_PIN_LTC2309(LTC2309_ADDR, 0)));
 }
 
@@ -1197,7 +1204,7 @@ void test_empty_arrays_find_nothing(void)
 		I2C_ADDR_NOT_FOUND,
 		plc_xgpio_digital_write(MAKE_PIN_PCA9685(PCA9685_ADDR, 0),
 					PLC_XGPIO_HIGH));
-	TEST_ASSERT_EQUAL_UINT16(
+	TEST_ASSERT_EQUAL_UINT32(
 		0, plc_xgpio_analog_read(MAKE_PIN_LTC2309(LTC2309_ADDR, 0)));
 	TEST_ASSERT_EQUAL_INT(I2C_ADDR_NOT_FOUND,
 			      plc_xgpio_digital_write_all(MCP23008_ADDR, 0));

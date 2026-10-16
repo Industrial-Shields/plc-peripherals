@@ -469,11 +469,12 @@ int plc_xgpio_analog_write_set_frequency(uint32_t pin, uint32_t freq_hz)
 	return ret < 0 ? code : 0;
 }
 
-uint16_t plc_xgpio_analog_read(uint32_t pin)
+uint32_t plc_xgpio_analog_read(uint32_t pin)
 {
 	plc_xgpio_ltc2309_t* ltc;
 	plc_xgpio_ads101x_t* ads;
-	uint16_t value;
+	uint32_t value_32;
+	uint16_t value_16;
 	int ret;
 
 	const uint8_t type = PIN_PERIPHERAL_TYPE(pin);
@@ -487,12 +488,12 @@ uint16_t plc_xgpio_analog_read(uint32_t pin)
 	switch (type) {
 	case PLC_DIRECT:
 		ret = plc_normal_gpio_analog_read(PIN_DIRECT_INDEX(pin),
-						  &value);
+						  &value_32);
 		assert(ret == 0 || ret == -1);
 		if (ret != 0) {
 			return 0;
 		}
-		return value;
+		return value_32;
 
 	case PLC_LTC2309:
 		ltc = find_ltc2309(PIN_PERIPHERAL_ADDR(pin));
@@ -500,11 +501,11 @@ uint16_t plc_xgpio_analog_read(uint32_t pin)
 		    ltc2309_unsigned_single_ended_read(I2C,
 						       &ltc->handle,
 						       LTC2309_CHANNELS[index],
-						       &value,
+						       &value_16,
 						       ltc->timeout_ms) != 0) {
 			return 0;
 		}
-		return value;
+		return (uint32_t)value_16;
 
 	case PLC_ADS1015:
 		ads = find_ads1015(PIN_PERIPHERAL_ADDR(pin));
@@ -513,11 +514,11 @@ uint16_t plc_xgpio_analog_read(uint32_t pin)
 		    ads101x_unsigned_single_read(I2C,
 						 &ads->handle,
 						 (ADS101X_INPUT)index,
-						 &value,
+						 &value_16,
 						 ads->timeout_ms) != 0) {
 			return 0;
 		}
-		return value;
+		return (uint32_t)value_16;
 
 	default:
 		return 0;

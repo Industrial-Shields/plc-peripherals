@@ -297,8 +297,8 @@ extern int plc_normal_gpio_read(uint32_t pin, uint8_t* read);
  *
  * Parameters:
  *   pin (uint32_t)    - The index of the direct GPIO.
- *   read (uint16_t*)  - Where to store the reading. Its scale is up to this
- *                       function.
+ *   read (uint32_t*)  - Where to store the reading. Its scale is up to this
+ *                       function, and always unsigned.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
@@ -307,7 +307,7 @@ extern int plc_normal_gpio_read(uint32_t pin, uint8_t* read);
  *     - EFAULT  : "read" pointer is NULL.
  *     - ENOTSUP : The platform has no analog reads on its direct GPIOs.
  */
-extern int plc_normal_gpio_analog_read(uint32_t pin, uint16_t* read);
+extern int plc_normal_gpio_analog_read(uint32_t pin, uint32_t* read);
 
 // The errors reported by xgpio functions.
 enum {
@@ -491,11 +491,11 @@ int plc_xgpio_analog_write_set_frequency(uint32_t pin, uint32_t freq_hz);
  * Parameters:
  *   pin (uint32_t) - The pin.
  * Returns:
- *   uint16_t - The reading, 0 on failure, or -I2C_PIN_WITHOUT_I2C_BUS
+ *   uint32_t - The reading, 0 on failure, or -I2C_PIN_WITHOUT_I2C_BUS
  *              (positive, as the return is unsigned) for any pin but a
  *              direct one when there is no I2C bus.
  */
-uint16_t plc_xgpio_analog_read(uint32_t pin);
+uint32_t plc_xgpio_analog_read(uint32_t pin);
 
 /**
  * plc_xgpio_digital_write_all
