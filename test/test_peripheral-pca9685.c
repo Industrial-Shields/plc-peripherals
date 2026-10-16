@@ -1325,8 +1325,7 @@ void test_pca9685_set_prescaler_retries_a_failed_prescale_write_without_sleeping
 	destroy_pca(pca);
 }
 
-void test_pca9685_set_prescaler_does_not_wake_a_chip_a_failed_sleep_left_awake(
-	void)
+void test_pca9685_set_prescaler_wakes_a_chip_a_failed_sleep_left_awake(void)
 {
 	pca9685_t* pca = create_pca();
 
@@ -1336,16 +1335,43 @@ void test_pca9685_set_prescaler_does_not_wake_a_chip_a_failed_sleep_left_awake(
 	TEST_ASSERT_EQUAL_INT(-1,
 			      pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
 
-	// MODE1 says it never went to sleep, so there is nothing to write
+	// It never went to sleep, but it is woken anyway, which does nothing
 	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
 	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	expect_wake_from_sleep(MODE1_AI);
 	TEST_ASSERT_EQUAL_INT(
-		1, pca9685_set_prescaler(TEST_I2C, pca, PRE_SCALE_POR, 0));
+		0, pca9685_set_prescaler(TEST_I2C, pca, PRE_SCALE_POR, 0));
 
 	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
 	TEST_ASSERT_EQUAL_INT(
 		1, pca9685_set_prescaler(TEST_I2C, pca, PRE_SCALE_POR, 0));
-	TEST_ASSERT_EQUAL_size_t(0, fake_delay.len);
+	TEST_ASSERT_EQUAL_size_t(1, fake_delay.len);
+	destroy_pca(pca);
+}
+
+void test_pca9685_set_prescaler_restarts_the_outputs_a_failed_restart_left_stopped(
+	void)
+{
+	pca9685_t* pca = create_pca();
+
+	expect_i2c_read8_8b(PRE_SCALE, PRE_SCALE_POR, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI | MODE1_SLEEP, 0);
+	expect_i2c_write8_8b(PRE_SCALE, 0x79, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI, 0);
+	expect_i2c_write8_8b(MODE1, MODE1_AI | MODE1_RESTART, -1);
+	TEST_ASSERT_EQUAL_INT(-1,
+			      pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+
+	// Awake, with the outputs waiting to be restarted (section 7.3.1.1)
+	expect_i2c_read8_8b(PRE_SCALE, 0x79, 0);
+	expect_i2c_read8_8b(MODE1, MODE1_AI | MODE1_RESTART, 0);
+	expect_wake_from_sleep(MODE1_AI);
+	TEST_ASSERT_EQUAL_INT(0, pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
+
+	// Restarted, so back to a single read
+	expect_i2c_read8_8b(PRE_SCALE, 0x79, 0);
+	TEST_ASSERT_EQUAL_INT(1, pca9685_set_prescaler(TEST_I2C, pca, 0x79, 0));
 	destroy_pca(pca);
 }
 

@@ -263,11 +263,10 @@ pca9685_sleep(const i2c_interface_t* i2c, plc_i2c_addr_t addr, uint8_t mode1)
  * outputs that were running when the chip went to sleep (section 7.3.1.1). We
  * set RESTART unconditionally; if it is 0, there is nothing to resume, and
  * writing it does nothing. EXTCLK is always written as 0, as in pca9685_sleep.
- *
- * This method assumes the PCA9685 is already sleeping.
  */
-static int
-pca9685_wake(const i2c_interface_t* i2c, plc_i2c_addr_t addr, uint8_t mode1)
+static int pca9685_wake_and_restart(const i2c_interface_t* i2c,
+				    plc_i2c_addr_t addr,
+				    uint8_t mode1)
 {
 	const uint8_t awake = mode1 & ~(MODE1_REG_SLEEP | MODE1_REG_RESTART |
 					MODE1_REG_EXTCLK);
@@ -301,7 +300,7 @@ static int pca9685_wake_if_needed(const i2c_interface_t* i2c,
 		}
 
 		if ((mode1_reg & MODE1_REG_SLEEP) &&
-		    pca9685_wake(i2c, pca->addr, mode1_reg) != 0) {
+		    pca9685_wake_and_restart(i2c, pca->addr, mode1_reg) != 0) {
 			return -1;
 		}
 
@@ -453,7 +452,7 @@ int pca9685_static_init(const i2c_interface_t* i2c,
 	if (mode1_reg & MODE1_REG_SLEEP) {
 		// Disable SLEEP in MODE1 reg and wake it up
 		mode1_reg &= ~MODE1_REG_SLEEP;
-		if (pca9685_wake(i2c, addr, mode1_reg) != 0) {
+		if (pca9685_wake_and_restart(i2c, addr, mode1_reg) != 0) {
 			return -1;
 		}
 	} else if (i2c_write8_8b(i2c, addr, MODE1_REG, mode1_reg) != 0) {
@@ -631,14 +630,21 @@ int pca9685_set_prescaler(const i2c_interface_t* i2c,
 			result = -1;
 			goto set_prescaler_cleanup;
 		}
-	} else if (!(mode1_reg & MODE1_REG_SLEEP)) {
-		// The call that failed never got the chip to sleep
-		PCA(pca)->needs_wake = false;
-		result = 1;
-		goto set_prescaler_cleanup;
 	}
 
-	if (pca9685_wake(i2c, PCA(pca)->addr, mode1_reg) != 0) {
+	/*
+	 * Unconditionally wake it up, even if the prescaler register has the
+	 * correct value.
+	 *
+	 * It could happen that the new prescaler register was written and the
+	 * PCA9685 was awakened, but something else failed after awakening it.
+	 * In that specific case, the outputs stay off until a new output is
+	 * written, or a set_prescaler call succeeds.
+	 *
+	 * We cannot return early if the PCA9685 was already awake, because the
+	 * outputs could be off.
+	 */
+	if (pca9685_wake_and_restart(i2c, PCA(pca)->addr, mode1_reg) != 0) {
 		result = -1;
 		goto set_prescaler_cleanup;
 	}
