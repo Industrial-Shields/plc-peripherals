@@ -283,9 +283,10 @@ static int pca9685_wake_and_restart(const i2c_interface_t* i2c,
 }
 
 /*
- * Wake the chip if a failed pca9685_set_prescaler may have left it asleep,
- * which stops every output. Waking it before touching the PWM registers keeps
- * the RESTART that resumes the outputs from being cleared by the write.
+ * Wake and restart the chip if a failed call may have left its outputs stopped
+ * (asleep, or awake but waiting to be restarted). It does it even if MODE1
+ * reads awake, for that second case. Doing it before touching the PWM registers
+ * keeps the RESTART that resumes the outputs from being cleared by the write.
  *
  * The caller must hold the lock before calling it (if protected).
  */
@@ -299,8 +300,11 @@ static int pca9685_wake_if_needed(const i2c_interface_t* i2c,
 			return -1;
 		}
 
-		if ((mode1_reg & MODE1_REG_SLEEP) &&
-		    pca9685_wake_and_restart(i2c, pca->addr, mode1_reg) != 0) {
+		/*
+		 * Unconditionally wake it up, even if it is already awake, so
+		 * the outputs are always restarted.
+		 */
+		if (pca9685_wake_and_restart(i2c, pca->addr, mode1_reg) != 0) {
 			return -1;
 		}
 
@@ -441,21 +445,16 @@ int pca9685_static_init(const i2c_interface_t* i2c,
 	/*
 	 * Sequence:
 	 *   - Write MODE2 first, so outputs restarted by a wake already use it.
-	 *   - If asleep, wake the chip.
-	 *   - Otherwise, write MODE1 (waking the chip already writes MODE1).
+	 *   - Wake the chip and restart its outputs, which writes MODE1. Do it
+	 *     even if it is already awake: whatever used it before may have
+	 *     left it awake with its outputs waiting to be restarted.
 	 */
 
 	if (i2c_write8_8b(i2c, addr, MODE2_REG, mode2_reg) != 0) {
 		return -1;
 	}
 
-	if (mode1_reg & MODE1_REG_SLEEP) {
-		// Disable SLEEP in MODE1 reg and wake it up
-		mode1_reg &= ~MODE1_REG_SLEEP;
-		if (pca9685_wake_and_restart(i2c, addr, mode1_reg) != 0) {
-			return -1;
-		}
-	} else if (i2c_write8_8b(i2c, addr, MODE1_REG, mode1_reg) != 0) {
+	if (pca9685_wake_and_restart(i2c, addr, mode1_reg) != 0) {
 		return -1;
 	}
 
