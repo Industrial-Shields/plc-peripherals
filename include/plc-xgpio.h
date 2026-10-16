@@ -62,7 +62,7 @@ extern "C" {
 /*
  * A pin is 32 bits. The MSB is its type, as peripheral_type_t. For the
  * peripherals, the 2nd byte is the I2C address and the 0th byte the GPIO's
- * index in the peripheral. The 1st byte is 0x00.
+ * index in the peripheral. The 1st byte can freely be used by the peripheral.
  */
 typedef enum {
 	PLC_DIRECT = 0,
@@ -91,8 +91,8 @@ typedef struct {
 } plc_xgpio_pca9685_t;
 
 /*
- * TODO: The LTC2309 inputs are always read single-ended and unipolar, as
- * v2.0.0 did, so COM must be tied to GND.
+ * TODO: The LTC2309 inputs are always read unipolar. The single-ended ones, as
+ * v2.0.0 read them, need COM tied to GND.
  */
 typedef struct {
 	ltc2309_t handle;
@@ -144,10 +144,16 @@ typedef struct {
 		      ((index) & 0xFF00) >> 8,    \
 		      (index))
 
+// Macros to distinguish the input type of an LTC2309
+// clang-format off
+#define PLC_XGPIO_LTC2309_SINGLE_ENDED 0b00
+#define PLC_XGPIO_LTC2309_DIFFERENTIAL 0b01
+// clang-format on
+
 /*
  * The adapted peripherals until now use the 2nd byte as I2C address,
  * and the 0th byte as the GPIO's index of the peripheral. The 1st
- * byte is left as 0x00
+ * byte is left as 0x00 if not used by the peripheral.
  */
 #define MAKE_PIN_PCA9685(addr, index) \
 	_MAKE_PIN_PLC(PLC_PCA9685, (addr), 0x00, (index))
@@ -156,7 +162,11 @@ typedef struct {
 #define MAKE_PIN_MCP23017(addr, index) \
 	_MAKE_PIN_PLC(PLC_MCP23017, (addr), 0x00, (index))
 #define MAKE_PIN_LTC2309(addr, index) \
-	_MAKE_PIN_PLC(PLC_LTC2309, (addr), 0x00, (index))
+	_MAKE_PIN_PLC(                \
+		PLC_LTC2309, (addr), PLC_XGPIO_LTC2309_SINGLE_ENDED, (index))
+#define MAKE_PIN_LTC2309_DIFF(addr, pair) \
+	_MAKE_PIN_PLC(                    \
+		PLC_LTC2309, (addr), PLC_XGPIO_LTC2309_DIFFERENTIAL, (pair))
 #define MAKE_PIN_ADS1015(addr, index) \
 	_MAKE_PIN_PLC(PLC_ADS1015, (addr), 0x00, (index))
 
@@ -487,8 +497,8 @@ int plc_xgpio_analog_write_set_frequency(uint32_t pin, uint32_t freq_hz);
  *
  * Read the analog value of a GPIO.
  *
- * Supported pins: PLC_DIRECT, PLC_LTC2309 (single-ended, 0 to 4095) and
- * PLC_ADS1015 (against GND, 0 to 2047).
+ * Supported pins: PLC_DIRECT, PLC_LTC2309 (single-ended or differential,
+ * unipolar, 0 to 4095) and PLC_ADS1015 (against GND, 0 to 2047).
  *
  * Parameters:
  *   pin (uint32_t) - The pin.

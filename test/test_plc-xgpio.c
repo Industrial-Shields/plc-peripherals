@@ -183,6 +183,14 @@ void test_make_pin_encodes_type_addr_and_index(void)
 				MAKE_PIN_ADS1015(0x48, ADS101X_P3_GND));
 }
 
+void test_make_pin_ltc2309_diff_sets_the_differential_byte(void)
+{
+	TEST_ASSERT_EQUAL_HEX32(0x04080103,
+				MAKE_PIN_LTC2309_DIFF(0x08, LTC2309_P6_N7));
+	// A plain LTC2309 pin is single-ended
+	TEST_ASSERT_EQUAL_HEX32(0x04080003, MAKE_PIN_LTC2309(0x08, 3));
+}
+
 void test_make_pin_direct_keeps_a_24_bit_index(void)
 {
 	TEST_ASSERT_EQUAL_HEX32(0x00000005, MAKE_PIN_DIRECT(5));
@@ -311,6 +319,29 @@ void test_pin_mode_mcp230xx_searches_the_array_of_its_type(void)
 		I2C_ADDR_NOT_FOUND,
 		plc_xgpio_pin_mode(MAKE_PIN_MCP23017(MCP23008_ADDR, 0),
 				   PLC_XGPIO_OUTPUT));
+}
+
+void test_pin_mode_ltc2309_differential_pins_are_inputs(void)
+{
+	TEST_ASSERT_EQUAL_INT(
+		1,
+		plc_xgpio_pin_mode(MAKE_PIN_LTC2309_DIFF(LTC2309_ADDR,
+							 LTC2309_P7_N6),
+				   PLC_XGPIO_INPUT));
+	TEST_ASSERT_EQUAL_INT(
+		PIN_NOT_SUPPORTED,
+		plc_xgpio_pin_mode(MAKE_PIN_LTC2309_DIFF(LTC2309_ADDR,
+							 LTC2309_P0_N1),
+				   PLC_XGPIO_OUTPUT));
+}
+
+void test_pin_mode_ltc2309_rejects_an_unknown_read_byte(void)
+{
+	TEST_ASSERT_EQUAL_INT(
+		PIN_NOT_SUPPORTED,
+		plc_xgpio_pin_mode(
+			_MAKE_PIN_PLC(PLC_LTC2309, LTC2309_ADDR, 0x02, 0),
+			PLC_XGPIO_INPUT));
 }
 
 void test_pin_mode_fixed_direction_pins(void)
@@ -652,6 +683,31 @@ void test_digital_read_ltc2309_threshold_is_above_1636(void)
 		plc_xgpio_digital_read(MAKE_PIN_LTC2309(LTC2309_ADDR, 0)));
 }
 
+static void
+expect_ltc2309_diff_read(LTC2309_DIFF_INPUT pair, uint16_t* value, int ret)
+{
+	ltc2309_unsigned_differential_read_ExpectAndReturn(
+		TEST_I2C, &ltc2309[0].handle, pair, NULL, TEST_TIMEOUT_MS, ret);
+	ltc2309_unsigned_differential_read_IgnoreArg_read_value();
+	ltc2309_unsigned_differential_read_ReturnThruPtr_read_value(value);
+}
+
+void test_digital_read_ltc2309_differential_threshold_is_above_1636(void)
+{
+	uint16_t at = 1636;
+	uint16_t above = 1637;
+
+	expect_ltc2309_diff_read(LTC2309_P2_N3, &at, 0);
+	TEST_ASSERT_EQUAL_INT(PLC_XGPIO_LOW,
+			      plc_xgpio_digital_read(MAKE_PIN_LTC2309_DIFF(
+				      LTC2309_ADDR, LTC2309_P2_N3)));
+
+	expect_ltc2309_diff_read(LTC2309_P2_N3, &above, 0);
+	TEST_ASSERT_EQUAL_INT(PLC_XGPIO_HIGH,
+			      plc_xgpio_digital_read(MAKE_PIN_LTC2309_DIFF(
+				      LTC2309_ADDR, LTC2309_P2_N3)));
+}
+
 void test_digital_read_ads1015_threshold_is_above_818(void)
 {
 	uint16_t at = 818;
@@ -961,6 +1017,48 @@ void test_analog_read_ltc2309_maps_every_index_to_its_channel(void)
 					 plc_xgpio_analog_read(MAKE_PIN_LTC2309(
 						 LTC2309_ADDR, i)));
 	}
+}
+
+void test_analog_read_ltc2309_reads_every_differential_pair(void)
+{
+	uint16_t value;
+	uint8_t i;
+
+	for (i = 0; i < LTC2309_NUM_INPUTS; i++) {
+		value = (uint16_t)(300 + i);
+		expect_ltc2309_diff_read((LTC2309_DIFF_INPUT)i, &value, 0);
+		TEST_ASSERT_EQUAL_UINT32(
+			300 + i,
+			plc_xgpio_analog_read(
+				MAKE_PIN_LTC2309_DIFF(LTC2309_ADDR, i)));
+	}
+}
+
+void test_analog_read_ltc2309_differential_failures_read_0(void)
+{
+	uint16_t value = 1234;
+
+	expect_ltc2309_diff_read(LTC2309_P0_N1, &value, -1);
+	TEST_ASSERT_EQUAL_UINT32(0,
+				 plc_xgpio_analog_read(MAKE_PIN_LTC2309_DIFF(
+					 LTC2309_ADDR, LTC2309_P0_N1)));
+
+	/*
+	 * No driver call for a pair out of range, a missing chip, or an
+	 * unknown read byte
+	 */
+	TEST_ASSERT_EQUAL_UINT32(
+		0,
+		plc_xgpio_analog_read(MAKE_PIN_LTC2309_DIFF(LTC2309_ADDR, 8)));
+	TEST_ASSERT_EQUAL_UINT32(0,
+				 plc_xgpio_analog_read(MAKE_PIN_LTC2309_DIFF(
+					 MISSING_ADDR, LTC2309_P0_N1)));
+	TEST_ASSERT_EQUAL_UINT32(0,
+				 plc_xgpio_analog_read(_MAKE_PIN_PLC(
+					 PLC_LTC2309, LTC2309_ADDR, 0x02, 0)));
+	TEST_ASSERT_EQUAL_INT(PLC_XGPIO_LOW,
+			      plc_xgpio_digital_read(_MAKE_PIN_PLC(
+				      PLC_LTC2309, LTC2309_ADDR, 0x02, 0)));
 }
 
 void test_analog_read_ads1015_reads_each_input_against_gnd(void)

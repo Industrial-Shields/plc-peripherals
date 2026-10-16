@@ -27,6 +27,9 @@
 #define PIN_PERIPHERAL_ADDR(pin) (((pin) >> 16) & 0xFF)
 #define PIN_PERIPHERAL_INDEX(pin) ((pin) & 0xFF)
 #define PIN_DIRECT_INDEX(pin) ((pin) & 0xFFFFFF)
+
+// How a PLC_LTC2309 pin's input is read, PLC_XGPIO_LTC2309_*
+#define PIN_LTC2309_READ(pin) (((pin) >> 8) & 0xFF)
 // The number of GPIOs of the MCP230XX a PLC_MCP23008 or PLC_MCP23017 pin is of
 #define PIN_MCP230XX_NUM_GPIOS(pin)                                      \
 	(PIN_PERIPHERAL_TYPE(pin) == PLC_MCP23008 ? MCP23008_NUM_GPIOS : \
@@ -132,6 +135,44 @@ static void* find_ads1015(uint8_t addr)
 }
 
 /*
+ * Read the input of a PLC_LTC2309 pin, either single-ended or the differential
+ * pair. Returns 0 if successful, otherwise -1.
+ */
+static int read_ltc2309(uint32_t pin, uint16_t* value)
+{
+	plc_xgpio_ltc2309_t* ltc;
+
+	const uint8_t index = PIN_PERIPHERAL_INDEX(pin);
+
+	// There are as many differential pairs as inputs
+	ltc = find_ltc2309(PIN_PERIPHERAL_ADDR(pin));
+	if (ltc == NULL || index >= LTC2309_NUM_INPUTS) {
+		return -1;
+	}
+
+	switch (PIN_LTC2309_READ(pin)) {
+	case PLC_XGPIO_LTC2309_SINGLE_ENDED:
+		return ltc2309_unsigned_single_ended_read(
+			I2C,
+			&ltc->handle,
+			LTC2309_CHANNELS[index],
+			value,
+			ltc->timeout_ms);
+
+	case PLC_XGPIO_LTC2309_DIFFERENTIAL:
+		return ltc2309_unsigned_differential_read(
+			I2C,
+			&ltc->handle,
+			(LTC2309_DIFF_INPUT)index,
+			value,
+			ltc->timeout_ms);
+
+	default:
+		return -1;
+	}
+}
+
+/*
  * plc_xgpio_pin_mode for a pin whose peripheral always has the same mode,
  * "fixed_mode". "find" looks up its entry in the arrays, and is only called
  * once the index and the mode are valid.
@@ -181,6 +222,10 @@ int plc_xgpio_pin_mode(uint32_t pin, uint8_t mode)
 				      PLC_XGPIO_OUTPUT,
 				      find_pca9685);
 	case PLC_LTC2309:
+		if (PIN_LTC2309_READ(pin) != PLC_XGPIO_LTC2309_SINGLE_ENDED &&
+		    PIN_LTC2309_READ(pin) != PLC_XGPIO_LTC2309_DIFFERENTIAL) {
+			return PIN_NOT_SUPPORTED;
+		}
 		return fixed_pin_mode(pin,
 				      LTC2309_NUM_INPUTS,
 				      mode,
@@ -305,7 +350,6 @@ int plc_xgpio_digital_write(uint32_t pin, uint8_t value)
 int plc_xgpio_digital_read(uint32_t pin)
 {
 	plc_xgpio_mcp230xx_t* mcp;
-	plc_xgpio_ltc2309_t* ltc;
 	plc_xgpio_ads101x_t* ads;
 	uint16_t analog;
 	uint8_t level;
@@ -342,13 +386,7 @@ int plc_xgpio_digital_read(uint32_t pin)
 		return level ? 1 : 0;
 
 	case PLC_LTC2309:
-		ltc = find_ltc2309(PIN_PERIPHERAL_ADDR(pin));
-		if (ltc == NULL || index >= LTC2309_NUM_INPUTS ||
-		    ltc2309_unsigned_single_ended_read(I2C,
-						       &ltc->handle,
-						       LTC2309_CHANNELS[index],
-						       &analog,
-						       ltc->timeout_ms) != 0) {
+		if (read_ltc2309(pin, &analog) != 0) {
 			return 0;
 		}
 		return analog > LTC2309_HIGH_THRESHOLD ? 1 : 0;
@@ -475,7 +513,6 @@ int plc_xgpio_analog_write_set_frequency(uint32_t pin, uint32_t freq_hz)
 
 uint32_t plc_xgpio_analog_read(uint32_t pin)
 {
-	plc_xgpio_ltc2309_t* ltc;
 	plc_xgpio_ads101x_t* ads;
 	uint32_t value_32;
 	uint16_t value_16;
@@ -500,13 +537,7 @@ uint32_t plc_xgpio_analog_read(uint32_t pin)
 		return value_32;
 
 	case PLC_LTC2309:
-		ltc = find_ltc2309(PIN_PERIPHERAL_ADDR(pin));
-		if (ltc == NULL || index >= LTC2309_NUM_INPUTS ||
-		    ltc2309_unsigned_single_ended_read(I2C,
-						       &ltc->handle,
-						       LTC2309_CHANNELS[index],
-						       &value_16,
-						       ltc->timeout_ms) != 0) {
+		if (read_ltc2309(pin, &value_16) != 0) {
 			return 0;
 		}
 		return (uint32_t)value_16;
