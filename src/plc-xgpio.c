@@ -34,6 +34,8 @@
 
 #define FIND_IN_ARRAY(arr, num)                      \
 	do {                                         \
+		assert((num) == 0 || (arr) != NULL); \
+                                                     \
 		for (size_t i = 0; i < (num); i++) { \
 			if ((arr)[i].addr == addr) { \
 				return &(arr[i]);    \
@@ -73,6 +75,8 @@ static int fixed_pin_mode(plc_xgpio_pin_t pin,
 			  uint8_t fixed_mode,
 			  bool found)
 {
+	assert(fixed_mode == PLC_XGPIO_INPUT || fixed_mode == PLC_XGPIO_OUTPUT);
+
 	if (!found) {
 		return I2C_ADDR_NOT_FOUND;
 	}
@@ -268,6 +272,7 @@ int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_SET_PIN_MODE_FAIL;
 		ret = plc_normal_gpio_set_pin_mode(PIN_DIRECT_INDEX(pin), mode);
+		assert(ret >= -1 && ret <= 1);
 
 		if (ret < 0) {
 			code = direct_pin_errors(code);
@@ -349,6 +354,7 @@ int plc_xgpio_digital_write(plc_xgpio_pin_t pin, uint8_t value)
 		ret = plc_normal_gpio_digital_write(PIN_DIRECT_INDEX(pin),
 						    value ? PLC_XGPIO_HIGH :
 							    PLC_XGPIO_LOW);
+		assert(ret >= -1 && ret <= 1);
 
 		if (ret < 0) {
 			code = direct_pin_errors(code);
@@ -431,6 +437,9 @@ int plc_xgpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read)
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_DIGITAL_READ_FAIL;
 		ret = plc_normal_gpio_digital_read(PIN_DIRECT_INDEX(pin), read);
+		assert(ret == 0 || ret == -1);
+		assert(ret != 0 || *read == PLC_XGPIO_HIGH ||
+		       *read == PLC_XGPIO_LOW);
 
 		if (ret < 0) {
 			code = direct_pin_errors(code);
@@ -523,6 +532,7 @@ int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint16_t value)
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_PWM_WRITE_FAIL;
 		ret = plc_normal_gpio_pwm_write(PIN_DIRECT_INDEX(pin), value);
+		assert(ret >= -1 && ret <= 1);
 
 		if (ret < 0) {
 			code = errno == ERANGE ? DUTY_CYCLE_OUT_OF_RANGE :
@@ -585,6 +595,7 @@ int plc_xgpio_set_pwm_frequency(plc_xgpio_pin_t pin, uint32_t freq_hz)
 		code = NORMAL_GPIO_SET_PWM_FREQUENCY_FAIL;
 		ret = plc_normal_gpio_set_pwm_frequency(PIN_DIRECT_INDEX(pin),
 							freq_hz);
+		assert(ret >= -1 && ret <= 1);
 
 		if (ret < 0) {
 			code = errno == ERANGE ? FREQ_OUT_OF_RANGE :
@@ -660,6 +671,7 @@ int plc_xgpio_analog_read(plc_xgpio_pin_t pin, uint16_t* read)
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_ANALOG_READ_FAIL;
 		ret = plc_normal_gpio_analog_read(PIN_DIRECT_INDEX(pin), read);
+		assert(ret == 0 || ret == -1);
 
 		if (ret < 0) {
 			code = direct_pin_errors(code);
