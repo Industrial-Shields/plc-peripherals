@@ -90,6 +90,16 @@ static void expect_mcp230xx_get_type(size_t i)
 	mcp230xx_get_type_ReturnThruPtr_type(&mcp230xx_types[i]);
 }
 
+static ADS101X_TYPE ads101x_type = ADS101X_015;
+
+static void expect_ads101x_get_type(void)
+{
+	ads101x_get_type_ExpectAndReturn(
+		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
+	ads101x_get_type_IgnoreArg_type();
+	ads101x_get_type_ReturnThruPtr_type(&ads101x_type);
+}
+
 void setUp(void)
 {
 	memset(&peripherals, 0, sizeof(peripherals));
@@ -381,6 +391,7 @@ void test_set_pin_mode_fixed_direction_pins(void)
 		plc_xgpio_set_pin_mode(MAKE_PIN_LTC2309(LTC2309_ADDR,
 							LTC2309_CH7),
 				       PLC_XGPIO_INPUT));
+	expect_ads101x_get_type();
 	TEST_ASSERT_EQUAL_INT(
 		1,
 		plc_xgpio_set_pin_mode(MAKE_PIN_ADS101X(ADS101X_ADDR,
@@ -399,11 +410,28 @@ void test_set_pin_mode_fixed_direction_pins_reject_the_other_mode(void)
 		plc_xgpio_set_pin_mode(MAKE_PIN_LTC2309(LTC2309_ADDR,
 							LTC2309_CH0),
 				       PLC_XGPIO_OUTPUT));
+	expect_ads101x_get_type();
 	TEST_ASSERT_EQUAL_INT(
 		PIN_NOT_SUPPORTED,
 		plc_xgpio_set_pin_mode(MAKE_PIN_ADS101X(ADS101X_ADDR,
 							ADS101X_P0_GND),
 				       PLC_XGPIO_OUTPUT));
+}
+
+void test_set_pin_mode_ads101x_unknown_type_is_unsupported(void)
+{
+	// A type added to the driver after xgpio was built
+	ADS101X_TYPE unknown = (ADS101X_TYPE)(ADS101X_015 + 1);
+
+	ads101x_get_type_ExpectAndReturn(
+		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
+	ads101x_get_type_IgnoreArg_type();
+	ads101x_get_type_ReturnThruPtr_type(&unknown);
+	TEST_ASSERT_EQUAL_INT(
+		UNSUPPORTED_PERIPHERAL_TYPE,
+		plc_xgpio_set_pin_mode(MAKE_PIN_ADS101X(ADS101X_ADDR,
+							ADS101X_P0_GND),
+				       PLC_XGPIO_INPUT));
 }
 
 void test_set_pin_mode_ltc2309_differential_is_an_input(void)
@@ -440,6 +468,7 @@ void test_set_pin_mode_fixed_direction_pins_index_out_of_range(void)
 		plc_xgpio_set_pin_mode(MAKE_PIN_LTC2309(LTC2309_ADDR,
 							LTC2309_NUM_INPUTS),
 				       PLC_XGPIO_INPUT));
+	expect_ads101x_get_type();
 	TEST_ASSERT_EQUAL_INT(
 		INDEX_OUT_OF_RANGE,
 		plc_xgpio_set_pin_mode(MAKE_PIN_ADS101X(ADS101X_ADDR,
@@ -878,16 +907,6 @@ static void expect_ltc2309_read(LTC2309_INPUT channel, uint16_t* value, int ret)
 							   ret);
 	ltc2309_unsigned_single_ended_read_IgnoreArg_read_value();
 	ltc2309_unsigned_single_ended_read_ReturnThruPtr_read_value(value);
-}
-
-static ADS101X_TYPE ads101x_type = ADS101X_015;
-
-static void expect_ads101x_get_type(void)
-{
-	ads101x_get_type_ExpectAndReturn(
-		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
-	ads101x_get_type_IgnoreArg_type();
-	ads101x_get_type_ReturnThruPtr_type(&ads101x_type);
 }
 
 // What ads101x_get_continuous_mode gives for the ADS101X in the array

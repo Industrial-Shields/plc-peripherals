@@ -343,57 +343,58 @@ enum {
 	// plc_xgpio_set_pin_mode
 	NORMAL_GPIO_SET_PIN_MODE_FAIL              = -1,
 	PERIPHERAL_MCP230XX_SET_PIN_MODE_FAIL      = -2,
+	PERIPHERAL_ADS101X_SET_PIN_MODE_FAIL       = -3,
 
 	// plc_xgpio_digital_write
-	NORMAL_GPIO_DIGITAL_WRITE_FAIL             = -3,
-	PERIPHERAL_PCA9685_DIGITAL_WRITE_FAIL      = -4,
-	PERIPHERAL_MCP230XX_DIGITAL_WRITE_FAIL     = -5,
+	NORMAL_GPIO_DIGITAL_WRITE_FAIL             = -4,
+	PERIPHERAL_PCA9685_DIGITAL_WRITE_FAIL      = -5,
+	PERIPHERAL_MCP230XX_DIGITAL_WRITE_FAIL     = -6,
 
 	// plc_xgpio_digital_read
-	NORMAL_GPIO_DIGITAL_READ_FAIL              = -6,
-	PERIPHERAL_PCA9685_DIGITAL_READ_FAIL       = -7,
-	PERIPHERAL_MCP230XX_DIGITAL_READ_FAIL      = -8,
-	PERIPHERAL_LTC2309_DIGITAL_READ_FAIL       = -9,
-	PERIPHERAL_ADS101X_DIGITAL_READ_FAIL       = -10,
+	NORMAL_GPIO_DIGITAL_READ_FAIL              = -7,
+	PERIPHERAL_PCA9685_DIGITAL_READ_FAIL       = -8,
+	PERIPHERAL_MCP230XX_DIGITAL_READ_FAIL      = -9,
+	PERIPHERAL_LTC2309_DIGITAL_READ_FAIL       = -10,
+	PERIPHERAL_ADS101X_DIGITAL_READ_FAIL       = -11,
 
 	// plc_xgpio_pwm_write
-	NORMAL_GPIO_PWM_WRITE_FAIL                 = -11,
-	PERIPHERAL_PCA9685_PWM_WRITE_FAIL          = -12,
+	NORMAL_GPIO_PWM_WRITE_FAIL                 = -12,
+	PERIPHERAL_PCA9685_PWM_WRITE_FAIL          = -13,
 
 	// plc_xgpio_set_pwm_frequency
-	NORMAL_GPIO_SET_PWM_FREQUENCY_FAIL         = -13,
-	PERIPHERAL_PCA9685_SET_PWM_FREQUENCY_FAIL  = -14,
+	NORMAL_GPIO_SET_PWM_FREQUENCY_FAIL         = -14,
+	PERIPHERAL_PCA9685_SET_PWM_FREQUENCY_FAIL  = -15,
 
 	// plc_xgpio_analog_read
-	NORMAL_GPIO_ANALOG_READ_FAIL               = -15,
-	PERIPHERAL_LTC2309_ANALOG_READ_FAIL        = -16,
-	PERIPHERAL_ADS101X_ANALOG_READ_FAIL        = -17,
+	NORMAL_GPIO_ANALOG_READ_FAIL               = -16,
+	PERIPHERAL_LTC2309_ANALOG_READ_FAIL        = -17,
+	PERIPHERAL_ADS101X_ANALOG_READ_FAIL        = -18,
 
 	// plc_xgpio_digital_write_all
-	PERIPHERAL_PCA9685_DIGITAL_WRITE_ALL_FAIL  = -18,
-	PERIPHERAL_MCP230XX_DIGITAL_WRITE_ALL_FAIL = -19,
+	PERIPHERAL_PCA9685_DIGITAL_WRITE_ALL_FAIL  = -19,
+	PERIPHERAL_MCP230XX_DIGITAL_WRITE_ALL_FAIL = -20,
 
 	// plc_xgpio_digital_read_all
-	PERIPHERAL_MCP230XX_DIGITAL_READ_ALL_FAIL  = -20,
+	PERIPHERAL_MCP230XX_DIGITAL_READ_ALL_FAIL  = -21,
 
 	// plc_xgpio_pwm_write_all
-	PERIPHERAL_PCA9685_PWM_WRITE_ALL_FAIL      = -21,
+	PERIPHERAL_PCA9685_PWM_WRITE_ALL_FAIL      = -22,
 
 	// Others
-	I2C_PIN_WITHOUT_I2C_BUS                    = -22,
-	I2C_ADDR_WITHOUT_I2C_BUS                   = -23,
-	PIN_NOT_SUPPORTED                          = -24,
-	I2C_ADDR_NOT_FOUND                         = -25,
-	NULL_ARGUMENT                              = -26,
-	FREQ_OUT_OF_RANGE                          = -27,
-	DUTY_CYCLE_OUT_OF_RANGE                    = -28,
-	UNKNOWN_PIN_TYPE                           = -29,
-	INDEX_OUT_OF_RANGE                         = -30,
-	I2C_PIN_WITHOUT_PERIPHERALS                = -31,
-	UNSUPPORTED_PERIPHERAL_TYPE                = -32,
-	I2C_ADDR_WITHOUT_PERIPHERALS               = -33,
-	VALUES_OUT_OF_RANGE                        = -34,
-	UNKNOWN_MODE                               = -35,
+	I2C_PIN_WITHOUT_I2C_BUS                    = -23,
+	I2C_ADDR_WITHOUT_I2C_BUS                   = -24,
+	PIN_NOT_SUPPORTED                          = -25,
+	I2C_ADDR_NOT_FOUND                         = -26,
+	NULL_ARGUMENT                              = -27,
+	FREQ_OUT_OF_RANGE                          = -28,
+	DUTY_CYCLE_OUT_OF_RANGE                    = -29,
+	UNKNOWN_PIN_TYPE                           = -30,
+	INDEX_OUT_OF_RANGE                         = -31,
+	I2C_PIN_WITHOUT_PERIPHERALS                = -32,
+	UNSUPPORTED_PERIPHERAL_TYPE                = -33,
+	I2C_ADDR_WITHOUT_PERIPHERALS               = -34,
+	VALUES_OUT_OF_RANGE                        = -35,
+	UNKNOWN_MODE                               = -36,
 	// clang-format on
 };
 
@@ -411,6 +412,7 @@ enum {
  *         - NORMAL_GPIO_SET_PIN_MODE_FAIL         : The direct GPIO call
  *                                                   failed.
  *         - PERIPHERAL_MCP230XX_SET_PIN_MODE_FAIL : The MCP230XX call failed.
+ *         - PERIPHERAL_ADS101X_SET_PIN_MODE_FAIL  : The ADS101X call failed.
  *         - I2C_ADDR_NOT_FOUND                    : The peripheral isn't in the
  *                                                   arrays.
  *         - INDEX_OUT_OF_RANGE                    : The peripheral doesn't have
@@ -423,8 +425,8 @@ enum {
  *                                                   there is no I2C bus.
  *         - PIN_NOT_SUPPORTED                     : The mode is invalid, or the
  *                                                   pin can't have it.
- *         - UNSUPPORTED_PERIPHERAL_TYPE           : The MCP230XX is a type
- *                                                   xgpio doesn't know.
+ *         - UNSUPPORTED_PERIPHERAL_TYPE           : The MCP230XX or ADS101X is
+ *                                                   a type xgpio doesn't know.
  *         - UNKNOWN_MODE                          : The pin mode is unknown.
  *         - UNKNOWN_PIN_TYPE                      : The pin type is unknown.
  */

@@ -105,6 +105,25 @@ static int write_output_without_bus(const i2c_interface_t* i2c,
 	return 0;
 }
 
+// ads101x_get_type as the driver behaves with a NULL i2c
+static int ads_get_type_without_bus(const i2c_interface_t* i2c,
+				    ads101x_t* ads,
+				    ADS101X_TYPE* type,
+				    uint32_t timeout_ms,
+				    int cmock_num_calls)
+{
+	(void)ads;
+	(void)timeout_ms;
+	(void)cmock_num_calls;
+
+	if (i2c == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+	*type = ADS101X_015;
+	return 0;
+}
+
 // ads101x_get_continuous_mode as the driver behaves with a NULL i2c
 static int get_continuous_mode_without_bus(const i2c_interface_t* i2c,
 					   ads101x_t* ads,
@@ -273,6 +292,7 @@ void tearDown(void)
 void test_set_pin_mode_without_bus_only_handles_direct_pins(void)
 {
 	mcp230xx_set_input_Stub(set_input_without_bus);
+	ads101x_get_type_Stub(ads_get_type_without_bus);
 
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5), PLC_XGPIO_INPUT));

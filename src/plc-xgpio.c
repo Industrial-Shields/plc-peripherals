@@ -293,6 +293,8 @@ static int read_ads101x(plc_xgpio_pin_t pin, uint16_t* read, int code)
 int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 {
 	plc_xgpio_mcp230xx_t* mcp;
+	plc_xgpio_ads101x_t* ads;
+	ADS101X_TYPE ads_type;
 	int code;
 	int ret;
 
@@ -363,12 +365,26 @@ int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 					      NULL);
 
 	case PLC_ADS101X:
+		ads = find_ads101x(PIN_PERIPHERAL_ADDR(pin));
+		if (ads != NULL) {
+			code = PERIPHERAL_ADS101X_SET_PIN_MODE_FAIL;
+			ret = ads101x_get_type(
+				I2C, &ads->handle, &ads_type, ads->timeout_ms);
+			if (ret < 0) {
+				return errno == EFAULT ?
+					       I2C_PIN_WITHOUT_I2C_BUS :
+					       code;
+			}
+			if (ads_type != ADS101X_015) {
+				return UNSUPPORTED_PERIPHERAL_TYPE;
+			}
+		}
+
 		return fixed_pin_mode(pin,
 				      ADS1015_NUM_INPUTS,
 				      mode,
 				      PLC_XGPIO_INPUT,
-				      find_ads101x(PIN_PERIPHERAL_ADDR(pin)) !=
-					      NULL);
+				      ads != NULL);
 
 	default:
 		return UNKNOWN_PIN_TYPE;
