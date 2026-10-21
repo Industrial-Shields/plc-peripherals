@@ -554,6 +554,21 @@ int ads101x_get_type(ads101x_t* ads, ADS101X_TYPE* type, uint32_t timeout_ms)
 	return 0;
 }
 
+int ads101x_get_continuous_mode(ads101x_t* ads,
+				bool* continuous_mode,
+				uint32_t timeout_ms)
+{
+	(void)timeout_ms;
+
+	if (ads == NULL || continuous_mode == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	*continuous_mode = ADS101X_IS_CONTINUOUS_MODE(ads);
+	return 0;
+}
+
 int ads101x_single_read(const i2c_interface_t* i2c,
 			ads101x_t* ads,
 			ADS101X_INPUT index,

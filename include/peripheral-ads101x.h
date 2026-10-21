@@ -374,6 +374,31 @@ int ads101x_unprotect(ads101x_t* ads);
 int ads101x_get_type(ads101x_t* ads, ADS101X_TYPE* type, uint32_t timeout_ms);
 
 /**
+ * ads101x_get_continuous_mode
+ *
+ * Get whether the ADS101X handle was initialized in continuous conversion
+ * mode, so it is read with ads101x_continuous_read, or in single-shot mode, so
+ * it is read with ads101x_single_read.
+ *
+ * Parameters:
+ *   ads (ads101x_t*)         - The ADS101X to get the mode from.
+ *   continuous_mode (bool*)  - Pointer to store true in for continuous mode,
+ *                              false for single-shot mode.
+ *   timeout_ms (uint32_t)    - Ignored. The mode never changes, so no lock is
+ *                              taken; it's there to match the other getters.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT : Passed ads101x_t or continuous_mode is NULL.
+ */
+int ads101x_get_continuous_mode(ads101x_t* ads,
+				bool* continuous_mode,
+				uint32_t timeout_ms);
+
+/**
  * ads101x_single_read
  *
  * Trigger a single-shot conversion of an ADS101X channel, and retrieve its
