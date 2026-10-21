@@ -66,6 +66,10 @@
 #define PLC_XGPIO_PCA9685_DEFAULT_HIGH_THRESHOLD 0
 #define PLC_XGPIO_LTC2309_DEFAULT_HIGH_THRESHOLD 1636
 #define PLC_XGPIO_ADS101X_DEFAULT_HIGH_THRESHOLD 818
+
+// The modes of an LTC2309 pin, in its 1st byte
+#define PLC_XGPIO_LTC2309_SINGLE_ENDED           0
+#define PLC_XGPIO_LTC2309_DIFFERENTIAL           1
 // clang-format on
 
 #ifdef __cplusplus
@@ -98,20 +102,12 @@ typedef struct {
 	uint8_t addr;
 } plc_xgpio_pca9685_t;
 
-/*
- * TODO: The LTC2309 inputs are always read single-ended and unipolar, as
- * v2.0.0 did, so COM must be tied to GND.
- */
 typedef struct {
 	ltc2309_t handle;
 	uint32_t timeout_ms;
 	uint8_t addr;
 } plc_xgpio_ltc2309_t;
 
-/*
- * TODO: The ADS101X handle must be initialized as v2.0.0 used it, in
- * single-shot mode.
- */
 typedef struct {
 	ads101x_t handle;
 	uint32_t timeout_ms;
@@ -165,8 +161,10 @@ extern const i2c_interface_t* plc_xgpio_i2c;
  * Direct pins can use up to 24 bits to address a GPIO.
  *
  * The adapted peripherals until now use the 2nd byte as the I2C address, and
- * the 0th byte as the GPIO's index of the peripheral. The 1st byte is left as
- * 0x00.
+ * the 0th byte as the GPIO's index of the peripheral. The 1st byte is the mode
+ * of the pin, 0x00 for every peripheral but the LTC2309:
+ *   - PLC_XGPIO_LTC2309_SINGLE_ENDED : The index is an LTC2309_INPUT.
+ *   - PLC_XGPIO_LTC2309_DIFFERENTIAL : The index is an LTC2309_DIFF_INPUT.
  */
 
 #define _MAKE_PIN_PLC(type, addr, index, pin) \
@@ -185,7 +183,11 @@ extern const i2c_interface_t* plc_xgpio_i2c;
 #define MAKE_PIN_MCP230XX(addr, index) \
 	_MAKE_PIN_PLC(PLC_MCP230XX, (addr), 0x00, (index))
 #define MAKE_PIN_LTC2309(addr, index) \
-	_MAKE_PIN_PLC(PLC_LTC2309, (addr), 0x00, (index))
+	_MAKE_PIN_PLC(                \
+		PLC_LTC2309, (addr), PLC_XGPIO_LTC2309_SINGLE_ENDED, (index))
+#define MAKE_PIN_LTC2309_DIFF(addr, index) \
+	_MAKE_PIN_PLC(                     \
+		PLC_LTC2309, (addr), PLC_XGPIO_LTC2309_DIFFERENTIAL, (index))
 #define MAKE_PIN_ADS101X(addr, index) \
 	_MAKE_PIN_PLC(PLC_ADS101X, (addr), 0x00, (index))
 
@@ -391,6 +393,7 @@ enum {
 	UNSUPPORTED_PERIPHERAL_TYPE                = -32,
 	I2C_ADDR_WITHOUT_PERIPHERALS               = -33,
 	VALUES_OUT_OF_RANGE                        = -34,
+	UNKNOWN_MODE                               = -35,
 	// clang-format on
 };
 
@@ -422,6 +425,7 @@ enum {
  *                                                   pin can't have it.
  *         - UNSUPPORTED_PERIPHERAL_TYPE           : The MCP230XX is a type
  *                                                   xgpio doesn't know.
+ *         - UNKNOWN_MODE                          : The pin mode is unknown.
  *         - UNKNOWN_PIN_TYPE                      : The pin type is unknown.
  */
 int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode);
@@ -468,7 +472,11 @@ int plc_xgpio_digital_write(plc_xgpio_pin_t pin, uint8_t value);
  * Read the level of a GPIO.
  *
  * Supported pins: PLC_DIRECT, PLC_PCA9685 (high above 0), PLC_MCP230XX,
- * PLC_LTC2309 (high above 1636) and PLC_ADS101X (high above 818).
+ * PLC_LTC2309 (single-ended or differential, unipolar, high above 1636) and
+ * PLC_ADS101X (single-shot or continuous, high above 818).
+ *
+ * WARNING: An ADS101X differential pair whose positive input is under the
+ * negative one will fail, because the reading is unsigned.
  *
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The pin.
@@ -495,6 +503,7 @@ int plc_xgpio_digital_write(plc_xgpio_pin_t pin, uint8_t value);
  *         - PIN_NOT_SUPPORTED                     : The pin can't be read.
  *         - UNSUPPORTED_PERIPHERAL_TYPE           : The MCP230XX or ADS101X is
  *                                                   a type xgpio doesn't know.
+ *         - UNKNOWN_MODE                          : The pin mode is unknown.
  *         - UNKNOWN_PIN_TYPE                      : The pin type is unknown.
  */
 int plc_xgpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read);
@@ -576,8 +585,11 @@ int plc_xgpio_set_pwm_frequency(plc_xgpio_pin_t pin, uint32_t freq_hz);
  *
  * Read the analog value of a GPIO.
  *
- * Supported pins: PLC_DIRECT, PLC_LTC2309 (single-ended, 0 to 4095) and
- * PLC_ADS101X (0 to 2047).
+ * Supported pins: PLC_DIRECT, PLC_LTC2309 (single-ended or differential,
+ * unipolar, 0 to 4095) and PLC_ADS101X (single-shot or continuous, 0 to 2047).
+ *
+ * WARNING: An ADS101X differential pair whose positive input is under the
+ * negative one will fail, because the reading is unsigned.
  *
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The pin.
@@ -602,6 +614,7 @@ int plc_xgpio_set_pwm_frequency(plc_xgpio_pin_t pin, uint32_t freq_hz);
  *                                                 analog reads.
  *         - UNSUPPORTED_PERIPHERAL_TYPE         : The ADS101X is a type xgpio
  *                                                 doesn't know.
+ *         - UNKNOWN_MODE                        : The pin mode is unknown.
  *         - UNKNOWN_PIN_TYPE                    : The pin type is unknown.
  */
 int plc_xgpio_analog_read(plc_xgpio_pin_t pin, uint32_t* read);

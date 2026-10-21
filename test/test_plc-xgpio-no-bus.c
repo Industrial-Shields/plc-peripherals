@@ -105,6 +105,25 @@ static int write_output_without_bus(const i2c_interface_t* i2c,
 	return 0;
 }
 
+// ads101x_get_continuous_mode as the driver behaves with a NULL i2c
+static int get_continuous_mode_without_bus(const i2c_interface_t* i2c,
+					   ads101x_t* ads,
+					   bool* continuous_mode,
+					   uint32_t timeout_ms,
+					   int cmock_num_calls)
+{
+	(void)ads;
+	(void)timeout_ms;
+	(void)cmock_num_calls;
+
+	if (i2c == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+	*continuous_mode = false;
+	return 0;
+}
+
 // ads101x_unsigned_single_read as the driver behaves with a NULL i2c
 static int single_read_without_bus(const i2c_interface_t* i2c,
 				   ads101x_t* ads,
@@ -298,6 +317,7 @@ void test_digital_read_without_bus(void)
 {
 	uint8_t read = UINT8_MAX;
 
+	ads101x_get_continuous_mode_Stub(get_continuous_mode_without_bus);
 	ads101x_unsigned_single_read_Stub(single_read_without_bus);
 	fake_normal_gpio.level = PLC_XGPIO_HIGH;
 
@@ -357,6 +377,7 @@ void test_analog_read_without_bus(void)
 	uint32_t read = UINT32_MAX;
 
 	ltc2309_unsigned_single_ended_read_Stub(single_ended_read_without_bus);
+	ads101x_get_continuous_mode_Stub(get_continuous_mode_without_bus);
 	ads101x_unsigned_single_read_Stub(single_read_without_bus);
 	fake_normal_gpio.analog = 77;
 

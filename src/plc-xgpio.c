@@ -27,6 +27,7 @@
 
 #define PIN_PERIPHERAL_TYPE(pin) (((pin) >> 24) & 0xFF)
 #define PIN_PERIPHERAL_ADDR(pin) (((pin) >> 16) & 0xFF)
+#define PIN_PERIPHERAL_MODE(pin) (((pin) >> 8) & 0xFF)
 #define PIN_PERIPHERAL_INDEX(pin) ((pin) & 0xFF)
 #define PIN_DIRECT_INDEX(pin) ((pin) & 0xFFFFFF)
 
@@ -208,6 +209,13 @@ ads101x_error(int code, plc_xgpio_pin_t pin, plc_xgpio_ads101x_t* ads)
 	return code;
 }
 
+// Whether the 1st byte of an LTC2309 pin is a mode xgpio knows
+static bool ltc2309_mode_is_known(plc_xgpio_pin_t pin)
+{
+	return PIN_PERIPHERAL_MODE(pin) == PLC_XGPIO_LTC2309_SINGLE_ENDED ||
+	       PIN_PERIPHERAL_MODE(pin) == PLC_XGPIO_LTC2309_DIFFERENTIAL;
+}
+
 /*
  * Read the LTC2309 or ADS101X input of "pin" into "read". Returns 0, or a
  * negative error, "code" when errno doesn't tell more.
@@ -215,41 +223,71 @@ ads101x_error(int code, plc_xgpio_pin_t pin, plc_xgpio_ads101x_t* ads)
 static int read_ltc2309(plc_xgpio_pin_t pin, uint16_t* read, int code)
 {
 	plc_xgpio_ltc2309_t* ltc;
+	int ret;
 
 	ltc = find_ltc2309(PIN_PERIPHERAL_ADDR(pin));
 	if (!ltc) {
 		return I2C_ADDR_NOT_FOUND;
 	}
 
-	if (ltc2309_unsigned_single_ended_read(I2C,
-					       &ltc->handle,
-					       PIN_PERIPHERAL_INDEX(pin),
-					       read,
-					       ltc->timeout_ms) < 0) {
-		return ltc2309_error(code, pin);
+	if (!ltc2309_mode_is_known(pin)) {
+		return UNKNOWN_MODE;
 	}
 
-	return 0;
+	if (PIN_PERIPHERAL_MODE(pin) == PLC_XGPIO_LTC2309_SINGLE_ENDED) {
+		ret = ltc2309_unsigned_single_ended_read(
+			I2C,
+			&ltc->handle,
+			PIN_PERIPHERAL_INDEX(pin),
+			read,
+			ltc->timeout_ms);
+	} else {
+		ret = ltc2309_unsigned_differential_read(
+			I2C,
+			&ltc->handle,
+			PIN_PERIPHERAL_INDEX(pin),
+			read,
+			ltc->timeout_ms);
+	}
+
+	return ret == 0 ? ret : ltc2309_error(code, pin);
 }
 
 static int read_ads101x(plc_xgpio_pin_t pin, uint16_t* read, int code)
 {
 	plc_xgpio_ads101x_t* ads;
+	int get_continuous_ret;
+	bool is_continuous;
+	int ret;
 
 	ads = find_ads101x(PIN_PERIPHERAL_ADDR(pin));
 	if (!ads) {
 		return I2C_ADDR_NOT_FOUND;
 	}
 
-	if (ads101x_unsigned_single_read(I2C,
-					 &ads->handle,
-					 PIN_PERIPHERAL_INDEX(pin),
-					 read,
-					 ads->timeout_ms) < 0) {
-		return ads101x_error(code, pin, ads);
+	get_continuous_ret = ads101x_get_continuous_mode(
+		I2C, &ads->handle, &is_continuous, ads->timeout_ms);
+	if (get_continuous_ret == 0) {
+		if (is_continuous) {
+			ret = ads101x_unsigned_continuous_read(
+				I2C,
+				&ads->handle,
+				PIN_PERIPHERAL_INDEX(pin),
+				read,
+				ads->timeout_ms);
+		} else {
+			ret = ads101x_unsigned_single_read(
+				I2C,
+				&ads->handle,
+				PIN_PERIPHERAL_INDEX(pin),
+				read,
+				ads->timeout_ms);
+		}
+
+		return ret == 0 ? ret : ads101x_error(code, pin, ads);
 	}
 
-	return 0;
+	return ads101x_error(code, pin, ads);
 }
 
 int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
@@ -313,6 +351,10 @@ int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 		break;
 
 	case PLC_LTC2309:
+		if (!ltc2309_mode_is_known(pin)) {
+			return UNKNOWN_MODE;
+		}
+
 		return fixed_pin_mode(pin,
 				      LTC2309_NUM_INPUTS,
 				      mode,

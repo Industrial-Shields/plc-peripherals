@@ -406,6 +406,28 @@ void test_set_pin_mode_fixed_direction_pins_reject_the_other_mode(void)
 				       PLC_XGPIO_OUTPUT));
 }
 
+void test_set_pin_mode_ltc2309_differential_is_an_input(void)
+{
+	TEST_ASSERT_EQUAL_INT(
+		1,
+		plc_xgpio_set_pin_mode(MAKE_PIN_LTC2309_DIFF(LTC2309_ADDR,
+							     LTC2309_P2_N3),
+				       PLC_XGPIO_INPUT));
+}
+
+void test_set_pin_mode_ltc2309_unknown_mode(void)
+{
+	// The 1st byte isn't single-ended or differential
+	TEST_ASSERT_EQUAL_INT(
+		UNKNOWN_MODE,
+		plc_xgpio_set_pin_mode(
+			_MAKE_PIN_PLC(PLC_LTC2309,
+				      LTC2309_ADDR,
+				      PLC_XGPIO_LTC2309_DIFFERENTIAL + 1,
+				      LTC2309_CH0),
+			PLC_XGPIO_INPUT));
+}
+
 void test_set_pin_mode_fixed_direction_pins_index_out_of_range(void)
 {
 	TEST_ASSERT_EQUAL_INT(
@@ -868,8 +890,16 @@ static void expect_ads101x_get_type(void)
 	ads101x_get_type_ReturnThruPtr_type(&ads101x_type);
 }
 
+// What ads101x_get_continuous_mode gives for the ADS101X in the array
+static bool ads101x_continuous_mode = false;
+
 static void expect_ads1015_read(ADS101X_INPUT input, uint16_t* value, int ret)
 {
+	ads101x_get_continuous_mode_ExpectAndReturn(
+		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
+	ads101x_get_continuous_mode_IgnoreArg_continuous_mode();
+	ads101x_get_continuous_mode_ReturnThruPtr_continuous_mode(
+		&ads101x_continuous_mode);
 	ads101x_unsigned_single_read_ExpectAndReturn(
 		TEST_I2C, &ads101x[0].handle, input, NULL, TEST_TIMEOUT_MS, ret);
 	ads101x_unsigned_single_read_IgnoreArg_return_value();
@@ -894,6 +924,38 @@ void test_digital_read_ltc2309_high_above_the_threshold(void)
 		0,
 		plc_xgpio_digital_read(
 			MAKE_PIN_LTC2309(LTC2309_ADDR, LTC2309_CH5), &read));
+	TEST_ASSERT_EQUAL_UINT8(PLC_XGPIO_HIGH, read);
+}
+
+static void
+expect_ltc2309_diff_read(LTC2309_DIFF_INPUT pair, uint16_t* value, int ret)
+{
+	ltc2309_unsigned_differential_read_ExpectAndReturn(
+		TEST_I2C, &ltc2309[0].handle, pair, NULL, TEST_TIMEOUT_MS, ret);
+	ltc2309_unsigned_differential_read_IgnoreArg_read_value();
+	ltc2309_unsigned_differential_read_ReturnThruPtr_read_value(value);
+}
+
+void test_digital_read_ltc2309_differential_high_above_the_threshold(void)
+{
+	uint16_t at = PLC_XGPIO_LTC2309_DEFAULT_HIGH_THRESHOLD;
+	uint16_t above = PLC_XGPIO_LTC2309_DEFAULT_HIGH_THRESHOLD + 1;
+	uint8_t read = UINT8_MAX;
+
+	expect_ltc2309_diff_read(LTC2309_P3_N2, &at, 0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		plc_xgpio_digital_read(MAKE_PIN_LTC2309_DIFF(LTC2309_ADDR,
+							     LTC2309_P3_N2),
+				       &read));
+	TEST_ASSERT_EQUAL_UINT8(PLC_XGPIO_LOW, read);
+
+	expect_ltc2309_diff_read(LTC2309_P3_N2, &above, 0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		plc_xgpio_digital_read(MAKE_PIN_LTC2309_DIFF(LTC2309_ADDR,
+							     LTC2309_P3_N2),
+				       &read));
 	TEST_ASSERT_EQUAL_UINT8(PLC_XGPIO_HIGH, read);
 }
 
@@ -1354,6 +1416,88 @@ void test_analog_read_ads101x_unknown_type_is_unsupported(void)
 		UNSUPPORTED_PERIPHERAL_TYPE,
 		plc_xgpio_analog_read(
 			MAKE_PIN_ADS101X(ADS101X_ADDR, ADS101X_P3_GND), &read));
+}
+
+void test_analog_read_ltc2309_differential_passes_the_pair(void)
+{
+	static const LTC2309_DIFF_INPUT PAIRS[] = {
+		LTC2309_P0_N1, LTC2309_P2_N3, LTC2309_P4_N5, LTC2309_P6_N7,
+		LTC2309_P1_N0, LTC2309_P3_N2, LTC2309_P5_N4, LTC2309_P7_N6,
+	};
+	uint32_t read = UINT32_MAX;
+	uint16_t value;
+	uint8_t i;
+
+	for (i = 0; i < sizeof(PAIRS) / sizeof(PAIRS[0]); i++) {
+		value = (uint16_t)(300 + i);
+		expect_ltc2309_diff_read(PAIRS[i], &value, 0);
+		TEST_ASSERT_EQUAL_INT(
+			0,
+			plc_xgpio_analog_read(
+				MAKE_PIN_LTC2309_DIFF(LTC2309_ADDR, PAIRS[i]),
+				&read));
+		TEST_ASSERT_EQUAL_UINT32(300 + i, read);
+	}
+}
+
+void test_reads_ltc2309_unknown_mode(void)
+{
+	// The 1st byte isn't single-ended or differential: no driver call
+	const plc_xgpio_pin_t pin =
+		_MAKE_PIN_PLC(PLC_LTC2309,
+			      LTC2309_ADDR,
+			      PLC_XGPIO_LTC2309_DIFFERENTIAL + 1,
+			      LTC2309_CH0);
+	uint32_t value;
+	uint8_t level;
+
+	TEST_ASSERT_EQUAL_INT(UNKNOWN_MODE, plc_xgpio_analog_read(pin, &value));
+	TEST_ASSERT_EQUAL_INT(UNKNOWN_MODE,
+			      plc_xgpio_digital_read(pin, &level));
+}
+
+void test_analog_read_ads101x_continuous_uses_the_continuous_read(void)
+{
+	uint32_t read = UINT32_MAX;
+	bool continuous = true;
+	uint16_t value = 1234;
+
+	ads101x_get_continuous_mode_ExpectAndReturn(
+		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
+	ads101x_get_continuous_mode_IgnoreArg_continuous_mode();
+	ads101x_get_continuous_mode_ReturnThruPtr_continuous_mode(&continuous);
+	ads101x_unsigned_continuous_read_ExpectAndReturn(TEST_I2C,
+							 &ads101x[0].handle,
+							 ADS101X_P2_GND,
+							 NULL,
+							 TEST_TIMEOUT_MS,
+							 0);
+	ads101x_unsigned_continuous_read_IgnoreArg_return_value();
+	ads101x_unsigned_continuous_read_ReturnThruPtr_return_value(&value);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		plc_xgpio_analog_read(
+			MAKE_PIN_ADS101X(ADS101X_ADDR, ADS101X_P2_GND), &read));
+	TEST_ASSERT_EQUAL_UINT32(1234, read);
+}
+
+void test_analog_read_ads101x_get_continuous_mode_failing(void)
+{
+	// The wrong bus: the type can't be read either, so no index check
+	uint32_t read;
+
+	ads101x_get_continuous_mode_ExpectAndReturn(
+		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, -1);
+	ads101x_get_continuous_mode_IgnoreArg_continuous_mode();
+	ads101x_get_type_ExpectAndReturn(
+		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, -1);
+	ads101x_get_type_IgnoreArg_type();
+	errno = EINVAL;
+	TEST_ASSERT_EQUAL_INT(
+		PERIPHERAL_ADS101X_ANALOG_READ_FAIL,
+		plc_xgpio_analog_read(
+			MAKE_PIN_ADS101X(ADS101X_ADDR, ADS101X_P2_GND), &read));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 }
 
 void test_analog_read_errors(void)
