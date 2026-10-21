@@ -349,7 +349,7 @@ void test_all_functions_without_bus(void)
 
 void test_analog_read_without_bus(void)
 {
-	uint16_t read = UINT16_MAX;
+	uint32_t read = UINT32_MAX;
 
 	ltc2309_unsigned_single_ended_read_Stub(single_ended_read_without_bus);
 	ads101x_unsigned_single_read_Stub(single_read_without_bus);
@@ -357,7 +357,7 @@ void test_analog_read_without_bus(void)
 
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_xgpio_analog_read(MAKE_PIN_DIRECT(36), &read));
-	TEST_ASSERT_EQUAL_UINT16(77, read);
+	TEST_ASSERT_EQUAL_UINT32(77, read);
 	TEST_ASSERT_EQUAL_INT(
 		I2C_PIN_WITHOUT_I2C_BUS,
 		plc_xgpio_analog_read(

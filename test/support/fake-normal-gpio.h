@@ -39,7 +39,7 @@ typedef struct {
 	uint32_t arg;
 
 	// What the reads store
-	uint16_t analog;
+	uint32_t analog;
 	uint8_t level;
 
 	// What every function returns

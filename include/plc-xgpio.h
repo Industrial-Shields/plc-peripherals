@@ -317,8 +317,8 @@ extern int plc_normal_gpio_set_pwm_frequency(plc_xgpio_pin_t pin,
  *
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The index of the direct GPIO.
- *   read (uint16_t*)       - Where to store the reading. Its scale is up to
- *                            this function.
+ *   read (uint32_t*)       - Where to store the reading. Its scale is up to
+ *                            this function, and always unsigned.
  * Returns:
  *   int - 0 if successful, otherwise -1.
  *
@@ -328,7 +328,7 @@ extern int plc_normal_gpio_set_pwm_frequency(plc_xgpio_pin_t pin,
  *     - EINVAL  : "pin" is not an existent pin.
  *     - ENOTSUP : "pin" has no analog reads.
  */
-extern int plc_normal_gpio_analog_read(plc_xgpio_pin_t pin, uint16_t* read);
+extern int plc_normal_gpio_analog_read(plc_xgpio_pin_t pin, uint32_t* read);
 
 /*
  * The errors reported by xgpio functions.
@@ -581,7 +581,7 @@ int plc_xgpio_set_pwm_frequency(plc_xgpio_pin_t pin, uint32_t freq_hz);
  *
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The pin.
- *   read (uint16_t*)       - Where to store the reading.
+ *   read (uint32_t*)       - Where to store the reading.
  * Returns:
  *   int - 0 if successful, otherwise a negative value:
  *         - NORMAL_GPIO_ANALOG_READ_FAIL        : The direct GPIO call failed.
@@ -604,7 +604,7 @@ int plc_xgpio_set_pwm_frequency(plc_xgpio_pin_t pin, uint32_t freq_hz);
  *                                                 doesn't know.
  *         - UNKNOWN_PIN_TYPE                    : The pin type is unknown.
  */
-int plc_xgpio_analog_read(plc_xgpio_pin_t pin, uint16_t* read);
+int plc_xgpio_analog_read(plc_xgpio_pin_t pin, uint32_t* read);
 
 /**
  * plc_xgpio_digital_write_all

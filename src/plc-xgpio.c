@@ -648,8 +648,9 @@ int plc_xgpio_set_pwm_frequency(plc_xgpio_pin_t pin, uint32_t freq_hz)
 	return ret >= 0 ? ret : code;
 }
 
-int plc_xgpio_analog_read(plc_xgpio_pin_t pin, uint16_t* read)
+int plc_xgpio_analog_read(plc_xgpio_pin_t pin, uint32_t* read)
 {
+	uint16_t read_16;
 	int code;
 	int ret;
 
@@ -685,12 +686,20 @@ int plc_xgpio_analog_read(plc_xgpio_pin_t pin, uint16_t* read)
 		return PIN_NOT_SUPPORTED;
 
 	case PLC_LTC2309:
-		return read_ltc2309(
-			pin, read, PERIPHERAL_LTC2309_ANALOG_READ_FAIL);
+		ret = read_ltc2309(
+			pin, &read_16, PERIPHERAL_LTC2309_ANALOG_READ_FAIL);
+		if (ret == 0) {
+			*read = (uint32_t)read_16;
+		}
+		return ret;
 
 	case PLC_ADS101X:
-		return read_ads101x(
-			pin, read, PERIPHERAL_ADS101X_ANALOG_READ_FAIL);
+		ret = read_ads101x(
+			pin, &read_16, PERIPHERAL_ADS101X_ANALOG_READ_FAIL);
+		if (ret == 0) {
+			*read = (uint32_t)read_16;
+		}
+		return ret;
 
 	default:
 		return UNKNOWN_PIN_TYPE;

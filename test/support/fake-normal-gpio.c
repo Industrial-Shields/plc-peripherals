@@ -68,7 +68,7 @@ int plc_normal_gpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read)
 	return fake_normal_gpio.ret;
 }
 
-int plc_normal_gpio_analog_read(plc_xgpio_pin_t pin, uint16_t* read)
+int plc_normal_gpio_analog_read(plc_xgpio_pin_t pin, uint32_t* read)
 {
 	fake_normal_gpio.calls++;
 	fake_normal_gpio.pin = pin;

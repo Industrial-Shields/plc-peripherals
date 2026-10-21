@@ -1241,13 +1241,13 @@ void test_analog_read_null_read(void)
 
 void test_analog_read_direct(void)
 {
-	uint16_t read = UINT16_MAX;
+	uint32_t read = UINT32_MAX;
 
 	fake_normal_gpio.analog = 3210;
 	TEST_ASSERT_EQUAL_INT(
 		0, plc_xgpio_analog_read(MAKE_PIN_DIRECT(0x123456), &read));
 	TEST_ASSERT_EQUAL_UINT32(0x123456, fake_normal_gpio.pin);
-	TEST_ASSERT_EQUAL_UINT16(3210, read);
+	TEST_ASSERT_EQUAL_UINT32(3210, read);
 
 	fake_normal_gpio.ret = -1;
 	errno = EIO;
@@ -1266,13 +1266,24 @@ void test_analog_read_direct(void)
 						    &read));
 }
 
+void test_analog_read_direct_keeps_readings_above_16_bits(void)
+{
+	uint32_t read = 0;
+
+	// A 24-bit ADC's full scale
+	fake_normal_gpio.analog = 0xFFFFFF;
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_xgpio_analog_read(MAKE_PIN_DIRECT(0x123456), &read));
+	TEST_ASSERT_EQUAL_UINT32(0xFFFFFF, read);
+}
+
 void test_analog_read_ltc2309_passes_the_channel(void)
 {
 	static const LTC2309_INPUT CHANNELS[LTC2309_NUM_INPUTS] = {
 		LTC2309_CH0, LTC2309_CH1, LTC2309_CH2, LTC2309_CH3,
 		LTC2309_CH4, LTC2309_CH5, LTC2309_CH6, LTC2309_CH7,
 	};
-	uint16_t read = UINT16_MAX;
+	uint32_t read = UINT32_MAX;
 	uint16_t value;
 	uint8_t i;
 
@@ -1284,7 +1295,7 @@ void test_analog_read_ltc2309_passes_the_channel(void)
 			plc_xgpio_analog_read(MAKE_PIN_LTC2309(LTC2309_ADDR,
 							       CHANNELS[i]),
 					      &read));
-		TEST_ASSERT_EQUAL_UINT16(100 + i, read);
+		TEST_ASSERT_EQUAL_UINT32(100 + i, read);
 	}
 }
 
@@ -1296,7 +1307,7 @@ void test_analog_read_ads101x_passes_the_input(void)
 		ADS101X_P2_GND,
 		ADS101X_P3_GND,
 	};
-	uint16_t read = UINT16_MAX;
+	uint32_t read = UINT32_MAX;
 	uint16_t value;
 	uint8_t i;
 
@@ -1308,7 +1319,7 @@ void test_analog_read_ads101x_passes_the_input(void)
 			plc_xgpio_analog_read(MAKE_PIN_ADS101X(ADS101X_ADDR,
 							       INPUTS[i]),
 					      &read));
-		TEST_ASSERT_EQUAL_UINT16(2000 + i, read);
+		TEST_ASSERT_EQUAL_UINT32(2000 + i, read);
 	}
 }
 
@@ -1317,7 +1328,7 @@ void test_analog_read_ads101x_unknown_type_is_unsupported(void)
 	// A type added to the driver after xgpio was built
 	ADS101X_TYPE unknown = (ADS101X_TYPE)(ADS101X_015 + 1);
 	uint16_t value = 0;
-	uint16_t read;
+	uint32_t read;
 
 	expect_ads1015_read(ADS101X_P3_GND, &value, -1);
 	ads101x_get_type_ExpectAndReturn(
@@ -1334,7 +1345,7 @@ void test_analog_read_ads101x_unknown_type_is_unsupported(void)
 void test_analog_read_errors(void)
 {
 	uint16_t value = 0;
-	uint16_t read;
+	uint32_t read;
 
 	expect_ltc2309_read(LTC2309_CH0, &value, -1);
 	errno = EIO;
@@ -1638,7 +1649,7 @@ void test_pwm_write_all_errors(void)
 
 void test_empty_arrays_find_nothing(void)
 {
-	uint16_t read;
+	uint32_t read;
 
 	memset(&peripherals, 0, sizeof(peripherals));
 

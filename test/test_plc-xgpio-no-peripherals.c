@@ -124,7 +124,7 @@ void test_set_pwm_frequency_without_peripherals_only_handles_direct_pins(void)
 
 void test_analog_read_without_peripherals_only_handles_direct_pins(void)
 {
-	uint16_t read;
+	uint32_t read;
 
 	TEST_ASSERT_EQUAL_INT(0,
 			      plc_xgpio_analog_read(MAKE_PIN_DIRECT(5), &read));
