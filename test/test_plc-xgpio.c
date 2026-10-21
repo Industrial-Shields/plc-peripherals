@@ -156,8 +156,10 @@ void test_make_pin_direct_keeps_a_24_bit_index(void)
 
 void test_set_pin_mode_rejects_an_invalid_mode(void)
 {
-	TEST_ASSERT_EQUAL_INT(PIN_NOT_SUPPORTED,
-			      plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5), 2));
+	TEST_ASSERT_EQUAL_INT(
+		PIN_NOT_SUPPORTED,
+		plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
+				       PLC_XGPIO_INPUT_PULLUP_INVERTED + 1));
 	TEST_ASSERT_EQUAL_INT(
 		PIN_NOT_SUPPORTED,
 		plc_xgpio_set_pin_mode(MAKE_PIN_MCP230XX(MCP23008_ADDR, 0), 7));
@@ -176,6 +178,36 @@ void test_set_pin_mode_direct_passes_the_pin_and_mode(void)
 			      plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(0x123456),
 						     PLC_XGPIO_OUTPUT));
 	TEST_ASSERT_EQUAL_UINT32(PLC_XGPIO_OUTPUT, fake_normal_gpio.arg);
+}
+
+void test_set_pin_mode_direct_passes_the_input_modes(void)
+{
+	TEST_ASSERT_EQUAL_INT(0,
+			      plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
+						     PLC_XGPIO_INPUT_PULLUP));
+	TEST_ASSERT_EQUAL_UINT32(PLC_XGPIO_INPUT_PULLUP, fake_normal_gpio.arg);
+
+	TEST_ASSERT_EQUAL_INT(0,
+			      plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
+						     PLC_XGPIO_INPUT_INVERTED));
+	TEST_ASSERT_EQUAL_UINT32(PLC_XGPIO_INPUT_INVERTED,
+				 fake_normal_gpio.arg);
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
+				       PLC_XGPIO_INPUT_PULLUP_INVERTED));
+	TEST_ASSERT_EQUAL_UINT32(PLC_XGPIO_INPUT_PULLUP_INVERTED,
+				 fake_normal_gpio.arg);
+}
+
+void test_set_pin_mode_direct_enotsup_is_not_supported(void)
+{
+	fake_normal_gpio.ret = -1;
+	errno = ENOTSUP;
+	TEST_ASSERT_EQUAL_INT(PIN_NOT_SUPPORTED,
+			      plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
+						     PLC_XGPIO_INPUT_INVERTED));
 }
 
 void test_set_pin_mode_direct_passes_1_through(void)
@@ -227,6 +259,48 @@ void test_set_pin_mode_mcp23008_input_has_no_pullup(void)
 		0,
 		plc_xgpio_set_pin_mode(MAKE_PIN_MCP230XX(MCP23008_ADDR, 7),
 				       PLC_XGPIO_INPUT));
+}
+
+void test_set_pin_mode_mcp23008_input_with_pullup(void)
+{
+	mcp230xx_set_input_ExpectAndReturn(TEST_I2C,
+					   &mcp230xx[0].handle,
+					   6,
+					   MCP230XX_PULLUP,
+					   TEST_TIMEOUT_MS,
+					   0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		plc_xgpio_set_pin_mode(MAKE_PIN_MCP230XX(MCP23008_ADDR, 6),
+				       PLC_XGPIO_INPUT_PULLUP));
+}
+
+void test_set_pin_mode_mcp23017_input_inverted(void)
+{
+	mcp230xx_set_input_ExpectAndReturn(TEST_I2C,
+					   &mcp230xx[1].handle,
+					   12,
+					   MCP230XX_NO_PULLUP_INVERTED,
+					   TEST_TIMEOUT_MS,
+					   0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		plc_xgpio_set_pin_mode(MAKE_PIN_MCP230XX(MCP23017_ADDR, 12),
+				       PLC_XGPIO_INPUT_INVERTED));
+}
+
+void test_set_pin_mode_mcp23017_input_with_pullup_inverted(void)
+{
+	mcp230xx_set_input_ExpectAndReturn(TEST_I2C,
+					   &mcp230xx[1].handle,
+					   9,
+					   MCP230XX_PULLUP_INVERTED,
+					   TEST_TIMEOUT_MS,
+					   0);
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		plc_xgpio_set_pin_mode(MAKE_PIN_MCP230XX(MCP23017_ADDR, 9),
+				       PLC_XGPIO_INPUT_PULLUP_INVERTED));
 }
 
 void test_set_pin_mode_mcp230xx_passes_1_through(void)
@@ -416,6 +490,33 @@ void test_set_pin_mode_fixed_direction_pins_reject_the_other_mode(void)
 		plc_xgpio_set_pin_mode(MAKE_PIN_ADS101X(ADS101X_ADDR,
 							ADS101X_P0_GND),
 				       PLC_XGPIO_OUTPUT));
+}
+
+void test_set_pin_mode_fixed_direction_pins_reject_the_input_modes(void)
+{
+	const uint8_t modes[] = {
+		PLC_XGPIO_INPUT_PULLUP,
+		PLC_XGPIO_INPUT_INVERTED,
+		PLC_XGPIO_INPUT_PULLUP_INVERTED,
+	};
+
+	for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+		TEST_ASSERT_EQUAL_INT(PIN_NOT_SUPPORTED,
+				      plc_xgpio_set_pin_mode(
+					      MAKE_PIN_PCA9685(PCA9685_ADDR, 0),
+					      modes[i]));
+		TEST_ASSERT_EQUAL_INT(
+			PIN_NOT_SUPPORTED,
+			plc_xgpio_set_pin_mode(MAKE_PIN_LTC2309(LTC2309_ADDR,
+								LTC2309_CH0),
+					       modes[i]));
+		expect_ads101x_get_type();
+		TEST_ASSERT_EQUAL_INT(
+			PIN_NOT_SUPPORTED,
+			plc_xgpio_set_pin_mode(MAKE_PIN_ADS101X(ADS101X_ADDR,
+								ADS101X_P0_GND),
+					       modes[i]));
+	}
 }
 
 void test_set_pin_mode_ads101x_unknown_type_is_unsupported(void)

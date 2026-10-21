@@ -44,8 +44,11 @@
 
 // The accepted modes of plc_xgpio_set_pin_mode
 // clang-format off
-#define PLC_XGPIO_INPUT  0
-#define PLC_XGPIO_OUTPUT 1
+#define PLC_XGPIO_INPUT                 0
+#define PLC_XGPIO_OUTPUT                1
+#define PLC_XGPIO_INPUT_PULLUP          2
+#define PLC_XGPIO_INPUT_INVERTED        3
+#define PLC_XGPIO_INPUT_PULLUP_INVERTED 4
 // clang-format on
 
 // The accepted values of plc_xgpio_digital_write/_all
@@ -211,15 +214,17 @@ extern const i2c_interface_t* plc_xgpio_i2c;
  *
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The index of the direct GPIO.
- *   mode (uint8_t)         - PLC_XGPIO_INPUT or PLC_XGPIO_OUTPUT.
+ *   mode (uint8_t)         - PLC_XGPIO_INPUT, PLC_XGPIO_OUTPUT,
+ *                            PLC_XGPIO_INPUT_PULLUP, PLC_XGPIO_INPUT_INVERTED
+ *                            or PLC_XGPIO_INPUT_PULLUP_INVERTED.
  * Returns:
  *   int - 0 if successful, 1 if it already had that mode, otherwise -1.
  *
  * Errors:
  *   errno set to:
- *     - EINVAL  : "pin" is not an existent pin, or "mode" is neither
- *                 PLC_XGPIO_INPUT nor PLC_XGPIO_OUTPUT.
- *     - ENOTSUP : "mode" is not supported.
+ *     - EINVAL  : "pin" is not an existent pin, or "mode" is not one of the
+ *                 modes above.
+ *     - ENOTSUP : "pin" can't have "mode".
  *     - Linux specific :
  *         - (others)   : Whatever ioctl(2) reports for the GPIO line request.
  */
@@ -408,7 +413,9 @@ enum {
  *
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The pin.
- *   mode (uint8_t)         - PLC_XGPIO_INPUT or PLC_XGPIO_OUTPUT.
+ *   mode (uint8_t)         - PLC_XGPIO_INPUT, PLC_XGPIO_OUTPUT,
+ *                            PLC_XGPIO_INPUT_PULLUP, PLC_XGPIO_INPUT_INVERTED
+ *                            or PLC_XGPIO_INPUT_PULLUP_INVERTED.
  * Returns:
  *   int - 0 if successful, 1 if it already had that mode, otherwise a negative
  *         value:

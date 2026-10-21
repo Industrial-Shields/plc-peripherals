@@ -303,13 +303,21 @@ static int read_ads101x(plc_xgpio_pin_t pin, uint16_t* read, int code)
 
 int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 {
+	MCP230XX_INPUT_CONFIG mcp_input_config;
 	plc_xgpio_mcp230xx_t* mcp;
 	plc_xgpio_ads101x_t* ads;
 	ADS101X_TYPE ads_type;
 	int code;
 	int ret;
 
-	if (mode != PLC_XGPIO_INPUT && mode != PLC_XGPIO_OUTPUT) {
+	switch (mode) {
+	case PLC_XGPIO_INPUT:
+	case PLC_XGPIO_OUTPUT:
+	case PLC_XGPIO_INPUT_PULLUP:
+	case PLC_XGPIO_INPUT_INVERTED:
+	case PLC_XGPIO_INPUT_PULLUP_INVERTED:
+		break;
+	default:
 		return PIN_NOT_SUPPORTED;
 	}
 
@@ -349,17 +357,33 @@ int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 		}
 
 		code = PERIPHERAL_MCP230XX_SET_PIN_MODE_FAIL;
-		if (mode == PLC_XGPIO_INPUT) {
-			ret = mcp230xx_set_input(I2C,
-						 &mcp->handle,
-						 PIN_PERIPHERAL_INDEX(pin),
-						 MCP230XX_NO_PULLUP,
-						 mcp->timeout_ms);
-		} else {
+		if (mode == PLC_XGPIO_OUTPUT) {
 			ret = mcp230xx_set_output(I2C,
 						  &mcp->handle,
 						  PIN_PERIPHERAL_INDEX(pin),
 						  mcp->timeout_ms);
+		} else {
+			switch (mode) {
+			case PLC_XGPIO_INPUT:
+				mcp_input_config = MCP230XX_NO_PULLUP;
+				break;
+			case PLC_XGPIO_INPUT_PULLUP:
+				mcp_input_config = MCP230XX_PULLUP;
+				break;
+			case PLC_XGPIO_INPUT_INVERTED:
+				mcp_input_config = MCP230XX_NO_PULLUP_INVERTED;
+				break;
+			case PLC_XGPIO_INPUT_PULLUP_INVERTED:
+				mcp_input_config = MCP230XX_PULLUP_INVERTED;
+				break;
+			default:
+				return PIN_NOT_SUPPORTED;
+			}
+			ret = mcp230xx_set_input(I2C,
+						 &mcp->handle,
+						 PIN_PERIPHERAL_INDEX(pin),
+						 mcp_input_config,
+						 mcp->timeout_ms);
 		}
 
 		if (ret < 0) {
