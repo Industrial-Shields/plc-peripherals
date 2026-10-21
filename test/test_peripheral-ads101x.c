@@ -143,6 +143,7 @@ static ads101x_t* init_ads(bool restart,
 {
 	ads101x_config_t cfg;
 
+	cfg.type = ADS101X_015;
 	cfg.continuous_mode = continuous_mode;
 	cfg.fsr = fsr;
 	cfg.dr = dr;
@@ -672,6 +673,7 @@ void test_ads101x_deinit_keeps_a_continuous_handle_when_the_shutdown_fails(void)
 // The same configuration create_ads uses, in single-shot mode.
 static void fill_single_shot_cfg(ads101x_config_t* cfg)
 {
+	cfg->type = ADS101X_015;
 	cfg->continuous_mode = false;
 	cfg->fsr = ADS101X_FSR_4_096V;
 	cfg->dr = FAST_DR;
@@ -2698,4 +2700,53 @@ void test_ads101x_single_read_resyncs_again_after_a_failed_delay(void)
 	assert_delays(expected, 1);
 
 	destroy_protected_ads(ads);
+}
+
+/* ---------------------------- ads101x_get_type ---------------------------- */
+
+void test_ads101x_get_type_returns_the_type_of_the_init(void)
+{
+	const ADS101X_TYPE types[] = { ADS101X_015 };
+	static ads101x_t storage;
+	ads101x_config_t cfg;
+
+	fill_single_shot_cfg(&cfg);
+
+	for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
+		ADS101X_TYPE type;
+
+		cfg.type = types[i];
+		expect_ads101x_restart();
+		i2c_write8_16b_ExpectAndReturn(TEST_I2C,
+					       TEST_ADDR,
+					       CONFIG_REG,
+					       INIT_NO_RESTART_CFG_SINGLE,
+					       0);
+		TEST_ASSERT_EQUAL_INT(
+			0,
+			ads101x_static_init(
+				TEST_I2C, &storage, TEST_ADDR, true, &cfg));
+
+		TEST_ASSERT_EQUAL_INT(0, ads101x_get_type(&storage, &type, 0));
+		TEST_ASSERT_EQUAL_INT(types[i], type);
+
+		TEST_ASSERT_EQUAL_INT(
+			0, ads101x_static_deinit(TEST_I2C, &storage, false));
+	}
+}
+
+void test_ads101x_get_type_fails_with_efault_for_null(void)
+{
+	ads101x_t* ads = create_ads(false);
+	ADS101X_TYPE type;
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_type(NULL, &type, 0));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_type(ads, NULL, 0));
+	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	destroy_ads(ads);
 }

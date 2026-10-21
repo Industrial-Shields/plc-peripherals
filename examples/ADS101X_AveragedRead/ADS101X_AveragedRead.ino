@@ -149,6 +149,7 @@ void setup()
 	}
 
 	ads101x_config_t cfg;
+	cfg.type = ADS101X_015;
 #ifdef USE_SINGLE_SHOT_READ
 	// Single-shot mode -- required for ads101x_single_read()'s OS-bit
 	// trigger to actually do anything.

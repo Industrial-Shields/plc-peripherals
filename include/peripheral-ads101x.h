@@ -28,7 +28,8 @@ extern "C" {
 #endif
 
 // clang-format off
-#define ADS1015_NUM_INPUTS  4 // AIN0 to AIN3
+#define ADS1015_NUM_PHYSICAL_INPUTS  4 // AIN0 to AIN3
+#define ADS1015_NUM_INPUTS  8          // The ADS101X_INPUT values (AIN0 - AIN3 + pairs)
 // clang-format on
 
 /*
@@ -39,7 +40,7 @@ extern "C" {
 #define ADS101X_INTERNAL_SIZE                                                 \
 	PLC_PERIPHERAL_INTERNAL_PAD(PLC_MUTEX_SIZE + sizeof(plc_i2c_addr_t) + \
 					    2 * sizeof(uint16_t) +            \
-					    sizeof(uint8_t) +                 \
+					    2 * sizeof(uint8_t) +             \
 					    2 * sizeof(bool),                 \
 				    ADS101X_INTERNAL_ALIGN)
 
@@ -61,6 +62,10 @@ typedef struct {
 	PLC_PERIPHERAL_INTERNAL_ALIGNAS(plc_mutex_t)
 	unsigned char opaque[ADS101X_SIZE];
 } ads101x_t;
+
+typedef enum {
+	ADS101X_015, // ADS1015
+} ADS101X_TYPE;
 
 typedef enum {
 	// clang-format off
@@ -103,6 +108,7 @@ typedef enum {
  *
  * The configuration ads101x_init applies to an ADS101X. Every field must be set.
  *
+ *   type (ADS101X_TYPE)          - The chip's specific type.
  *   continuous_mode (bool)       - true to put the ADS101X in continuous
  *                                  conversion mode, false to put it in
  *                                  single-shot mode. This setting will apply
@@ -118,6 +124,7 @@ typedef enum {
  *                                  false.
  */
 typedef struct {
+	ADS101X_TYPE type;
 	bool continuous_mode;
 	ADS101X_GAIN_AMPLIFIER fsr;
 	ADS101X_DATA_RATE dr;
@@ -345,6 +352,26 @@ int ads101x_protect(const i2c_interface_t* i2c,
  *                  plc-mutex.h).
  */
 int ads101x_unprotect(ads101x_t* ads);
+
+/**
+ * ads101x_get_type
+ *
+ * Get the chip type the ADS101X handle was initialized with.
+ *
+ * Parameters:
+ *   ads (ads101x_t*)      - The ADS101X to get the type from.
+ *   type (ADS101X_TYPE*)  - Pointer to store the type in.
+ *   timeout_ms (uint32_t) - Ignored. The type never changes, so no lock is
+ *                           taken; it's there to match the other getters.
+ *
+ * Returns:
+ *   int - 0 if successful, -1 otherwise.
+ *
+ * Errors:
+ *   errno set to:
+ *     - EFAULT : Passed ads101x_t or type is NULL.
+ */
+int ads101x_get_type(ads101x_t* ads, ADS101X_TYPE* type, uint32_t timeout_ms);
 
 /**
  * ads101x_single_read

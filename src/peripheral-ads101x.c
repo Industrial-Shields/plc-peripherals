@@ -56,6 +56,7 @@ typedef struct {
 	uint16_t expected_cfg_reg;
 	uint16_t last_cfg_reg;
 	uint8_t bus;
+	uint8_t type;
 	bool is_protected;
 	bool needs_resync;
 } ads101x_internal_t;
@@ -421,6 +422,7 @@ int ads101x_static_init(const i2c_interface_t* i2c,
 
 	ADS(ads)->addr = addr;
 	ADS(ads)->bus = bus;
+	ADS(ads)->type = (uint8_t)cfg->type;
 	ADS(ads)->expected_cfg_reg = cfg_reg;
 	ADS(ads)->last_cfg_reg = cfg_reg;
 	ADS(ads)->is_protected = false;
@@ -536,6 +538,19 @@ int ads101x_unprotect(ads101x_t* ads)
 	}
 
 	ADS(ads)->is_protected = false;
+	return 0;
+}
+
+int ads101x_get_type(ads101x_t* ads, ADS101X_TYPE* type, uint32_t timeout_ms)
+{
+	(void)timeout_ms;
+
+	if (ads == NULL || type == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
+
+	*type = (ADS101X_TYPE)ADS(ads)->type;
 	return 0;
 }
 
