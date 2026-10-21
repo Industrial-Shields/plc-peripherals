@@ -52,7 +52,7 @@ int plc_normal_gpio_set_pwm_frequency(plc_xgpio_pin_t pin, uint32_t freq)
 	return fake_normal_gpio.ret;
 }
 
-int plc_normal_gpio_pwm_write(plc_xgpio_pin_t pin, uint16_t value)
+int plc_normal_gpio_pwm_write(plc_xgpio_pin_t pin, uint32_t value)
 {
 	fake_normal_gpio.calls++;
 	fake_normal_gpio.pin = pin;

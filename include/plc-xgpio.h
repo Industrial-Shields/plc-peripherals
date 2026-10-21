@@ -273,7 +273,7 @@ extern int plc_normal_gpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read);
  *
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The index of the direct GPIO.
- *   value (uint16_t)       - The duty cycle, as passed to
+ *   value (uint32_t)       - The duty cycle, as passed to
  *                            plc_xgpio_pwm_write. Its scale is up to this
  *                            function.
  * Returns:
@@ -286,7 +286,7 @@ extern int plc_normal_gpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read);
  *                 duty cycles are platform dependent.
  *     - ENOTSUP : "pin" doesn't support PWM.
  */
-extern int plc_normal_gpio_pwm_write(plc_xgpio_pin_t pin, uint16_t value);
+extern int plc_normal_gpio_pwm_write(plc_xgpio_pin_t pin, uint32_t value);
 
 /**
  * plc_normal_gpio_set_pwm_frequency
@@ -508,7 +508,7 @@ int plc_xgpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read);
  *
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The pin.
- *   value (uint16_t)       - The duty cycle. For a PCA9685, from
+ *   value (uint32_t)       - The duty cycle. For a PCA9685, from
  *                            PCA9685_OUTPUT_OFF to PCA9685_OUTPUT_ON.
  * Returns:
  *   int - 0 if successful, 1 if it already had that duty cycle, otherwise a
@@ -529,7 +529,7 @@ int plc_xgpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read);
  *         - PIN_NOT_SUPPORTED                 : The pin doesn't support PWM.
  *         - UNKNOWN_PIN_TYPE                  : The pin type is unknown.
  */
-int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint16_t value);
+int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint32_t value);
 
 /**
  * plc_xgpio_set_pwm_frequency

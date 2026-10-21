@@ -516,7 +516,7 @@ int plc_xgpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read)
 	return ret >= 0 ? ret : code;
 }
 
-int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint16_t value)
+int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint32_t value)
 {
 	plc_xgpio_pca9685_t* pca;
 	int code;
@@ -546,11 +546,16 @@ int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint16_t value)
 			return I2C_ADDR_NOT_FOUND;
 		}
 
+		// It would wrap into range in the driver's uint16_t
+		if (value > UINT16_MAX) {
+			return DUTY_CYCLE_OUT_OF_RANGE;
+		}
+
 		code = PERIPHERAL_PCA9685_PWM_WRITE_FAIL;
 		ret = pca9685_write_output(I2C,
 					   &pca->handle,
 					   PIN_PERIPHERAL_INDEX(pin),
-					   value,
+					   (uint16_t)value,
 					   pca->timeout_ms);
 
 		if (ret < 0) {

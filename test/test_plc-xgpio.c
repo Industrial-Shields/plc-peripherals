@@ -1019,6 +1019,14 @@ void test_pwm_write_direct(void)
 						  1234));
 }
 
+void test_pwm_write_direct_keeps_duty_cycles_above_16_bits(void)
+{
+	// A 20-bit PWM's full scale
+	TEST_ASSERT_EQUAL_INT(
+		0, plc_xgpio_pwm_write(MAKE_PIN_DIRECT(0x123456), 0xFFFFF));
+	TEST_ASSERT_EQUAL_UINT32(0xFFFFF, fake_normal_gpio.arg);
+}
+
 void test_pwm_write_pca9685_passes_the_duty_cycle(void)
 {
 	pca9685_write_output_ExpectAndReturn(
@@ -1041,6 +1049,12 @@ void test_pwm_write_pca9685_passes_the_duty_cycle(void)
 
 void test_pwm_write_pca9685_errors(void)
 {
+	// It would wrap to 100 in the driver's uint16_t
+	TEST_ASSERT_EQUAL_INT(
+		DUTY_CYCLE_OUT_OF_RANGE,
+		plc_xgpio_pwm_write(MAKE_PIN_PCA9685(PCA9685_ADDR, 0),
+				    UINT16_MAX + 1 + 100));
+
 	pca9685_write_output_ExpectAndReturn(TEST_I2C,
 					     &pca9685[0].handle,
 					     0,
