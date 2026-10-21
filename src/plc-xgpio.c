@@ -126,8 +126,8 @@ mcp230xx_error(int code, plc_xgpio_pin_t pin, plc_xgpio_mcp230xx_t* mcp)
 {
 	MCP230XX_TYPE mcp_type;
 	uint8_t num_gpios;
-	int local_errno;
 	int get_type_ret;
+	int local_errno;
 
 	switch (errno) {
 	case EFAULT:
@@ -179,8 +179,8 @@ ads101x_error(int code, plc_xgpio_pin_t pin, plc_xgpio_ads101x_t* ads)
 {
 	ADS101X_TYPE ads_type;
 	uint8_t num_inputs;
-	int local_errno;
 	int get_type_ret;
+	int local_errno;
 
 	switch (errno) {
 	case EFAULT:
