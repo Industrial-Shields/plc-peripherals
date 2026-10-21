@@ -41,14 +41,14 @@ export ABS_SRC_DIR := $(realpath $(SRC_DIR))
 export ABS_BUILD_DIR := $(patsubst %/$(SRC_DIR), %/$(BUILD_DIR), $(ABS_SRC_DIR))
 LDFLAGS += -L$(ABS_BUILD_DIR) -lplc-peripherals
 
-SRCS := $(filter-out $(SRC_DIR)/expanded-gpio.c, $(wildcard $(SRC_DIR)/*.c))
+SRCS := $(filter-out $(SRC_DIR)/plc-xgpio.c, $(wildcard $(SRC_DIR)/*.c))
 OBJS := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
 DEPS := $(OBJS:.o=.d)
 LIB := $(BUILD_DIR)/$(LIBNAME)
 
-.PHONY: all tests coverage cppcheck valgrind check format clean
+.PHONY: all xgpio tests coverage cppcheck valgrind check format clean
 
-all: $(LIB)
+all: $(LIB) xgpio
 
 
 $(BUILD_DIR):
@@ -61,6 +61,9 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 $(LIB): $(OBJS) | $(BUILD_DIR)
 	rm -f $@
 	ar rcs $@ $(OBJS)
+
+# Only compiles plc-xgpio.c, which isn't in the library, to check it
+xgpio: $(BUILD_DIR)/plc-xgpio.o
 
 tests:
 	ceedling test:all
@@ -94,4 +97,4 @@ check: format $(LIB)
 clean:
 	rm -rf $(BUILD_DIR)
 
--include $(DEPS)
+-include $(DEPS) $(BUILD_DIR)/plc-xgpio.d
