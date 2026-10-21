@@ -541,7 +541,10 @@ int ads101x_unprotect(ads101x_t* ads)
 	return 0;
 }
 
-int ads101x_get_type(ads101x_t* ads, ADS101X_TYPE* type, uint32_t timeout_ms)
+int ads101x_get_type(const i2c_interface_t* i2c,
+		     ads101x_t* ads,
+		     ADS101X_TYPE* type,
+		     uint32_t timeout_ms)
 {
 	(void)timeout_ms;
 
@@ -550,11 +553,16 @@ int ads101x_get_type(ads101x_t* ads, ADS101X_TYPE* type, uint32_t timeout_ms)
 		return -1;
 	}
 
+	if (i2c_check_bus(i2c, ADS(ads)->bus) != 0) {
+		return -1;
+	}
+
 	*type = (ADS101X_TYPE)ADS(ads)->type;
 	return 0;
 }
 
-int ads101x_get_continuous_mode(ads101x_t* ads,
+int ads101x_get_continuous_mode(const i2c_interface_t* i2c,
+				ads101x_t* ads,
 				bool* continuous_mode,
 				uint32_t timeout_ms)
 {
@@ -562,6 +570,10 @@ int ads101x_get_continuous_mode(ads101x_t* ads,
 
 	if (ads == NULL || continuous_mode == NULL) {
 		errno = EFAULT;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, ADS(ads)->bus) != 0) {
 		return -1;
 	}
 

@@ -134,7 +134,7 @@ mcp230xx_error(int code, plc_xgpio_pin_t pin, plc_xgpio_mcp230xx_t* mcp)
 	case EINVAL:
 		local_errno = errno;
 		get_type_ret = mcp230xx_get_type(
-			&mcp->handle, &mcp_type, mcp->timeout_ms);
+			I2C, &mcp->handle, &mcp_type, mcp->timeout_ms);
 		errno = local_errno;
 		if (get_type_ret == 0) {
 			switch (mcp_type) {
@@ -187,7 +187,7 @@ ads101x_error(int code, plc_xgpio_pin_t pin, plc_xgpio_ads101x_t* ads)
 	case EINVAL:
 		local_errno = errno;
 		get_type_ret = ads101x_get_type(
-			&ads->handle, &ads_type, ads->timeout_ms);
+			I2C, &ads->handle, &ads_type, ads->timeout_ms);
 		errno = local_errno;
 		if (get_type_ret == 0) {
 			switch (ads_type) {
@@ -748,9 +748,11 @@ int plc_xgpio_digital_write_all(uint8_t addr, uint32_t values)
 	// Then try to find an MCP230XX
 	mcp = find_mcp230xx(addr);
 	if (mcp != NULL) {
-		if (mcp230xx_get_type(&mcp->handle, &type, mcp->timeout_ms) !=
-		    0) {
-			return PERIPHERAL_MCP230XX_DIGITAL_WRITE_ALL_FAIL;
+		if (mcp230xx_get_type(
+			    I2C, &mcp->handle, &type, mcp->timeout_ms) != 0) {
+			return errno == EFAULT ?
+				       I2C_ADDR_WITHOUT_I2C_BUS :
+				       PERIPHERAL_MCP230XX_DIGITAL_WRITE_ALL_FAIL;
 		}
 		switch (type) {
 		case MCP230XX_008:
@@ -798,9 +800,11 @@ int plc_xgpio_digital_read_all(uint8_t addr, void* values)
 
 	mcp = find_mcp230xx(addr);
 	if (mcp != NULL) {
-		if (mcp230xx_get_type(&mcp->handle, &type, mcp->timeout_ms) !=
-		    0) {
-			return PERIPHERAL_MCP230XX_DIGITAL_READ_ALL_FAIL;
+		if (mcp230xx_get_type(
+			    I2C, &mcp->handle, &type, mcp->timeout_ms) != 0) {
+			return errno == EFAULT ?
+				       I2C_ADDR_WITHOUT_I2C_BUS :
+				       PERIPHERAL_MCP230XX_DIGITAL_READ_ALL_FAIL;
 		}
 		// A type added to the driver after this was built has an unknown size
 		if (type != MCP230XX_008 && type != MCP230XX_017) {

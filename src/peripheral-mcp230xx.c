@@ -521,12 +521,19 @@ int mcp230xx_unprotect(mcp230xx_t* mcp)
 	return 0;
 }
 
-int mcp230xx_get_type(mcp230xx_t* mcp, MCP230XX_TYPE* type, uint32_t timeout_ms)
+int mcp230xx_get_type(const i2c_interface_t* i2c,
+		      mcp230xx_t* mcp,
+		      MCP230XX_TYPE* type,
+		      uint32_t timeout_ms)
 {
 	(void)timeout_ms;
 
 	if (mcp == NULL || type == NULL) {
 		errno = EFAULT;
+		return -1;
+	}
+
+	if (i2c_check_bus(i2c, MCP(mcp)->bus) != 0) {
 		return -1;
 	}
 

@@ -2727,7 +2727,8 @@ void test_ads101x_get_type_returns_the_type_of_the_init(void)
 			ads101x_static_init(
 				TEST_I2C, &storage, TEST_ADDR, true, &cfg));
 
-		TEST_ASSERT_EQUAL_INT(0, ads101x_get_type(&storage, &type, 0));
+		TEST_ASSERT_EQUAL_INT(
+			0, ads101x_get_type(TEST_I2C, &storage, &type, 0));
 		TEST_ASSERT_EQUAL_INT(types[i], type);
 
 		TEST_ASSERT_EQUAL_INT(
@@ -2741,12 +2742,19 @@ void test_ads101x_get_type_fails_with_efault_for_null(void)
 	ADS101X_TYPE type;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_type(NULL, &type, 0));
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_type(TEST_I2C, NULL, &type, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_type(ads, NULL, 0));
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_type(TEST_I2C, ads, NULL, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	// Like every other call, it checks the bus
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_type(TEST_I2C, ads, &type, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	fake_i2c_bus = TEST_BUS;
 
 	destroy_ads(ads);
 }
@@ -2759,14 +2767,16 @@ void test_ads101x_get_continuous_mode_returns_the_mode_of_the_init(void)
 	ads101x_t* ads;
 
 	ads = create_ads(false);
-	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_get_continuous_mode(ads, &continuous_mode, 0));
+	TEST_ASSERT_EQUAL_INT(0,
+			      ads101x_get_continuous_mode(
+				      TEST_I2C, ads, &continuous_mode, 0));
 	TEST_ASSERT_FALSE(continuous_mode);
 	destroy_ads(ads);
 
 	ads = create_ads(true);
-	TEST_ASSERT_EQUAL_INT(
-		0, ads101x_get_continuous_mode(ads, &continuous_mode, 0));
+	TEST_ASSERT_EQUAL_INT(0,
+			      ads101x_get_continuous_mode(
+				      TEST_I2C, ads, &continuous_mode, 0));
 	TEST_ASSERT_TRUE(continuous_mode);
 	destroy_ads(ads);
 }
@@ -2777,13 +2787,24 @@ void test_ads101x_get_continuous_mode_fails_with_efault_for_null(void)
 	bool continuous_mode;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(
-		-1, ads101x_get_continuous_mode(NULL, &continuous_mode, 0));
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ads101x_get_continuous_mode(
+				      TEST_I2C, NULL, &continuous_mode, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, ads101x_get_continuous_mode(ads, NULL, 0));
+	TEST_ASSERT_EQUAL_INT(
+		-1, ads101x_get_continuous_mode(TEST_I2C, ads, NULL, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	// Like every other call, it checks the bus
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1,
+			      ads101x_get_continuous_mode(
+				      TEST_I2C, ads, &continuous_mode, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	fake_i2c_bus = TEST_BUS;
 
 	destroy_ads(ads);
 }

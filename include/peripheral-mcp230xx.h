@@ -388,19 +388,22 @@ int mcp230xx_unprotect(mcp230xx_t* mcp);
  * Get the chip type the MCP230XX handle was initialized with.
  *
  * Parameters:
- *   mcp (mcp230xx_t*)     - The MCP230XX to get the type from.
- *   type (MCP230XX_TYPE*) - Pointer to store the type in.
- *   timeout_ms (uint32_t) - Ignored. The type never changes, so no lock is
- *                           taken; it's there to match the other getters.
+ *   i2c (const i2c_interface_t*) - The I2C interface the MCP230XX is on.
+ *   mcp (mcp230xx_t*)            - The MCP230XX to get the type from.
+ *   type (MCP230XX_TYPE*)        - Pointer to store the type in.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
+ *                                  applicable when the MCP230XX is protected.
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed mcp230xx_t or type is NULL.
+ *     - EFAULT : Passed mcp230xx_t, type or i2c is NULL.
+ *     - EINVAL : i2c is not on the bus the MCP230XX was initialized on.
  */
-int mcp230xx_get_type(mcp230xx_t* mcp,
+int mcp230xx_get_type(const i2c_interface_t* i2c,
+		      mcp230xx_t* mcp,
 		      MCP230XX_TYPE* type,
 		      uint32_t timeout_ms);
 

@@ -85,7 +85,7 @@ static MCP230XX_TYPE mcp230xx_types[] = { MCP230XX_008, MCP230XX_017 };
 static void expect_mcp230xx_get_type(size_t i)
 {
 	mcp230xx_get_type_ExpectAndReturn(
-		&mcp230xx[i].handle, NULL, TEST_TIMEOUT_MS, 0);
+		TEST_I2C, &mcp230xx[i].handle, NULL, TEST_TIMEOUT_MS, 0);
 	mcp230xx_get_type_IgnoreArg_type();
 	mcp230xx_get_type_ReturnThruPtr_type(&mcp230xx_types[i]);
 }
@@ -323,7 +323,7 @@ void test_set_pin_mode_mcp230xx_get_type_failing_is_a_chip_failure(void)
 					    TEST_TIMEOUT_MS,
 					    -1);
 	mcp230xx_get_type_ExpectAndReturn(
-		&mcp230xx[0].handle, NULL, TEST_TIMEOUT_MS, -1);
+		TEST_I2C, &mcp230xx[0].handle, NULL, TEST_TIMEOUT_MS, -1);
 	mcp230xx_get_type_IgnoreArg_type();
 	errno = EINVAL;
 	TEST_ASSERT_EQUAL_INT(
@@ -341,7 +341,7 @@ void test_set_pin_mode_mcp230xx_unknown_type_is_unsupported(void)
 	mcp230xx_set_output_ExpectAndReturn(
 		TEST_I2C, &mcp230xx[1].handle, 20, TEST_TIMEOUT_MS, -1);
 	mcp230xx_get_type_ExpectAndReturn(
-		&mcp230xx[1].handle, NULL, TEST_TIMEOUT_MS, 0);
+		TEST_I2C, &mcp230xx[1].handle, NULL, TEST_TIMEOUT_MS, 0);
 	mcp230xx_get_type_IgnoreArg_type();
 	mcp230xx_get_type_ReturnThruPtr_type(&unknown);
 	errno = EINVAL;
@@ -863,7 +863,7 @@ static ADS101X_TYPE ads101x_type = ADS101X_015;
 static void expect_ads101x_get_type(void)
 {
 	ads101x_get_type_ExpectAndReturn(
-		&ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
+		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
 	ads101x_get_type_IgnoreArg_type();
 	ads101x_get_type_ReturnThruPtr_type(&ads101x_type);
 }
@@ -1346,7 +1346,7 @@ void test_analog_read_ads101x_unknown_type_is_unsupported(void)
 
 	expect_ads1015_read(ADS101X_P3_GND, &value, -1);
 	ads101x_get_type_ExpectAndReturn(
-		&ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
+		TEST_I2C, &ads101x[0].handle, NULL, TEST_TIMEOUT_MS, 0);
 	ads101x_get_type_IgnoreArg_type();
 	ads101x_get_type_ReturnThruPtr_type(&unknown);
 	errno = EINVAL;
@@ -1510,7 +1510,7 @@ void test_digital_write_all_unknown_mcp230xx_type_is_unsupported(void)
 	MCP230XX_TYPE unknown = (MCP230XX_TYPE)(MCP230XX_017 + 1);
 
 	mcp230xx_get_type_ExpectAndReturn(
-		&mcp230xx[1].handle, NULL, TEST_TIMEOUT_MS, 0);
+		TEST_I2C, &mcp230xx[1].handle, NULL, TEST_TIMEOUT_MS, 0);
 	mcp230xx_get_type_IgnoreArg_type();
 	mcp230xx_get_type_ReturnThruPtr_type(&unknown);
 	TEST_ASSERT_EQUAL_INT(UNSUPPORTED_PERIPHERAL_TYPE,
@@ -1603,7 +1603,7 @@ void test_digital_read_all_unknown_mcp230xx_type_is_unsupported(void)
 	uint16_t out = 0x5A5A;
 
 	mcp230xx_get_type_ExpectAndReturn(
-		&mcp230xx[1].handle, NULL, TEST_TIMEOUT_MS, 0);
+		TEST_I2C, &mcp230xx[1].handle, NULL, TEST_TIMEOUT_MS, 0);
 	mcp230xx_get_type_IgnoreArg_type();
 	mcp230xx_get_type_ReturnThruPtr_type(&unknown);
 	TEST_ASSERT_EQUAL_INT(UNSUPPORTED_PERIPHERAL_TYPE,

@@ -2398,7 +2398,8 @@ void test_mcp230xx_get_type_returns_the_type_of_the_init(void)
 		mcp230xx_t* mcp = create_mcp(types[i]);
 		MCP230XX_TYPE type;
 
-		TEST_ASSERT_EQUAL_INT(0, mcp230xx_get_type(mcp, &type, 0));
+		TEST_ASSERT_EQUAL_INT(
+			0, mcp230xx_get_type(TEST_I2C, mcp, &type, 0));
 		TEST_ASSERT_EQUAL_INT(types[i], type);
 
 		destroy_mcp(mcp);
@@ -2411,12 +2412,19 @@ void test_mcp230xx_get_type_fails_with_efault_for_null(void)
 	MCP230XX_TYPE type;
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(NULL, &type, 0));
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(TEST_I2C, NULL, &type, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
 
 	errno = 0;
-	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(mcp, NULL, 0));
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(TEST_I2C, mcp, NULL, 0));
 	TEST_ASSERT_EQUAL_INT(EFAULT, errno);
+
+	// Like every other call, it checks the bus
+	fake_i2c_bus = TEST_BUS + 1;
+	errno = 0;
+	TEST_ASSERT_EQUAL_INT(-1, mcp230xx_get_type(TEST_I2C, mcp, &type, 0));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	fake_i2c_bus = TEST_BUS;
 
 	destroy_mcp(mcp);
 }

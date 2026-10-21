@@ -359,19 +359,24 @@ int ads101x_unprotect(ads101x_t* ads);
  * Get the chip type the ADS101X handle was initialized with.
  *
  * Parameters:
- *   ads (ads101x_t*)      - The ADS101X to get the type from.
- *   type (ADS101X_TYPE*)  - Pointer to store the type in.
- *   timeout_ms (uint32_t) - Ignored. The type never changes, so no lock is
- *                           taken; it's there to match the other getters.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to get the type from.
+ *   type (ADS101X_TYPE*)         - Pointer to store the type in.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
+ *                                  applicable when the ADS101X is protected.
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed ads101x_t or type is NULL.
+ *     - EFAULT : Passed ads101x_t, type or i2c is NULL.
+ *     - EINVAL : i2c is not on the bus the ADS101X was initialized on.
  */
-int ads101x_get_type(ads101x_t* ads, ADS101X_TYPE* type, uint32_t timeout_ms);
+int ads101x_get_type(const i2c_interface_t* i2c,
+		     ads101x_t* ads,
+		     ADS101X_TYPE* type,
+		     uint32_t timeout_ms);
 
 /**
  * ads101x_get_continuous_mode
@@ -381,20 +386,23 @@ int ads101x_get_type(ads101x_t* ads, ADS101X_TYPE* type, uint32_t timeout_ms);
  * it is read with ads101x_single_read.
  *
  * Parameters:
- *   ads (ads101x_t*)         - The ADS101X to get the mode from.
- *   continuous_mode (bool*)  - Pointer to store true in for continuous mode,
- *                              false for single-shot mode.
- *   timeout_ms (uint32_t)    - Ignored. The mode never changes, so no lock is
- *                              taken; it's there to match the other getters.
+ *   i2c (const i2c_interface_t*) - The I2C interface the ADS101X is on.
+ *   ads (ads101x_t*)             - The ADS101X to get the mode from.
+ *   continuous_mode (bool*)      - Pointer to store true in for continuous
+ *                                  mode, false for single-shot mode.
+ *   timeout_ms (uint32_t)        - The maximum time to wait for the lock. Only
+ *                                  applicable when the ADS101X is protected.
  *
  * Returns:
  *   int - 0 if successful, -1 otherwise.
  *
  * Errors:
  *   errno set to:
- *     - EFAULT : Passed ads101x_t or continuous_mode is NULL.
+ *     - EFAULT : Passed ads101x_t, continuous_mode or i2c is NULL.
+ *     - EINVAL : i2c is not on the bus the ADS101X was initialized on.
  */
-int ads101x_get_continuous_mode(ads101x_t* ads,
+int ads101x_get_continuous_mode(const i2c_interface_t* i2c,
+				ads101x_t* ads,
 				bool* continuous_mode,
 				uint32_t timeout_ms);
 

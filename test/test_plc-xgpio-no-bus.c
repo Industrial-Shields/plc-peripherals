@@ -145,16 +145,21 @@ static int set_frequency_without_bus(const i2c_interface_t* i2c,
 	return 0;
 }
 
-// mcp230xx_get_type as the driver behaves on the MCP23008 in the array
-static int get_type_stub(mcp230xx_t* mcp,
-			 MCP230XX_TYPE* type,
-			 uint32_t timeout_ms,
-			 int cmock_num_calls)
+// mcp230xx_get_type as the driver behaves with a NULL i2c
+static int get_type_without_bus(const i2c_interface_t* i2c,
+				mcp230xx_t* mcp,
+				MCP230XX_TYPE* type,
+				uint32_t timeout_ms,
+				int cmock_num_calls)
 {
 	(void)mcp;
 	(void)timeout_ms;
 	(void)cmock_num_calls;
 
+	if (i2c == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
 	*type = MCP230XX_008;
 	return 0;
 }
@@ -331,7 +336,7 @@ void test_all_functions_without_bus(void)
 	uint16_t duty[PCA9685_NUM_OUTPUTS] = { 0 };
 	uint16_t levels;
 
-	mcp230xx_get_type_Stub(get_type_stub);
+	mcp230xx_get_type_Stub(get_type_without_bus);
 	mcp230xx_write_all_Stub(mcp_write_all_without_bus);
 	mcp230xx_read_all_Stub(mcp_read_all_without_bus);
 	pca9685_write_all_Stub(pca_write_all_without_bus);
