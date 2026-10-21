@@ -209,11 +209,26 @@ ads101x_error(int code, plc_xgpio_pin_t pin, plc_xgpio_ads101x_t* ads)
 	return code;
 }
 
-// Whether the 1st byte of an LTC2309 pin is a mode xgpio knows
-static bool ltc2309_mode_is_known(plc_xgpio_pin_t pin)
+// Whether the 1st byte of a pin is a mode its peripheral knows
+static bool pin_mode_is_known(plc_xgpio_pin_t pin)
 {
-	return PIN_PERIPHERAL_MODE(pin) == PLC_XGPIO_LTC2309_SINGLE_ENDED ||
-	       PIN_PERIPHERAL_MODE(pin) == PLC_XGPIO_LTC2309_DIFFERENTIAL;
+	switch (PIN_PERIPHERAL_TYPE(pin)) {
+	case PLC_PCA9685:
+	case PLC_MCP230XX:
+	case PLC_ADS101X:
+		return PIN_PERIPHERAL_MODE(pin) == PLC_XGPIO_NO_MODE;
+	case PLC_LTC2309:
+		return PIN_PERIPHERAL_MODE(pin) ==
+			       PLC_XGPIO_LTC2309_SINGLE_ENDED ||
+		       PIN_PERIPHERAL_MODE(pin) ==
+			       PLC_XGPIO_LTC2309_DIFFERENTIAL;
+	}
+
+	/*
+	 * A direct pin's 1st byte is part of its index, and an unknown type
+	 * fails as UNKNOWN_PIN_TYPE.
+	 */
+	return true;
 }
 
 /*
@@ -228,10 +243,6 @@ static int read_ltc2309(plc_xgpio_pin_t pin, uint16_t* read, int code)
 	ltc = find_ltc2309(PIN_PERIPHERAL_ADDR(pin));
 	if (!ltc) {
 		return I2C_ADDR_NOT_FOUND;
-	}
-
-	if (!ltc2309_mode_is_known(pin)) {
-		return UNKNOWN_MODE;
 	}
 
 	if (PIN_PERIPHERAL_MODE(pin) == PLC_XGPIO_LTC2309_SINGLE_ENDED) {
@@ -308,6 +319,10 @@ int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 		return I2C_PIN_WITHOUT_PERIPHERALS;
 	}
 
+	if (!pin_mode_is_known(pin)) {
+		return UNKNOWN_MODE;
+	}
+
 	switch (type) {
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_SET_PIN_MODE_FAIL;
@@ -353,10 +368,6 @@ int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 		break;
 
 	case PLC_LTC2309:
-		if (!ltc2309_mode_is_known(pin)) {
-			return UNKNOWN_MODE;
-		}
-
 		return fixed_pin_mode(pin,
 				      LTC2309_NUM_INPUTS,
 				      mode,
@@ -404,6 +415,10 @@ int plc_xgpio_digital_write(plc_xgpio_pin_t pin, uint8_t value)
 
 	if (type != PLC_DIRECT && plc_xgpio_peripherals == NULL) {
 		return I2C_PIN_WITHOUT_PERIPHERALS;
+	}
+
+	if (!pin_mode_is_known(pin)) {
+		return UNKNOWN_MODE;
 	}
 
 	switch (type) {
@@ -489,6 +504,10 @@ int plc_xgpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read)
 
 	if (type != PLC_DIRECT && plc_xgpio_peripherals == NULL) {
 		return I2C_PIN_WITHOUT_PERIPHERALS;
+	}
+
+	if (!pin_mode_is_known(pin)) {
+		return UNKNOWN_MODE;
 	}
 
 	switch (type) {
@@ -586,6 +605,10 @@ int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint32_t value)
 		return I2C_PIN_WITHOUT_PERIPHERALS;
 	}
 
+	if (!pin_mode_is_known(pin)) {
+		return UNKNOWN_MODE;
+	}
+
 	switch (type) {
 	case PLC_DIRECT:
 		code = NORMAL_GPIO_PWM_WRITE_FAIL;
@@ -651,6 +674,10 @@ int plc_xgpio_set_pwm_frequency(plc_xgpio_pin_t pin, uint32_t freq_hz)
 
 	if (type != PLC_DIRECT && plc_xgpio_peripherals == NULL) {
 		return I2C_PIN_WITHOUT_PERIPHERALS;
+	}
+
+	if (!pin_mode_is_known(pin)) {
+		return UNKNOWN_MODE;
 	}
 
 	switch (type) {
@@ -729,6 +756,10 @@ int plc_xgpio_analog_read(plc_xgpio_pin_t pin, uint32_t* read)
 
 	if (type != PLC_DIRECT && plc_xgpio_peripherals == NULL) {
 		return I2C_PIN_WITHOUT_PERIPHERALS;
+	}
+
+	if (!pin_mode_is_known(pin)) {
+		return UNKNOWN_MODE;
 	}
 
 	switch (type) {

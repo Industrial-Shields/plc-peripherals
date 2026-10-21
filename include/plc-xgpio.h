@@ -70,6 +70,9 @@
 // The modes of an LTC2309 pin, in its 1st byte
 #define PLC_XGPIO_LTC2309_SINGLE_ENDED           0
 #define PLC_XGPIO_LTC2309_DIFFERENTIAL           1
+
+// The 1st byte of a pin whose peripheral has no modes
+#define PLC_XGPIO_NO_MODE                        0
 // clang-format on
 
 #ifdef __cplusplus
@@ -162,15 +165,15 @@ extern const i2c_interface_t* plc_xgpio_i2c;
  *
  * The adapted peripherals until now use the 2nd byte as the I2C address, and
  * the 0th byte as the GPIO's index of the peripheral. The 1st byte is the mode
- * of the pin, 0x00 for every peripheral but the LTC2309:
+ * of the pin, PLC_XGPIO_NO_MODE for every peripheral but the LTC2309:
  *   - PLC_XGPIO_LTC2309_SINGLE_ENDED : The index is an LTC2309_INPUT.
  *   - PLC_XGPIO_LTC2309_DIFFERENTIAL : The index is an LTC2309_DIFF_INPUT.
  */
 
-#define _MAKE_PIN_PLC(type, addr, index, pin) \
-	(((uint32_t)((type) & 0xFF) << 24) |  \
-	 ((uint32_t)((addr) & 0xFF) << 16) |  \
-	 ((uint32_t)((index) & 0xFF) << 8) | ((uint32_t)((pin) & 0xFF)))
+#define _MAKE_PIN_PLC(type, addr, mode, pin) \
+	(((uint32_t)((type) & 0xFF) << 24) | \
+	 ((uint32_t)((addr) & 0xFF) << 16) | \
+	 ((uint32_t)((mode) & 0xFF) << 8) | ((uint32_t)((pin) & 0xFF)))
 
 #define MAKE_PIN_DIRECT(index)                    \
 	_MAKE_PIN_PLC(PLC_DIRECT,                 \
@@ -179,9 +182,9 @@ extern const i2c_interface_t* plc_xgpio_i2c;
 		      (index))
 
 #define MAKE_PIN_PCA9685(addr, index) \
-	_MAKE_PIN_PLC(PLC_PCA9685, (addr), 0x00, (index))
+	_MAKE_PIN_PLC(PLC_PCA9685, (addr), PLC_XGPIO_NO_MODE, (index))
 #define MAKE_PIN_MCP230XX(addr, index) \
-	_MAKE_PIN_PLC(PLC_MCP230XX, (addr), 0x00, (index))
+	_MAKE_PIN_PLC(PLC_MCP230XX, (addr), PLC_XGPIO_NO_MODE, (index))
 #define MAKE_PIN_LTC2309(addr, index) \
 	_MAKE_PIN_PLC(                \
 		PLC_LTC2309, (addr), PLC_XGPIO_LTC2309_SINGLE_ENDED, (index))
@@ -189,7 +192,7 @@ extern const i2c_interface_t* plc_xgpio_i2c;
 	_MAKE_PIN_PLC(                     \
 		PLC_LTC2309, (addr), PLC_XGPIO_LTC2309_DIFFERENTIAL, (index))
 #define MAKE_PIN_ADS101X(addr, index) \
-	_MAKE_PIN_PLC(PLC_ADS101X, (addr), 0x00, (index))
+	_MAKE_PIN_PLC(PLC_ADS101X, (addr), PLC_XGPIO_NO_MODE, (index))
 
 /*
  * The following externs are expected to be provided by the library using this
@@ -464,6 +467,7 @@ int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode);
  *         - PIN_NOT_SUPPORTED                      : The pin can't be written.
  *         - UNSUPPORTED_PERIPHERAL_TYPE            : The MCP230XX is a type
  *                                                    xgpio doesn't know.
+ *         - UNKNOWN_MODE                           : The pin mode is unknown.
  *         - UNKNOWN_PIN_TYPE                       : The pin type is unknown.
  */
 int plc_xgpio_digital_write(plc_xgpio_pin_t pin, uint8_t value);
@@ -538,6 +542,7 @@ int plc_xgpio_digital_read(plc_xgpio_pin_t pin, uint8_t* read);
  *         - I2C_PIN_WITHOUT_PERIPHERALS       : It isn't a direct pin, and
  *                                               plc_xgpio_peripherals is NULL.
  *         - PIN_NOT_SUPPORTED                 : The pin doesn't support PWM.
+ *         - UNKNOWN_MODE                      : The pin mode is unknown.
  *         - UNKNOWN_PIN_TYPE                  : The pin type is unknown.
  */
 int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint32_t value);
@@ -577,6 +582,8 @@ int plc_xgpio_pwm_write(plc_xgpio_pin_t pin, uint32_t value);
  *                                                       is NULL.
  *         - PIN_NOT_SUPPORTED                         : The pin doesn't support
  *                                                       PWM.
+ *         - UNKNOWN_MODE                              : The pin mode is
+ *                                                       unknown.
  *         - UNKNOWN_PIN_TYPE                          : The pin type is
  *                                                       unknown.
  */
