@@ -154,15 +154,42 @@ void test_make_pin_direct_keeps_a_24_bit_index(void)
 
 // ---- plc_xgpio_set_pin_mode ----
 
+// A mode that isn't any of the accepted ones, whatever their values are
+static uint8_t invalid_mode(void)
+{
+	const uint8_t modes[] = {
+		PLC_XGPIO_INPUT,
+		PLC_XGPIO_OUTPUT,
+		PLC_XGPIO_INPUT_PULLUP,
+		PLC_XGPIO_INPUT_INVERTED,
+		PLC_XGPIO_INPUT_PULLUP_INVERTED,
+		PLC_XGPIO_INPUT_PULLDOWN,
+		PLC_XGPIO_OUTPUT_OPEN_DRAIN,
+	};
+	uint8_t mode;
+	size_t i;
+
+	for (mode = 0;; mode++) {
+		for (i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+			if (modes[i] == mode) {
+				break;
+			}
+		}
+		if (i == sizeof(modes) / sizeof(modes[0])) {
+			return mode;
+		}
+	}
+}
+
 void test_set_pin_mode_rejects_an_invalid_mode(void)
 {
+	TEST_ASSERT_EQUAL_INT(PIN_NOT_SUPPORTED,
+			      plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
+						     invalid_mode()));
 	TEST_ASSERT_EQUAL_INT(
 		PIN_NOT_SUPPORTED,
-		plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
-				       PLC_XGPIO_INPUT_PULLUP_INVERTED + 1));
-	TEST_ASSERT_EQUAL_INT(
-		PIN_NOT_SUPPORTED,
-		plc_xgpio_set_pin_mode(MAKE_PIN_MCP230XX(MCP23008_ADDR, 0), 7));
+		plc_xgpio_set_pin_mode(MAKE_PIN_MCP230XX(MCP23008_ADDR, 0),
+				       invalid_mode()));
 	TEST_ASSERT_EQUAL_UINT32(0, fake_normal_gpio.calls);
 }
 
@@ -198,6 +225,22 @@ void test_set_pin_mode_direct_passes_the_input_modes(void)
 		plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
 				       PLC_XGPIO_INPUT_PULLUP_INVERTED));
 	TEST_ASSERT_EQUAL_UINT32(PLC_XGPIO_INPUT_PULLUP_INVERTED,
+				 fake_normal_gpio.arg);
+}
+
+void test_set_pin_mode_direct_passes_the_pulldown_and_open_drain_modes(void)
+{
+	TEST_ASSERT_EQUAL_INT(0,
+			      plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
+						     PLC_XGPIO_INPUT_PULLDOWN));
+	TEST_ASSERT_EQUAL_UINT32(PLC_XGPIO_INPUT_PULLDOWN,
+				 fake_normal_gpio.arg);
+
+	TEST_ASSERT_EQUAL_INT(
+		0,
+		plc_xgpio_set_pin_mode(MAKE_PIN_DIRECT(5),
+				       PLC_XGPIO_OUTPUT_OPEN_DRAIN));
+	TEST_ASSERT_EQUAL_UINT32(PLC_XGPIO_OUTPUT_OPEN_DRAIN,
 				 fake_normal_gpio.arg);
 }
 
@@ -517,6 +560,37 @@ void test_set_pin_mode_fixed_direction_pins_reject_the_input_modes(void)
 								ADS101X_P0_GND),
 					       modes[i]));
 	}
+}
+
+void test_set_pin_mode_peripherals_reject_the_pulldown_and_open_drain_modes(void)
+{
+	const uint8_t modes[] = {
+		PLC_XGPIO_INPUT_PULLDOWN,
+		PLC_XGPIO_OUTPUT_OPEN_DRAIN,
+	};
+
+	for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+		TEST_ASSERT_EQUAL_INT(
+			PIN_NOT_SUPPORTED,
+			plc_xgpio_set_pin_mode(
+				MAKE_PIN_MCP230XX(MCP23008_ADDR, 0), modes[i]));
+		TEST_ASSERT_EQUAL_INT(PIN_NOT_SUPPORTED,
+				      plc_xgpio_set_pin_mode(
+					      MAKE_PIN_PCA9685(PCA9685_ADDR, 0),
+					      modes[i]));
+		TEST_ASSERT_EQUAL_INT(
+			PIN_NOT_SUPPORTED,
+			plc_xgpio_set_pin_mode(MAKE_PIN_LTC2309(LTC2309_ADDR,
+								LTC2309_CH0),
+					       modes[i]));
+		expect_ads101x_get_type();
+		TEST_ASSERT_EQUAL_INT(
+			PIN_NOT_SUPPORTED,
+			plc_xgpio_set_pin_mode(MAKE_PIN_ADS101X(ADS101X_ADDR,
+								ADS101X_P0_GND),
+					       modes[i]));
+	}
+	TEST_ASSERT_EQUAL_UINT32(0, fake_normal_gpio.calls);
 }
 
 void test_set_pin_mode_ads101x_unknown_type_is_unsupported(void)

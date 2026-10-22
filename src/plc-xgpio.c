@@ -19,6 +19,11 @@
 
 #include <plc-xgpio.h>
 
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
+// The pinMode modes, which the PLC_XGPIO_* ones are there
+#include <esp32-hal-gpio.h>
+#endif
+
 #include <assert.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -316,6 +321,8 @@ int plc_xgpio_set_pin_mode(plc_xgpio_pin_t pin, uint8_t mode)
 	case PLC_XGPIO_INPUT_PULLUP:
 	case PLC_XGPIO_INPUT_INVERTED:
 	case PLC_XGPIO_INPUT_PULLUP_INVERTED:
+	case PLC_XGPIO_INPUT_PULLDOWN:
+	case PLC_XGPIO_OUTPUT_OPEN_DRAIN:
 		break;
 	default:
 		return PIN_NOT_SUPPORTED;

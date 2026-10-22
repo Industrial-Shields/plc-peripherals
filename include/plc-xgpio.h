@@ -42,13 +42,38 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// The accepted modes of plc_xgpio_set_pin_mode
+/*
+ * The accepted modes of plc_xgpio_set_pin_mode.
+ *
+ * On Arduino-ESP32 they are the pinMode modes, so the ones of a sketch can be
+ * passed as they are, and the direct GPIO functions get them as they are too.
+ * The inverted ones don't exist there: they are the input ones with
+ * PLC_XGPIO_INVERTED set. Only the files that use them need the Arduino ones
+ * defined, as macros expand where they are used.
+ *
+ * Elsewhere, they have their own values.
+ */
 // clang-format off
+#if PLC_ENVIRONMENT == PLC_ARDUINO_ESP32
+// A bit no pinMode mode of Arduino-ESP32 uses, to make the inverted inputs
+#define PLC_XGPIO_INVERTED              0x20
+
+#define PLC_XGPIO_INPUT                 INPUT
+#define PLC_XGPIO_OUTPUT                OUTPUT
+#define PLC_XGPIO_INPUT_PULLUP          INPUT_PULLUP
+#define PLC_XGPIO_INPUT_INVERTED        (INPUT | PLC_XGPIO_INVERTED)
+#define PLC_XGPIO_INPUT_PULLUP_INVERTED (INPUT_PULLUP | PLC_XGPIO_INVERTED)
+#define PLC_XGPIO_INPUT_PULLDOWN        INPUT_PULLDOWN
+#define PLC_XGPIO_OUTPUT_OPEN_DRAIN     OUTPUT_OPEN_DRAIN
+#else
 #define PLC_XGPIO_INPUT                 0
 #define PLC_XGPIO_OUTPUT                1
 #define PLC_XGPIO_INPUT_PULLUP          2
 #define PLC_XGPIO_INPUT_INVERTED        3
 #define PLC_XGPIO_INPUT_PULLUP_INVERTED 4
+#define PLC_XGPIO_INPUT_PULLDOWN        5
+#define PLC_XGPIO_OUTPUT_OPEN_DRAIN     6
+#endif
 // clang-format on
 
 // The accepted values of plc_xgpio_digital_write/_all
@@ -215,8 +240,10 @@ extern const i2c_interface_t* plc_xgpio_i2c;
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The index of the direct GPIO.
  *   mode (uint8_t)         - PLC_XGPIO_INPUT, PLC_XGPIO_OUTPUT,
- *                            PLC_XGPIO_INPUT_PULLUP, PLC_XGPIO_INPUT_INVERTED
- *                            or PLC_XGPIO_INPUT_PULLUP_INVERTED.
+ *                            PLC_XGPIO_INPUT_PULLUP, PLC_XGPIO_INPUT_INVERTED,
+ *                            PLC_XGPIO_INPUT_PULLUP_INVERTED,
+ *                            PLC_XGPIO_INPUT_PULLDOWN or
+ *                            PLC_XGPIO_OUTPUT_OPEN_DRAIN.
  * Returns:
  *   int - 0 if successful, 1 if it already had that mode, otherwise -1.
  *
@@ -414,8 +441,10 @@ enum {
  * Parameters:
  *   pin (plc_xgpio_pin_t)  - The pin.
  *   mode (uint8_t)         - PLC_XGPIO_INPUT, PLC_XGPIO_OUTPUT,
- *                            PLC_XGPIO_INPUT_PULLUP, PLC_XGPIO_INPUT_INVERTED
- *                            or PLC_XGPIO_INPUT_PULLUP_INVERTED.
+ *                            PLC_XGPIO_INPUT_PULLUP, PLC_XGPIO_INPUT_INVERTED,
+ *                            PLC_XGPIO_INPUT_PULLUP_INVERTED,
+ *                            PLC_XGPIO_INPUT_PULLDOWN or
+ *                            PLC_XGPIO_OUTPUT_OPEN_DRAIN.
  * Returns:
  *   int - 0 if successful, 1 if it already had that mode, otherwise a negative
  *         value:
