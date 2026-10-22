@@ -27,12 +27,8 @@
 #include <errno.h>
 #include <esp32-hal-i2c.h>
 
-#include <esp_log.h>
-// Only the ESP_LOGx calls use it, and they compile to nothing at level 0
-#if defined(CORE_DEBUG_LEVEL) && CORE_DEBUG_LEVEL > 0
-static const char* TAG = "plc-peripherals-i2c";
-#endif
-
+#define PLC_LOG_TAG "plc-peripherals-i2c"
+#include <plc-log.h>
 struct _i2c_interface_t {
 	uint8_t bus_number;
 };
@@ -47,13 +43,12 @@ static int check_i2c_address(plc_i2c_addr_t addr)
 	}
 
 	if (addr > MAXIMUM_10BIT_ADDRESS) {
-		ESP_LOGE(TAG, "Invalid I2C address 0x%x", addr);
+		PLC_LOGE("Invalid I2C address 0x%x", addr);
 		errno = EINVAL;
 		return -1;
 	}
 
-	ESP_LOGW(TAG,
-		 "10-bit I2C address 0x%03x: the Arduino HAL only supports "
+	PLC_LOGW("10-bit I2C address 0x%03x: the Arduino HAL only supports "
 		 "7-bit ones",
 		 addr);
 	errno = ENOTSUP;
@@ -67,8 +62,7 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 	if (init_result != ESP_OK) {
 		// Report an error if bus isn't initialized
 		if (!i2cIsInit(bus)) {
-			ESP_LOGE(
-				TAG,
+			PLC_LOGE(
 				"Can't initialize I2C bus %u (SDA %ld, SCL %ld): %s",
 				bus,
 				sda,
@@ -85,21 +79,18 @@ i2c_interface_t* i2c_init(uint8_t bus, int32_t sda, int32_t scl)
 			return NULL;
 		}
 
-		ESP_LOGW(TAG,
-			 "I2C bus %u was already initialized, keeping it: %s",
+		PLC_LOGW("I2C bus %u was already initialized, keeping it: %s",
 			 bus,
 			 esp_err_to_name(init_result));
 	}
 
 	i2c_interface_t* ret = malloc(sizeof(struct _i2c_interface_t));
 	if (ret == NULL) {
-		ESP_LOGE(
-			TAG, "Out of memory for the I2C bus %u interface", bus);
+		PLC_LOGE("Out of memory for the I2C bus %u interface", bus);
 		PLC_SET_MALLOC_ERRNO();
 	} else {
 		ret->bus_number = bus;
-		ESP_LOGD(TAG,
-			 "I2C bus %u initialized (SDA %ld, SCL %ld)",
+		PLC_LOGD("I2C bus %u initialized (SDA %ld, SCL %ld)",
 			 bus,
 			 sda,
 			 scl);
@@ -146,8 +137,7 @@ int i2c_set_clock(const i2c_interface_t* i2c, uint32_t clock_hz)
 	if (set_result != ESP_OK &&
 	    (i2cGetClock(i2c->bus_number, &current_hz) != ESP_OK ||
 	     current_hz != clock_hz)) {
-		ESP_LOGE(TAG,
-			 "Can't set the I2C bus %u clock to %lu Hz: %s",
+		PLC_LOGE("Can't set the I2C bus %u clock to %lu Hz: %s",
 			 i2c->bus_number,
 			 clock_hz,
 			 esp_err_to_name(set_result));
@@ -185,23 +175,20 @@ int i2c_deinit(i2c_interface_t* i2c, bool deinit_i2c_bus)
 		if (deinit_result != ESP_OK) {
 			// Report an error if bus is still initialized
 			if (i2cIsInit(i2c->bus_number)) {
-				ESP_LOGE(TAG,
-					 "Can't de-initialize I2C bus %u: %s",
+				PLC_LOGE("Can't de-initialize I2C bus %u: %s",
 					 i2c->bus_number,
 					 esp_err_to_name(deinit_result));
 				errno = EIO;
 				return -1;
 			}
 
-			ESP_LOGW(TAG,
-				 "I2C bus %u was already de-initialized: %s",
+			PLC_LOGW("I2C bus %u was already de-initialized: %s",
 				 i2c->bus_number,
 				 esp_err_to_name(deinit_result));
 		}
 	}
 
-	ESP_LOGD(TAG,
-		 "I2C bus %u interface released%s",
+	PLC_LOGD("I2C bus %u interface released%s",
 		 i2c->bus_number,
 		 deinit_i2c_bus ? ", and the bus de-initialized" : "");
 	free(i2c);
@@ -229,29 +216,25 @@ ssize_t i2c_write(const i2c_interface_t* i2c,
 					  MAXIMUM_I2C_TIMEOUT);
 	switch (write_result) {
 	case ESP_OK:
-		ESP_LOGV(TAG,
-			 "Wrote %u bytes to 0x%02x on bus %u",
+		PLC_LOGV("Wrote %u bytes to 0x%02x on bus %u",
 			 to_write_len,
 			 addr,
 			 i2c->bus_number);
 		return to_write_len;
 	case ESP_ERR_TIMEOUT:
-		ESP_LOGW(TAG,
-			 "Timed out writing to 0x%02x on bus %u",
+		PLC_LOGW("Timed out writing to 0x%02x on bus %u",
 			 addr,
 			 i2c->bus_number);
 		errno = ETIMEDOUT;
 		return -1;
 	case ESP_ERR_INVALID_ARG:
-		ESP_LOGE(TAG,
-			 "Invalid write to 0x%02x on bus %u",
+		PLC_LOGE("Invalid write to 0x%02x on bus %u",
 			 addr,
 			 i2c->bus_number);
 		errno = EINVAL;
 		return -1;
 	default:
-		ESP_LOGE(TAG,
-			 "Can't write to 0x%02x on bus %u: %s",
+		PLC_LOGE("Can't write to 0x%02x on bus %u: %s",
 			 addr,
 			 i2c->bus_number,
 			 esp_err_to_name(write_result));
@@ -289,37 +272,32 @@ ssize_t i2c_read(const i2c_interface_t* i2c,
 	switch (read_result) {
 	case ESP_OK:
 		if (read_count != to_read_len) {
-			ESP_LOGW(TAG,
-				 "Read %u of %u bytes from 0x%02x on bus %u",
+			PLC_LOGW("Read %u of %u bytes from 0x%02x on bus %u",
 				 read_count,
 				 to_read_len,
 				 addr,
 				 i2c->bus_number);
 		} else {
-			ESP_LOGV(TAG,
-				 "Read %u bytes from 0x%02x on bus %u",
+			PLC_LOGV("Read %u bytes from 0x%02x on bus %u",
 				 read_count,
 				 addr,
 				 i2c->bus_number);
 		}
 		return read_count;
 	case ESP_ERR_TIMEOUT:
-		ESP_LOGW(TAG,
-			 "Timed out reading from 0x%02x on bus %u",
+		PLC_LOGW("Timed out reading from 0x%02x on bus %u",
 			 addr,
 			 i2c->bus_number);
 		errno = ETIMEDOUT;
 		return -1;
 	case ESP_ERR_INVALID_ARG:
-		ESP_LOGE(TAG,
-			 "Invalid read from 0x%02x on bus %u",
+		PLC_LOGE("Invalid read from 0x%02x on bus %u",
 			 addr,
 			 i2c->bus_number);
 		errno = EINVAL;
 		return -1;
 	default:
-		ESP_LOGE(TAG,
-			 "Can't read from 0x%02x on bus %u: %s",
+		PLC_LOGE("Can't read from 0x%02x on bus %u: %s",
 			 addr,
 			 i2c->bus_number,
 			 esp_err_to_name(read_result));
@@ -366,15 +344,13 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 	switch (write_read_result) {
 	case ESP_OK:
 		if (read_count != to_read_len) {
-			ESP_LOGW(TAG,
-				 "Read %u of %u bytes from 0x%02x on bus %u",
+			PLC_LOGW("Read %u of %u bytes from 0x%02x on bus %u",
 				 read_count,
 				 to_read_len,
 				 addr,
 				 i2c->bus_number);
 		} else {
-			ESP_LOGV(
-				TAG,
+			PLC_LOGV(
 				"Wrote %u and read %u bytes from 0x%02x on bus %u",
 				to_write_len,
 				read_count,
@@ -383,22 +359,19 @@ ssize_t i2c_write_then_read(const i2c_interface_t* i2c,
 		}
 		return to_write_len;
 	case ESP_ERR_TIMEOUT:
-		ESP_LOGW(TAG,
-			 "Timed out writing then reading 0x%02x on bus %u",
+		PLC_LOGW("Timed out writing then reading 0x%02x on bus %u",
 			 addr,
 			 i2c->bus_number);
 		errno = ETIMEDOUT;
 		return -1;
 	case ESP_ERR_INVALID_ARG:
-		ESP_LOGE(TAG,
-			 "Invalid write then read of 0x%02x on bus %u",
+		PLC_LOGE("Invalid write then read of 0x%02x on bus %u",
 			 addr,
 			 i2c->bus_number);
 		errno = EINVAL;
 		return -1;
 	default:
-		ESP_LOGE(TAG,
-			 "Can't write then read 0x%02x on bus %u: %s",
+		PLC_LOGE("Can't write then read 0x%02x on bus %u: %s",
 			 addr,
 			 i2c->bus_number,
 			 esp_err_to_name(write_read_result));

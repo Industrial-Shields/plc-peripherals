@@ -28,11 +28,8 @@
 #include <stdbool.h>
 #include <errno.h>
 
-#include <esp_log.h>
-
-#if !defined(CORE_DEBUG_LEVEL) || CORE_DEBUG_LEVEL > 0
-static const char* TAG = "plc-mutex";
-#endif
+#define PLC_LOG_TAG "plc-mutex"
+#include <plc-log.h>
 
 typedef struct {
 	StaticSemaphore_t _buf;
@@ -54,13 +51,13 @@ static int create_esp_mutex(error_checker_mutex_t* mutex)
 
 	mutex->handle = xSemaphoreCreateMutexStatic(&(mutex->_buf));
 	if (mutex->handle == NULL) {
-		ESP_LOGE(TAG, "Can't create the mutex %p", (void*)mutex);
+		PLC_LOGE("Can't create the mutex %p", (void*)mutex);
 		errno = ENOMEM;
 		return -1;
 	}
 
 	mutex->is_locked = false;
-	ESP_LOGD(TAG, "Mutex %p created", (void*)mutex);
+	PLC_LOGD("Mutex %p created", (void*)mutex);
 	return 0;
 }
 
@@ -70,14 +67,14 @@ static int destroy_esp_mutex(error_checker_mutex_t* mutex)
 	assert(mutex->handle != NULL);
 
 	if (mutex->is_locked) {
-		ESP_LOGE(TAG, "Can't destroy the mutex %p: held", (void*)mutex);
+		PLC_LOGE("Can't destroy the mutex %p: held", (void*)mutex);
 		errno = EBUSY;
 		return -1;
 	}
 
 	vSemaphoreDelete(mutex->handle);
 	mutex->handle = NULL;
-	ESP_LOGD(TAG, "Mutex %p destroyed", (void*)mutex);
+	PLC_LOGD("Mutex %p destroyed", (void*)mutex);
 	return 0;
 }
 
@@ -87,7 +84,7 @@ plc_mutex_t* plc_mutex_create(void)
 		ECM(malloc(sizeof(error_checker_mutex_t)));
 
 	if (mutex_struct == NULL) {
-		ESP_LOGE(TAG, "Out of memory for a mutex");
+		PLC_LOGE("Out of memory for a mutex");
 		PLC_SET_MALLOC_ERRNO();
 	}
 
@@ -122,17 +119,14 @@ int plc_mutex_static_create(plc_mutex_t* mutex, plc_mutex_scope_t scope)
 	}
 
 	if (scope == PLC_MUTEX_SCOPE_PRIVATE) {
-		ESP_LOGE(TAG,
-			 "Mutex %p: PLC_MUTEX_SCOPE_PRIVATE isn't supported on "
+		PLC_LOGE("Mutex %p: PLC_MUTEX_SCOPE_PRIVATE isn't supported on "
 			 "ESP32",
 			 (void*)mutex);
 		errno = ENOTSUP;
 		return -1;
 	} else if (scope != PLC_MUTEX_SCOPE_SHARED) {
-		ESP_LOGE(TAG,
-			 "Mutex %p: invalid scope %d",
-			 (void*)mutex,
-			 (int)scope);
+		PLC_LOGE(
+			"Mutex %p: invalid scope %d", (void*)mutex, (int)scope);
 		errno = EINVAL;
 		return -1;
 	}
@@ -189,8 +183,7 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 						 1000U);
 
 	if (timeout_ms > MAX_WAIT_MS && timeout_ms != PLC_MUTEX_MAX_DELAY) {
-		ESP_LOGE(
-			TAG,
+		PLC_LOGE(
 			"Mutex %p: timeout of %lu ms, above the %lu ms maximum",
 			(void*)mutex,
 			timeout_ms,
@@ -202,8 +195,7 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 	// Try to detect a deadlock
 	if (xSemaphoreGetMutexHolder(ECM(mutex)->handle) ==
 	    xTaskGetCurrentTaskHandle()) {
-		ESP_LOGE(TAG,
-			 "Mutex %p: this task already holds it (deadlock)",
+		PLC_LOGE("Mutex %p: this task already holds it (deadlock)",
 			 (void*)mutex);
 		errno = EDEADLK;
 		return -1;
@@ -211,14 +203,11 @@ int plc_mutex_acquire(plc_mutex_t* mutex, uint32_t timeout_ms)
 
 	if (xSemaphoreTake(ECM(mutex)->handle, ticks) == pdTRUE) {
 		ECM(mutex)->is_locked = true;
-		ESP_LOGV(TAG, "Mutex %p acquired", (void*)mutex);
+		PLC_LOGV("Mutex %p acquired", (void*)mutex);
 		return 0;
 	}
 
-	ESP_LOGW(TAG,
-		 "Mutex %p: timed out after %lu ms",
-		 (void*)mutex,
-		 timeout_ms);
+	PLC_LOGW("Mutex %p: timed out after %lu ms", (void*)mutex, timeout_ms);
 	errno = EBUSY;
 	return -1;
 }
@@ -240,17 +229,15 @@ int plc_mutex_release(plc_mutex_t* mutex)
 	if (holder == xTaskGetCurrentTaskHandle()) {
 		ECM(mutex)->is_locked = false;
 		xSemaphoreGive(ECM(mutex)->handle);
-		ESP_LOGV(TAG, "Mutex %p released", (void*)mutex);
+		PLC_LOGV("Mutex %p released", (void*)mutex);
 		ret = 0;
 	} else if (holder == NULL) {
-		ESP_LOGW(TAG,
-			 "Mutex %p: released, but nobody holds it",
+		PLC_LOGW("Mutex %p: released, but nobody holds it",
 			 (void*)mutex);
 		errno = EALREADY;
 		ret = -1;
 	} else {
-		ESP_LOGE(TAG,
-			 "Mutex %p: released by a task that doesn't hold it",
+		PLC_LOGE("Mutex %p: released by a task that doesn't hold it",
 			 (void*)mutex);
 		errno = EPERM;
 		ret = -1;
