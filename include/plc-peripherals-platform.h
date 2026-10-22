@@ -25,8 +25,8 @@
 #define PLC_ARDUINO_ESP32 1
 #define PLC_ESP_IDF 2
 
-#if defined(ARDUINO)
-#include <Arduino.h>
+#if defined(ARDUINO_ARCH_ESP32)
+#include <esp_arduino_version.h>
 #endif
 
 #if defined(__linux__)
